@@ -14,6 +14,7 @@ class emptyDialog;
 class ShortcutManager;
 class logViewerDialog;
 class aboutDialog;
+class HttpServerManagerDialog;
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -39,6 +40,7 @@ public:
     emptyDialog *m_emptyDialog;
     logViewerDialog *m_logViewerDialog;
     aboutDialog *m_aboutDialog;
+    HttpServerManagerDialog *m_httpServerManagerDialog {nullptr};
     ShortcutManager *m_shortcutManager;
 
     ads::CDockManager *m_DockManager;
@@ -59,4 +61,3 @@ private:
 
 };
 #endif // MAINWINDOW_H
-

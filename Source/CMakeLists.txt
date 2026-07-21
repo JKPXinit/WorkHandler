@@ -14,7 +14,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets LinguistTools)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Network Widgets LinguistTools)
 
 if(NOT WIN32)
     message(FATAL_ERROR "This CMake configuration currently targets the existing Windows x64 ADS binaries.")
@@ -55,6 +55,8 @@ set(PROJECT_SOURCES
     myUI/customDialog/logviewerdialog.h
     myUI/customDialog/aboutdialog.cpp
     myUI/customDialog/aboutdialog.h
+    myUI/customDialog/httpservermanagerdialog.cpp
+    myUI/customDialog/httpservermanagerdialog.h
 
     myUI/ui/uiManager.cpp
     myUI/ui/uiManager.h
@@ -114,6 +116,7 @@ target_compile_options(${APP_TARGET} PRIVATE
 target_link_libraries(${APP_TARGET} PRIVATE
     Qt6::Core
     Qt6::Gui
+    Qt6::Network
     Qt6::Widgets
     ads::qtadvanceddocking
 )

@@ -89,6 +89,10 @@ m_Options_t *SoftwareConfig::strXml_to_Options(QString strxml) {
     OptionsTmp->m_systemConfig.logRotationMaxSizeMB    = 10;
     OptionsTmp->m_systemConfig.logRotationIntervalDays = 1;
     OptionsTmp->m_systemConfig.logRotationMaxBackups   = 5;
+    OptionsTmp->m_httpServerConfig.interfaceName.clear();
+    OptionsTmp->m_httpServerConfig.selectedAddress.clear();
+    OptionsTmp->m_httpServerConfig.port = 8080;
+    OptionsTmp->m_httpServerConfig.bindAllInterfaces = false;
 
     QXmlStreamReader xmlReader(strxml);     // 读取 XML 迭代器
 
@@ -173,6 +177,33 @@ m_Options_t *SoftwareConfig::strXml_to_Options(QString strxml) {
                     }
                 } // System
 
+                if (xmlReader.name() == "HttpServer" && xmlReader.isStartElement()) {
+                    while (!(xmlReader.name() == "HttpServer" && xmlReader.isEndElement())) {
+                        xmlReader.readNextStartElement();
+
+                        if (xmlReader.name() == "interfaceName") {
+                            OptionsTmp->m_httpServerConfig.interfaceName = xmlReader.readElementText();
+                        }
+
+                        if (xmlReader.name() == "selectedAddress") {
+                            OptionsTmp->m_httpServerConfig.selectedAddress = xmlReader.readElementText();
+                        }
+
+                        if (xmlReader.name() == "port") {
+                            bool ok = false;
+                            const int port = xmlReader.readElementText().toInt(&ok);
+                            if (ok && port >= 1 && port <= 65535) {
+                                OptionsTmp->m_httpServerConfig.port = static_cast<quint16>(port);
+                            }
+                        }
+
+                        if (xmlReader.name() == "bindAllInterfaces") {
+                            OptionsTmp->m_httpServerConfig.bindAllInterfaces =
+                                (xmlReader.readElementText() == "true");
+                        }
+                    }
+                } // HttpServer
+
                 if (xmlReader.name() == "Advanced" && xmlReader.isStartElement()) {
                     while (!(xmlReader.name() == "Advanced" && xmlReader.isEndElement())) {
                         xmlReader.readNextStartElement();
@@ -222,6 +253,10 @@ void SoftwareConfig::Default_Config() {
     m_Config->m_systemConfig.logRotationMaxSizeMB    = 10;
     m_Config->m_systemConfig.logRotationIntervalDays = 1;
     m_Config->m_systemConfig.logRotationMaxBackups   = 5;
+    m_Config->m_httpServerConfig.interfaceName.clear();
+    m_Config->m_httpServerConfig.selectedAddress.clear();
+    m_Config->m_httpServerConfig.port = 8080;
+    m_Config->m_httpServerConfig.bindAllInterfaces = false;
     m_Config->m_adminConfig.adminMode = false;
 
     Write_config(); // 写入配置文件
@@ -274,6 +309,14 @@ QString SoftwareConfig::Options_to_strXml(m_Options_t *OptionsTmp) {
     writer.writeTextElement("logRotationMaxBackups",   QString::number(OptionsTmp->m_systemConfig.logRotationMaxBackups));
     writer.writeEndElement();               // 软件设置
 
+    writer.writeStartElement("HttpServer");
+    writer.writeTextElement("interfaceName", OptionsTmp->m_httpServerConfig.interfaceName);
+    writer.writeTextElement("selectedAddress", OptionsTmp->m_httpServerConfig.selectedAddress);
+    writer.writeTextElement("port", QString::number(OptionsTmp->m_httpServerConfig.port));
+    writer.writeTextElement("bindAllInterfaces",
+                            OptionsTmp->m_httpServerConfig.bindAllInterfaces ? "true" : "false");
+    writer.writeEndElement();               // HTTP 服务设置
+
     writer.writeStartElement("Advanced");
     writer.writeTextElement("adminMode", OptionsTmp->m_adminConfig.adminMode ? "true" : "false");
     writer.writeEndElement();               // Advanced 设置
@@ -314,4 +357,3 @@ void SoftwareConfig::restoreLayoutConfig() {
         QMessageBox::warning(m_mainWindow ,tr("Warning") ,tr("Restore UI layout failed !"));
     }
 }
-
