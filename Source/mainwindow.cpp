@@ -9,6 +9,12 @@
 #include "exitmodedialog.h"
 #include "myLogger.h"
 #include "shortcutmanager.h"
+#include "httpservermanagerdialog.h"
+#include "httpserver.h"
+#include "public.h"
+
+#include <QHostAddress>
+#include <QTimer>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -48,6 +54,146 @@ MainWindow::MainWindow(QWidget *parent)
     // ShortcutManager 信号解耦连线
     connect(m_shortcutManager, &ShortcutManager::shortcutConfigSaved,
             m_softwareconfig, &SoftwareConfig::Write_config);
+
+    m_httpServer = new HttpServer(
+        Practical_Function::ResourcePath(QStringLiteral("/data/issue_panel.db")), this);
+
+    connect(m_httpServerManagerDialog,
+            &HttpServerManagerDialog::configurationSaveRequested,
+            this,
+            [this](const QString &serverInterface,
+                   quint16 serverPort,
+                   bool autoStart,
+                   bool keepOriginal,
+                   int maxImageWidth) {
+                ServerConfig config;
+                config.serverInterface = serverInterface;
+                config.serverPort = serverPort;
+                config.autoStart = autoStart;
+                config.keepOriginal = keepOriginal;
+                config.maxImageWidth = maxImageWidth;
+                QString error;
+                if (!m_httpServer->updateConfiguration(config, &error)) {
+                    m_httpServerManagerDialog->setServerState(
+                        HttpServerManagerDialog::ServerState::Error, error);
+                }
+            });
+    connect(m_httpServerManagerDialog,
+            &HttpServerManagerDialog::startServerRequested,
+            m_httpServer,
+            &HttpServer::startServer);
+    connect(m_httpServerManagerDialog,
+            &HttpServerManagerDialog::stopServerRequested,
+            m_httpServer,
+            &HttpServer::stopServer);
+    connect(m_httpServerManagerDialog,
+            &HttpServerManagerDialog::restartServerRequested,
+            m_httpServer,
+            &HttpServer::restartServer);
+    connect(m_httpServerManagerDialog,
+            &HttpServerManagerDialog::reachabilityTestRequested,
+            m_httpServer,
+            &HttpServer::testReachability);
+
+    connect(m_httpServer,
+            &HttpServer::stateChanged,
+            this,
+            [this](HttpServer::State state, const QString &detail) {
+                HttpServerManagerDialog::ServerState dialogState =
+                    HttpServerManagerDialog::ServerState::Stopped;
+                switch (state) {
+                case HttpServer::State::Stopped:
+                    dialogState = HttpServerManagerDialog::ServerState::Stopped;
+                    break;
+                case HttpServer::State::Starting:
+                    dialogState = HttpServerManagerDialog::ServerState::Starting;
+                    break;
+                case HttpServer::State::Running:
+                    dialogState = HttpServerManagerDialog::ServerState::Running;
+                    break;
+                case HttpServer::State::Stopping:
+                    dialogState = HttpServerManagerDialog::ServerState::Stopping;
+                    break;
+                case HttpServer::State::Error:
+                    dialogState = HttpServerManagerDialog::ServerState::Error;
+                    break;
+                }
+                m_httpServerManagerDialog->setServerState(dialogState, detail);
+                LOG_INFO(QStringLiteral("HTTP server state changed: %1")
+                             .arg(detail.isEmpty() ? QString::number(int(state)) : detail));
+            });
+    connect(m_httpServer,
+            &HttpServer::reachabilityTested,
+            this,
+            [this](bool reachable, const QString &detail) {
+                m_httpServerManagerDialog->setReachabilityState(
+                    reachable
+                        ? HttpServerManagerDialog::ReachabilityState::Reachable
+                        : HttpServerManagerDialog::ReachabilityState::Unreachable,
+                    detail);
+            });
+    connect(m_httpServer,
+            &HttpServer::bootstrapAdminCreated,
+            this,
+            [this](const QString &username, const QString &password) {
+                LOG_WARNING(QStringLiteral(
+                    "Initial HTTP administrator credentials: %1 / %2")
+                                .arg(username, password));
+                m_httpServerManagerDialog->showBootstrapCredentials(username, password);
+            });
+    connect(m_httpServer,
+            &HttpServer::configurationChanged,
+            this,
+            [this](const QString &serverInterface,
+                   quint16 serverPort,
+                   bool autoStart,
+                   bool keepOriginal,
+                   int maxImageWidth) {
+                const QString anyAddress =
+                    QHostAddress(QHostAddress::AnyIPv4).toString();
+                const bool bindAll = serverInterface == anyAddress;
+                m_softwareconfig->setHttpServerBindAllInterfaces(bindAll);
+                if (!bindAll) {
+                    m_softwareconfig->setHttpServerSelectedAddress(serverInterface);
+                }
+                m_softwareconfig->setHttpServerPort(serverPort);
+                m_softwareconfig->setHttpServerAutoStart(autoStart);
+                m_softwareconfig->setHttpServerKeepOriginal(keepOriginal);
+                m_softwareconfig->setHttpServerMaxImageWidth(maxImageWidth);
+                m_softwareconfig->Write_config();
+                m_httpServerManagerDialog->applyServerConfiguration(
+                    serverInterface, serverPort, autoStart,
+                    keepOriginal, maxImageWidth);
+            });
+
+    QString httpServerError;
+    if (m_httpServer->initialize(&httpServerError)) {
+        ServerConfig config = m_httpServer->configuration(&httpServerError);
+        if (m_httpServer->databaseWasCreated()) {
+            const QString selectedAddress =
+                m_softwareconfig->httpServerSelectedAddress().trimmed();
+            config.serverInterface = m_softwareconfig->httpServerBindAllInterfaces()
+                ? QHostAddress(QHostAddress::AnyIPv4).toString()
+                : (selectedAddress.isEmpty() ? config.serverInterface : selectedAddress);
+            config.serverPort = m_softwareconfig->httpServerPort();
+            config.autoStart = m_softwareconfig->httpServerAutoStart();
+            config.keepOriginal = m_softwareconfig->httpServerKeepOriginal();
+            config.maxImageWidth = m_softwareconfig->httpServerMaxImageWidth();
+        }
+        m_httpServer->updateConfiguration(config, &httpServerError);
+
+        if (httpServerError.isEmpty() && config.autoStart) {
+            QTimer::singleShot(0, m_httpServer, [this, config]() {
+                m_httpServer->startServer(config.serverInterface, config.serverPort);
+            });
+        }
+    }
+    if (!httpServerError.isEmpty()) {
+        LOG_ERROR(QStringLiteral("HTTP server initialization failed: %1")
+                      .arg(httpServerError));
+        m_httpServerManagerDialog->setServerState(
+            HttpServerManagerDialog::ServerState::Error, httpServerError);
+    }
 
 }
 
@@ -159,6 +305,9 @@ void MainWindow::onAdminModeExited()
 
 MainWindow::~MainWindow(){
     LOG_INFO("Application shutting down...");
+    if (m_httpServer) {
+        m_httpServer->stopServer();
+    }
     m_softwareconfig->setAdminMode(false);
     m_softwareconfig->Write_config();   // 主窗口析构时，管理员模式恢复初始
 
