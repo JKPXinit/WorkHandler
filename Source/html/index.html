@@ -569,11 +569,22 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
 
   const $ = (id) => document.getElementById(id);
   const storageKeys = { baseUrl: "workhandler.apiBase", token: "workhandler.token" };
-  const defaultBaseUrl = /^https?:$/.test(window.location.protocol)
-    ? window.location.origin
-    : "http://127.0.0.1:8080";
+  const requestedBaseUrl = new URLSearchParams(window.location.search).get("api");
+  const liveServerOrigin = /^55\d{2}$/.test(window.location.port)
+    && /\/Source\/html\//i.test(window.location.pathname);
+  const savedBaseUrl = localStorage.getItem(storageKeys.baseUrl);
+  let savedBaseIsLiveServer = false;
+  try { savedBaseIsLiveServer = /^55\d{2}$/.test(new URL(savedBaseUrl).port); }
+  catch {}
+  const defaultBaseUrl = liveServerOrigin
+    ? `${window.location.protocol}//${window.location.hostname || "127.0.0.1"}:8080`
+    : /^https?:$/.test(window.location.protocol)
+      ? window.location.origin
+      : "http://127.0.0.1:8080";
   const state = {
-    baseUrl: localStorage.getItem(storageKeys.baseUrl) || defaultBaseUrl,
+    baseUrl: requestedBaseUrl
+      || (liveServerOrigin && savedBaseIsLiveServer ? "" : savedBaseUrl)
+      || defaultBaseUrl,
     token: sessionStorage.getItem(storageKeys.token) || "",
     currentUser: null,
     activity: [],
@@ -632,6 +643,13 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
   function getTokenFrom(payload) {
     if (!payload || typeof payload !== "object") return "";
     return payload.token || payload.access_token || (payload.data && payload.data.token) || "";
+  }
+
+  function resultError(result, fallback) {
+    const payload = result && result.data;
+    return payload && payload.error && payload.error.message
+      ? payload.error.message
+      : fallback;
   }
 
   function headersToObject(headers) {
@@ -758,6 +776,12 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
       clearTimeout(timeout);
     }
     renderInspector(result);
+    if (result.status === 401 && state.token && path !== "/api/auth/login") {
+      state.token = "";
+      state.currentUser = null;
+      sessionStorage.removeItem(storageKeys.token);
+      updateSessionUi();
+    }
     return result;
   }
 
@@ -841,7 +865,10 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
       body: { username: $("loginUsername").value.trim(), password: $("loginPassword").value }
     });
     setBusy(submit, false);
-    if (!result.ok) return;
+    if (!result.ok) {
+      showToast(resultError(result, "登录失败"));
+      return;
+    }
     const token = getTokenFrom(result.data);
     if (!token) { showToast("登录响应中未找到 Token"); return; }
     state.token = token;
@@ -858,6 +885,8 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
     if (result.ok) {
       state.currentUser = unwrap(result.data, "user") || {};
       updateSessionUi();
+    } else {
+      showToast(resultError(result, "无法读取当前用户"));
     }
     return result;
   }
@@ -929,6 +958,7 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
     const result = await apiRequest("/api/users");
     setBusy(button, false);
     if (result.ok) renderUsers(extractUsers(result.data));
+    else showToast(resultError(result, "用户列表加载失败"));
     return result;
   }
 
@@ -947,6 +977,7 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
     if (!payload.username || !payload.password) { showToast("创建用户需要用户名和密码"); return; }
     const result = await apiRequest("/api/users", { method: "POST", body: payload });
     if (result.ok) { showToast("用户已创建"); fillUserForm(); await listUsers(); }
+    else showToast(resultError(result, "用户创建失败"));
   }
 
   function requiredUserId() {
@@ -960,6 +991,7 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
     if (!id) return;
     const result = await apiRequest(`/api/users/${encodeURIComponent(id)}`);
     if (result.ok) fillUserForm(unwrap(result.data, "user") || {});
+    else showToast(resultError(result, "用户读取失败"));
   }
 
   async function updateUser() {
@@ -967,6 +999,7 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
     if (!id) return;
     const result = await apiRequest(`/api/users/${encodeURIComponent(id)}`, { method: "PUT", body: userPayload(false) });
     if (result.ok) { showToast("用户已更新"); await listUsers(); }
+    else showToast(resultError(result, "用户更新失败"));
   }
 
   async function deleteUser() {
@@ -974,6 +1007,7 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
     if (!id || !window.confirm(`确认删除用户 ${id}？`)) return;
     const result = await apiRequest(`/api/users/${encodeURIComponent(id)}`, { method: "DELETE" });
     if (result.ok) { showToast("用户已删除"); fillUserForm(); await listUsers(); }
+    else showToast(resultError(result, "用户删除失败"));
   }
 
   function asBool(value) { return value === true || value === 1 || value === "1" || value === "true"; }
@@ -989,6 +1023,7 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
   async function loadServerConfig() {
     const result = await apiRequest("/api/server/config");
     if (result.ok) fillServerConfig(unwrap(result.data, "config") || {});
+    else showToast(resultError(result, "服务配置读取失败"));
   }
 
   function serverPayload() {
@@ -1010,11 +1045,25 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
     }
     const result = await apiRequest("/api/server/config", { method: "PUT", body: payload });
     if (result.ok) showToast("服务配置已保存");
+    else showToast(resultError(result, "服务配置保存失败"));
   }
 
   async function restartServer() {
     const result = await apiRequest("/api/server/restart", { method: "POST" });
-    showToast(result.ok ? "重启请求已提交" : "重启请求失败");
+    if (!result.ok) {
+      showToast(resultError(result, "重启请求失败"));
+      return;
+    }
+    const data = unwrap(result.data) || {};
+    if (data.restart_url) {
+      try {
+        state.baseUrl = normalizeBaseUrl(data.restart_url);
+        $("baseUrl").value = state.baseUrl;
+        localStorage.setItem(storageKeys.baseUrl, state.baseUrl);
+      } catch {}
+    }
+    showToast("重启请求已提交");
+    window.setTimeout(checkHealth, 800);
   }
 
   async function sendCustomRequest(event) {
