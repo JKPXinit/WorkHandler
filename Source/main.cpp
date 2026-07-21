@@ -6,9 +6,10 @@ int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
 
-    // 设置应用程序名称（用于日志文件名）
-    QCoreApplication::setApplicationName("Page_demo");
-    QCoreApplication::setApplicationVersion("0.1.2");
+    // 应用元数据由 CMake 项目定义统一提供。
+    QCoreApplication::setApplicationName(QStringLiteral(WORKHANDLER_APPLICATION_NAME));
+    QCoreApplication::setApplicationVersion(QStringLiteral(WORKHANDLER_VERSION));
+    QApplication::setApplicationDisplayName(QStringLiteral(WORKHANDLER_APPLICATION_NAME));
     QCoreApplication::setOrganizationName("YourOrganization");
 
     qputenv("QT_LOGGING_RULES", "qt.*=true");

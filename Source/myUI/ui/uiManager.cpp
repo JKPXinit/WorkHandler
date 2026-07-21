@@ -7,6 +7,7 @@
 #include <QGraphicsOpacityEffect>
 #include <QMessageBox>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QStorageInfo>
 #include <QProgressBar>
 #include <QHBoxLayout>
@@ -80,7 +81,7 @@ void uiManager::setupUI() {
     LOG_INFO("Setting up UI...");
 
 #if !UI_DEBUUG
-    parent->setWindowTitle(tr("Page demo"));
+    parent->setWindowTitle(QCoreApplication::applicationName());
     parent->setWindowIcon(appIcon);
 
     LOG_DEBUG("Initializing menu bar");
@@ -272,7 +273,7 @@ void uiManager::onMenuBar_New() {
 
 void uiManager::retranslateUi() {
     // 窗口标题
-    parent->setWindowTitle(tr("Page demo"));
+    parent->setWindowTitle(QCoreApplication::applicationName());
 
     // 菜单标题
     fileMenu->setTitle(tr("File"));
@@ -535,7 +536,7 @@ void uiManager::initTray()
 
     m_trayIcon = new QSystemTrayIcon(parent);
     m_trayIcon->setIcon(QIcon(AppIcons::App));
-    m_trayIcon->setToolTip("Page Demo");
+    m_trayIcon->setToolTip(QCoreApplication::applicationName());
     m_trayIcon->setContextMenu(m_trayMenu);
 
     connect(m_trayIcon, &QSystemTrayIcon::activated, m_mainWindow, [this](QSystemTrayIcon::ActivationReason r){
@@ -549,8 +550,8 @@ bool uiManager::onCloseEvent(QCloseEvent *)
 {
     if (m_trayIcon && m_trayIcon->isVisible()) {
         m_mainWindow->hide();
-        m_trayIcon->showMessage("Page Demo",
-                                "Running in background",
+        m_trayIcon->showMessage(QCoreApplication::applicationName(),
+                                tr("Running in background"),
                                 QSystemTrayIcon::Information, 2000);
         return false; // 不真正退出
     }

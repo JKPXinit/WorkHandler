@@ -325,14 +325,6 @@
         <source>Cancel</source>
         <translation type="unfinished"></translation>
     </message>
-    <message>
-        <location filename="../uiManager.cpp" line="365"/>
-        <source><byte value="xd"/>
-Author : JKPX                       <byte value="xd"/>
-Version : 1.0.1                       <byte value="xd"/>
-Date : 20250901</source>
-        <translation type="unfinished"></translation>
-    </message>
 </context>
 <context>
     <name>ui_AdminOptions</name>

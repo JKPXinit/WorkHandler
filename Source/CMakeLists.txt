@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(WorkHandler
-    VERSION 0.1.2
+    VERSION 0.0.1
     LANGUAGES CXX
 )
 
@@ -104,6 +104,8 @@ target_include_directories(${APP_TARGET} PRIVATE
 
 target_compile_definitions(${APP_TARGET} PRIVATE
     QT_DEPRECATED_WARNINGS
+    WORKHANDLER_APPLICATION_NAME="${PROJECT_NAME}"
+    WORKHANDLER_VERSION="${PROJECT_VERSION}"
 )
 
 target_compile_options(${APP_TARGET} PRIVATE

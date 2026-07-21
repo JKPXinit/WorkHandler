@@ -341,37 +341,6 @@
         <source>Cancel</source>
         <translation>取消</translation>
     </message>
-    <message>
-        <location filename="../uiManager.cpp" line="365"/>
-        <source><byte value="xd"/>
-Author : JKPX                       <byte value="xd"/>
-Version : 1.0.1                       <byte value="xd"/>
-Date : 20250901</source>
-        <translation>
-作者：JKPX                       
-版本：1.0.1                       
-日期：20250901</translation>
-    </message>
-    <message>
-        <source><byte value="xd"/>
-Author : JKPX                       <byte value="xd"/>
-Version : 0.1.2                       <byte value="xd"/>
-Date : 20250901</source>
-        <translation type="vanished">
-作者：JKPX                       
-版本：0.1.2                       
-日期：20250901</translation>
-    </message>
-    <message>
-        <source><byte value="xd"/>
-Author : JKPX                       <byte value="xd"/>
-Version : 0.1.2                       <byte value="xd"/>
-Date : 20250815</source>
-        <translation type="vanished"><byte value="xd"/>
-作者：JKPX                       <byte value="xd"/>
-版本：0.1.2                       <byte value="xd"/>
-日期：20250815</translation>
-    </message>
 </context>
 <context>
     <name>ui_AdminOptions</name>

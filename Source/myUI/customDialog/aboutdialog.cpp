@@ -3,6 +3,8 @@
 #include "myLogger.h"
 #include "public.h"
 
+#include <QCoreApplication>
+
 aboutDialog::aboutDialog(MainWindow *mainWindow)
 {
     m_mainWindow = mainWindow;
@@ -15,7 +17,8 @@ aboutDialog::~aboutDialog()
 QDialog* aboutDialog::setupAboutDialog()
 {
     m_dialog = new QDialog(m_mainWindow);
-    m_dialog->setWindowTitle(tr("About Page Demo"));
+    m_dialog->setWindowTitle(
+        QStringLiteral("%1 - %2").arg(QCoreApplication::applicationName(), tr("About")));
     m_dialog->setFixedSize(600, 500);
     m_dialog->setModal(true);
 
@@ -74,7 +77,8 @@ QWidget* aboutDialog::createAboutTab()
 
     // 应用名称和版本
     QVBoxLayout *titleLayout = new QVBoxLayout();
-    QLabel *appNameLabel = new QLabel("<h1>Page Demo</h1>");
+    QLabel *appNameLabel = new QLabel(
+        QStringLiteral("<h1>%1</h1>").arg(QCoreApplication::applicationName().toHtmlEscaped()));
     QLabel *versionLabel = new QLabel(QString("<b>Version:</b> %1").arg(getAppVersion()));
     versionLabel->setStyleSheet("font-size: 12pt;");
 
@@ -215,7 +219,7 @@ QWidget* aboutDialog::createLicenseTab()
 
 QString aboutDialog::getAppVersion() const
 {
-    return "0.1.2";
+    return QCoreApplication::applicationVersion();
 }
 
 QString aboutDialog::getAppBuildDate() const
