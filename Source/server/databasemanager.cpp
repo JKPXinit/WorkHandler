@@ -37,6 +37,19 @@ QJsonObject UserRecord::toJson() const
     };
 }
 
+UserSummary UserRecord::toSummary() const
+{
+    UserSummary summary;
+    summary.id = id;
+    summary.username = username;
+    summary.role = role;
+    summary.displayName = displayName;
+    summary.createdAt = createdAt;
+    summary.usesDefaultPassword = PasswordHasher::verifyPassword(
+        QStringLiteral("123456"), passwordHash);
+    return summary;
+}
+
 QJsonObject ServerConfig::toJson() const
 {
     return {
@@ -96,6 +109,7 @@ bool DatabaseManager::initialize(QString *errorMessage,
             "password TEXT NOT NULL,"
             "role TEXT NOT NULL CHECK(role IN ('admin','user','guest')),"
             "display_name TEXT,"
+            "token_version INTEGER NOT NULL DEFAULT 0,"
             "created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"),
         QStringLiteral(
             "CREATE TABLE IF NOT EXISTS blocks ("
@@ -144,6 +158,26 @@ bool DatabaseManager::initialize(QString *errorMessage,
         if (!execute(statement, errorMessage)) {
             return false;
         }
+    }
+
+    bool hasTokenVersion = false;
+    QSqlQuery userColumnsQuery(m_database);
+    if (!userColumnsQuery.exec(QStringLiteral("PRAGMA table_info(users)"))) {
+        setError(errorMessage, userColumnsQuery.lastError().text());
+        return false;
+    }
+    while (userColumnsQuery.next()) {
+        if (userColumnsQuery.value(1).toString()
+            == QStringLiteral("token_version")) {
+            hasTokenVersion = true;
+            break;
+        }
+    }
+    if (!hasTokenVersion
+        && !execute(QStringLiteral(
+            "ALTER TABLE users ADD COLUMN token_version "
+            "INTEGER NOT NULL DEFAULT 0"), errorMessage)) {
+        return false;
     }
 
     const QMap<QString, QString> defaults = {
@@ -207,7 +241,8 @@ QList<UserRecord> DatabaseManager::users(QString *errorMessage) const
     QList<UserRecord> records;
     QSqlQuery query(m_database);
     if (!query.exec(QStringLiteral(
-            "SELECT id, username, password, role, display_name, created_at "
+            "SELECT id, username, password, role, display_name, created_at, "
+            "token_version "
             "FROM users ORDER BY id"))) {
         setError(errorMessage, query.lastError().text());
         return records;
@@ -223,7 +258,8 @@ std::optional<UserRecord> DatabaseManager::userById(qint64 id,
 {
     QSqlQuery query(m_database);
     query.prepare(QStringLiteral(
-        "SELECT id, username, password, role, display_name, created_at "
+        "SELECT id, username, password, role, display_name, created_at, "
+        "token_version "
         "FROM users WHERE id = ?"));
     query.addBindValue(id);
     if (!query.exec()) {
@@ -241,7 +277,8 @@ std::optional<UserRecord> DatabaseManager::userByUsername(
 {
     QSqlQuery query(m_database);
     query.prepare(QStringLiteral(
-        "SELECT id, username, password, role, display_name, created_at "
+        "SELECT id, username, password, role, display_name, created_at, "
+        "token_version "
         "FROM users WHERE username = ?"));
     query.addBindValue(username);
     if (!query.exec()) {
@@ -258,8 +295,10 @@ bool DatabaseManager::usernameExists(const QString &username, qint64 exceptId) c
 {
     QSqlQuery query(m_database);
     query.prepare(exceptId > 0
-        ? QStringLiteral("SELECT 1 FROM users WHERE username = ? AND id != ?")
-        : QStringLiteral("SELECT 1 FROM users WHERE username = ?"));
+        ? QStringLiteral(
+              "SELECT 1 FROM users WHERE username = ? COLLATE NOCASE AND id != ?")
+        : QStringLiteral(
+              "SELECT 1 FROM users WHERE username = ? COLLATE NOCASE"));
     query.addBindValue(username);
     if (exceptId > 0) {
         query.addBindValue(exceptId);
@@ -364,6 +403,113 @@ int DatabaseManager::adminCount(QString *errorMessage) const
         return -1;
     }
     return query.value(0).toInt();
+}
+
+bool DatabaseManager::updatePasswordAndTokenSecret(
+    qint64 userId,
+    const QString &passwordHash,
+    QByteArray *newTokenSecret,
+    QString *errorMessage)
+{
+    if (newTokenSecret) {
+        newTokenSecret->clear();
+    }
+
+    if (!m_database.transaction()) {
+        setError(errorMessage, m_database.lastError().text());
+        return false;
+    }
+
+    QSqlQuery passwordQuery(m_database);
+    passwordQuery.prepare(QStringLiteral(
+        "UPDATE users SET password = ?, token_version = token_version + 1 "
+        "WHERE id = ?"));
+    passwordQuery.addBindValue(passwordHash);
+    passwordQuery.addBindValue(userId);
+    if (!passwordQuery.exec() || passwordQuery.numRowsAffected() != 1) {
+        const QString detail = passwordQuery.lastError().text();
+        m_database.rollback();
+        setError(errorMessage, detail.isEmpty()
+                                   ? QStringLiteral("User was not found.")
+                                   : detail);
+        return false;
+    }
+
+    const QByteArray secret = randomSecret(32);
+    const QString encodedSecret = QString::fromLatin1(
+        secret.toBase64(QByteArray::OmitTrailingEquals));
+    if (!setConfigValue(QStringLiteral("token_secret"),
+                        encodedSecret,
+                        errorMessage)) {
+        m_database.rollback();
+        return false;
+    }
+
+    if (!m_database.commit()) {
+        setError(errorMessage, m_database.lastError().text());
+        m_database.rollback();
+        return false;
+    }
+
+    if (newTokenSecret) {
+        *newTokenSecret = secret;
+    }
+    return true;
+}
+
+bool DatabaseManager::updatePasswordAndIncrementTokenVersion(
+    qint64 userId,
+    const QString &passwordHash,
+    int *newTokenVersion,
+    QString *errorMessage)
+{
+    if (newTokenVersion) {
+        *newTokenVersion = -1;
+    }
+    if (!m_database.transaction()) {
+        setError(errorMessage, m_database.lastError().text());
+        return false;
+    }
+
+    QSqlQuery updateQuery(m_database);
+    updateQuery.prepare(QStringLiteral(
+        "UPDATE users SET password = ?, token_version = token_version + 1 "
+        "WHERE id = ?"));
+    updateQuery.addBindValue(passwordHash);
+    updateQuery.addBindValue(userId);
+    if (!updateQuery.exec() || updateQuery.numRowsAffected() != 1) {
+        const QString detail = updateQuery.lastError().text();
+        m_database.rollback();
+        setError(errorMessage, detail.isEmpty()
+                                   ? QStringLiteral("User was not found.")
+                                   : detail);
+        return false;
+    }
+
+    QSqlQuery versionQuery(m_database);
+    versionQuery.prepare(QStringLiteral(
+        "SELECT token_version FROM users WHERE id = ?"));
+    versionQuery.addBindValue(userId);
+    if (!versionQuery.exec() || !versionQuery.next()) {
+        const QString detail = versionQuery.lastError().text();
+        m_database.rollback();
+        setError(errorMessage, detail.isEmpty()
+                                   ? QStringLiteral("User was not found.")
+                                   : detail);
+        return false;
+    }
+    const int tokenVersion = versionQuery.value(0).toInt();
+
+    if (!m_database.commit()) {
+        setError(errorMessage, m_database.lastError().text());
+        m_database.rollback();
+        return false;
+    }
+
+    if (newTokenVersion) {
+        *newTokenVersion = tokenVersion;
+    }
+    return true;
 }
 
 ServerConfig DatabaseManager::serverConfig(QString *errorMessage) const
@@ -481,6 +627,7 @@ UserRecord DatabaseManager::readUser(const QSqlQuery &query)
     user.role = query.value(3).toString();
     user.displayName = query.value(4).toString();
     user.createdAt = query.value(5).toString();
+    user.tokenVersion = query.value(6).toInt();
     return user;
 }
 

@@ -89,6 +89,143 @@ ServerConfig HttpServer::configuration(QString *errorMessage) const
     return m_database.serverConfig(errorMessage);
 }
 
+QList<UserSummary> HttpServer::accountSummaries(QString *errorMessage) const
+{
+    QList<UserSummary> summaries;
+    if (errorMessage) {
+        errorMessage->clear();
+    }
+    if (!m_initialized) {
+        if (errorMessage) {
+            *errorMessage = tr("Account database is not initialized.");
+        }
+        return summaries;
+    }
+
+    const QList<UserRecord> records = m_database.users(errorMessage);
+    summaries.reserve(records.size());
+    for (const UserRecord &record : records) {
+        summaries.append(record.toSummary());
+    }
+    return summaries;
+}
+
+bool HttpServer::createManagedUser(const QString &username,
+                                   UserSummary *createdUser,
+                                   QString *errorMessage)
+{
+    if (errorMessage) {
+        errorMessage->clear();
+    }
+    if (!m_initialized) {
+        if (errorMessage) {
+            *errorMessage = tr("Account database is not initialized.");
+        }
+        return false;
+    }
+
+    const QString normalizedUsername = username.trimmed();
+    if (!validUsername(normalizedUsername)) {
+        if (errorMessage) {
+            *errorMessage = tr("Provide a username of at most 64 characters without spaces.");
+        }
+        return false;
+    }
+    if (normalizedUsername.compare(QStringLiteral("admin"),
+                                   Qt::CaseInsensitive) == 0) {
+        if (errorMessage) {
+            *errorMessage = tr("The admin username is reserved.");
+        }
+        return false;
+    }
+    if (m_database.usernameExists(normalizedUsername)) {
+        if (errorMessage) {
+            *errorMessage = tr("The username already exists.");
+        }
+        return false;
+    }
+
+    UserRecord user;
+    QString databaseError;
+    if (!m_database.createUser(
+            normalizedUsername,
+            PasswordHasher::hashPassword(QStringLiteral("123456")),
+            QStringLiteral("user"),
+            QString(),
+            &user,
+            &databaseError)) {
+        if (errorMessage) {
+            *errorMessage = databaseErrorMessage(databaseError);
+        }
+        return false;
+    }
+
+    if (createdUser) {
+        *createdUser = user.toSummary();
+    }
+    emit accountsChanged();
+    return true;
+}
+
+bool HttpServer::changeAdminPassword(const QString &currentPassword,
+                                     const QString &newPassword,
+                                     QString *errorMessage)
+{
+    if (errorMessage) {
+        errorMessage->clear();
+    }
+    if (!m_initialized) {
+        if (errorMessage) {
+            *errorMessage = tr("Account database is not initialized.");
+        }
+        return false;
+    }
+    if (newPassword.size() < 8 || newPassword.size() > 256) {
+        if (errorMessage) {
+            *errorMessage = tr("The new password must contain 8 to 256 characters.");
+        }
+        return false;
+    }
+
+    QString databaseError;
+    const auto admin = m_database.userByUsername(
+        QStringLiteral("admin"), &databaseError);
+    if (!databaseError.isEmpty()) {
+        if (errorMessage) {
+            *errorMessage = databaseErrorMessage(databaseError);
+        }
+        return false;
+    }
+    if (!admin) {
+        if (errorMessage) {
+            *errorMessage = tr("The admin account was not found.");
+        }
+        return false;
+    }
+    if (!PasswordHasher::verifyPassword(currentPassword, admin->passwordHash)) {
+        if (errorMessage) {
+            *errorMessage = tr("The current password is incorrect.");
+        }
+        return false;
+    }
+
+    QByteArray newTokenSecret;
+    if (!m_database.updatePasswordAndTokenSecret(
+            admin->id,
+            PasswordHasher::hashPassword(newPassword),
+            &newTokenSecret,
+            &databaseError)) {
+        if (errorMessage) {
+            *errorMessage = databaseErrorMessage(databaseError);
+        }
+        return false;
+    }
+
+    m_tokenHelper.setSecret(newTokenSecret);
+    emit accountsChanged();
+    return true;
+}
+
 bool HttpServer::startServer(const QString &bindAddress, quint16 port)
 {
     if (!m_initialized) {
@@ -277,7 +414,8 @@ void HttpServer::registerRoutes()
             }
 
             return successResponse({
-                {QStringLiteral("token"), m_tokenHelper.issue(user->id, user->role)},
+                {QStringLiteral("token"),
+                 m_tokenHelper.issue(user->id, user->role, user->tokenVersion)},
                 {QStringLiteral("user"), user->toJson()}
             });
         });
@@ -307,6 +445,56 @@ void HttpServer::registerRoutes()
         });
 
     m_httpServer.route(
+        QStringLiteral("/api/auth/password"), Method::Put,
+        [this](const QHttpServerRequest &request) {
+            const AuthorizationResult authorization = authorize(request, false);
+            if (!authorization.authorized) {
+                return authorizationError(authorization);
+            }
+            if (authorization.user.username == QStringLiteral("admin")) {
+                return errorResponse(StatusCode::Forbidden,
+                                     QStringLiteral("admin_password_desktop_only"),
+                                     tr("The admin password can only be changed in the desktop application."));
+            }
+
+            QJsonObject body;
+            QString parseError;
+            if (!parseJsonObject(request, &body, &parseError)) {
+                return errorResponse(StatusCode::BadRequest,
+                                     QStringLiteral("invalid_json"), parseError);
+            }
+            const QString newPassword =
+                body.value(QStringLiteral("new_password")).toString();
+            if (newPassword.size() < 8 || newPassword.size() > 256) {
+                return errorResponse(
+                    StatusCode::BadRequest,
+                    QStringLiteral("invalid_password"),
+                    tr("The new password must contain 8 to 256 characters."));
+            }
+
+            int newTokenVersion = -1;
+            QString databaseError;
+            if (!m_database.updatePasswordAndIncrementTokenVersion(
+                    authorization.user.id,
+                    PasswordHasher::hashPassword(newPassword),
+                    &newTokenVersion,
+                    &databaseError)) {
+                return errorResponse(StatusCode::InternalServerError,
+                                     QStringLiteral("database_error"),
+                                     databaseErrorMessage(databaseError));
+            }
+
+            emit accountsChanged();
+            return successResponse({
+                {QStringLiteral("token"),
+                 m_tokenHelper.issue(authorization.user.id,
+                                     authorization.user.role,
+                                     newTokenVersion)},
+                {QStringLiteral("user"), authorization.user.toJson()}
+            });
+        });
+
+    m_httpServer.route(
         QStringLiteral("/api/users"), Method::Get,
         [this](const QHttpServerRequest &request) {
             const AuthorizationResult authorization = authorize(request, true);
@@ -329,50 +517,11 @@ void HttpServer::registerRoutes()
 
     m_httpServer.route(
         QStringLiteral("/api/users"), Method::Post,
-        [this](const QHttpServerRequest &request) {
-            const AuthorizationResult authorization = authorize(request, true);
-            if (!authorization.authorized) {
-                return authorizationError(authorization);
-            }
-            QJsonObject body;
-            QString parseError;
-            if (!parseJsonObject(request, &body, &parseError)) {
-                return errorResponse(StatusCode::BadRequest,
-                                     QStringLiteral("invalid_json"), parseError);
-            }
-            const QString username = body.value(QStringLiteral("username"))
-                                         .toString().trimmed();
-            const QString password = body.value(QStringLiteral("password")).toString();
-            const QString role = body.value(QStringLiteral("role")).toString();
-            const QString displayName = body.value(QStringLiteral("display_name"))
-                                            .toString().trimmed();
-            if (!validUsername(username) || password.size() < 8
-                || password.size() > 256 || !validRole(role)
-                || displayName.size() > 128) {
-                return errorResponse(StatusCode::BadRequest,
-                                     QStringLiteral("invalid_user"),
-                                     tr("Provide a valid username, role and password of at least 8 characters."));
-            }
-            if (m_database.usernameExists(username)) {
-                return errorResponse(StatusCode::Conflict,
-                                     QStringLiteral("username_exists"),
-                                     tr("The username already exists."));
-            }
-
-            UserRecord user;
-            QString databaseError;
-            if (!m_database.createUser(username,
-                                       PasswordHasher::hashPassword(password),
-                                       role,
-                                       displayName,
-                                       &user,
-                                       &databaseError)) {
-                return errorResponse(StatusCode::InternalServerError,
-                                     QStringLiteral("database_error"),
-                                     databaseErrorMessage(databaseError));
-            }
-            return successResponse({{QStringLiteral("user"), user.toJson()}},
-                                   StatusCode::Created);
+        [this](const QHttpServerRequest &) {
+            return errorResponse(
+                StatusCode::MethodNotAllowed,
+                QStringLiteral("registration_managed_by_application"),
+                tr("User registration is managed by the desktop application."));
         });
 
     m_httpServer.route(
@@ -423,6 +572,12 @@ void HttpServer::registerRoutes()
                 return errorResponse(StatusCode::BadRequest,
                                      QStringLiteral("invalid_json"), parseError);
             }
+            if (body.contains(QStringLiteral("password"))) {
+                return errorResponse(
+                    StatusCode::BadRequest,
+                    QStringLiteral("password_change_not_allowed"),
+                    tr("Use the current-user password endpoint to change a password."));
+            }
             const QString username = body.contains(QStringLiteral("username"))
                 ? body.value(QStringLiteral("username")).toString().trimmed()
                 : existing->username;
@@ -432,13 +587,26 @@ void HttpServer::registerRoutes()
             const QString displayName = body.contains(QStringLiteral("display_name"))
                 ? body.value(QStringLiteral("display_name")).toString().trimmed()
                 : existing->displayName;
-            const QString password = body.value(QStringLiteral("password")).toString();
             if (!validUsername(username) || !validRole(role)
-                || displayName.size() > 128
-                || (!password.isEmpty() && (password.size() < 8 || password.size() > 256))) {
+                || displayName.size() > 128) {
                 return errorResponse(StatusCode::BadRequest,
                                      QStringLiteral("invalid_user"),
                                      tr("The user fields are invalid."));
+            }
+            if (existing->username == QStringLiteral("admin")
+                && (username != QStringLiteral("admin")
+                    || role != QStringLiteral("admin"))) {
+                return errorResponse(
+                    StatusCode::Conflict,
+                    QStringLiteral("protected_admin"),
+                    tr("The fixed admin account cannot be renamed or demoted."));
+            }
+            if (existing->username != QStringLiteral("admin")
+                && username.compare(QStringLiteral("admin"),
+                                    Qt::CaseInsensitive) == 0) {
+                return errorResponse(StatusCode::Conflict,
+                                     QStringLiteral("reserved_username"),
+                                     tr("The admin username is reserved."));
             }
             if (m_database.usernameExists(username, id)) {
                 return errorResponse(StatusCode::Conflict,
@@ -461,15 +629,13 @@ void HttpServer::registerRoutes()
             }
 
             UserRecord updated;
-            const QString passwordHash = password.isEmpty()
-                ? QString()
-                : PasswordHasher::hashPassword(password);
             if (!m_database.updateUser(id, username, role, displayName,
-                                       passwordHash, &updated, &databaseError)) {
+                                       QString(), &updated, &databaseError)) {
                 return errorResponse(StatusCode::InternalServerError,
                                      QStringLiteral("database_error"),
                                      databaseErrorMessage(databaseError));
             }
+            emit accountsChanged();
             return successResponse({{QStringLiteral("user"), updated.toJson()}});
         });
 
@@ -492,6 +658,11 @@ void HttpServer::registerRoutes()
                                      QStringLiteral("user_not_found"),
                                      tr("User was not found."));
             }
+            if (existing->username == QStringLiteral("admin")) {
+                return errorResponse(StatusCode::Conflict,
+                                     QStringLiteral("protected_admin"),
+                                     tr("The fixed admin account cannot be deleted."));
+            }
             if (existing->role == QStringLiteral("admin")) {
                 const int administrators = m_database.adminCount(&databaseError);
                 if (!databaseError.isEmpty()) {
@@ -510,6 +681,7 @@ void HttpServer::registerRoutes()
                                      QStringLiteral("delete_failed"),
                                      databaseErrorMessage(databaseError));
             }
+            emit accountsChanged();
             return successResponse({{QStringLiteral("deleted_id"), id}});
         });
 
@@ -657,6 +829,11 @@ HttpServer::AuthorizationResult HttpServer::authorize(
         result.message = databaseError.isEmpty()
             ? tr("The token user no longer exists.")
             : databaseErrorMessage(databaseError);
+        return result;
+    }
+    if (claims.tokenVersion != user->tokenVersion) {
+        result.code = QStringLiteral("unauthorized");
+        result.message = tr("The token is no longer valid.");
         return result;
     }
     if (adminRequired && user->role != QStringLiteral("admin")) {

@@ -8,6 +8,16 @@
 
 #include <optional>
 
+struct UserSummary
+{
+    qint64 id {0};
+    QString username;
+    QString role;
+    QString displayName;
+    QString createdAt;
+    bool usesDefaultPassword {false};
+};
+
 struct UserRecord
 {
     qint64 id {0};
@@ -16,8 +26,10 @@ struct UserRecord
     QString role;
     QString displayName;
     QString createdAt;
+    int tokenVersion {0};
 
     QJsonObject toJson() const;
+    UserSummary toSummary() const;
 };
 
 struct ServerConfig
@@ -62,6 +74,15 @@ public:
                     QString *errorMessage = nullptr);
     bool deleteUser(qint64 id, QString *errorMessage = nullptr);
     int adminCount(QString *errorMessage = nullptr) const;
+    bool updatePasswordAndTokenSecret(qint64 userId,
+                                      const QString &passwordHash,
+                                      QByteArray *newTokenSecret,
+                                      QString *errorMessage = nullptr);
+    bool updatePasswordAndIncrementTokenVersion(
+        qint64 userId,
+        const QString &passwordHash,
+        int *newTokenVersion,
+        QString *errorMessage = nullptr);
 
     ServerConfig serverConfig(QString *errorMessage = nullptr) const;
     bool setServerConfig(const ServerConfig &config, QString *errorMessage = nullptr);

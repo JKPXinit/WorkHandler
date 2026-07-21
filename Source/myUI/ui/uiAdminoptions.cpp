@@ -1,10 +1,12 @@
 ﻿#include "uiAdminoptions.h"
 #include "mainwindow.h"
 
+#include <QAbstractItemView>
 #include <QRadioButton>
 #include <QApplication>
 #include <QCheckBox>
 #include <QFileDialog>
+#include <QFormLayout>
 #include <QGroupBox>
 #include <QStackedWidget>
 #include <QDesktopServices>
@@ -12,6 +14,7 @@
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QLabel>
+#include <QLineEdit>
 #include <QPainter>
 #include <QPushButton>
 #include <QMessageBox>
@@ -28,6 +31,7 @@
 #include "uiManager.h"
 #include "thememanager.h"
 #include "shortcutmanager.h"
+#include "httpserver.h"
 
 namespace {
 
@@ -157,6 +161,231 @@ QWidget * ui_AdminOptions::createThemePage() {
     return themePage;
 }
 
+QWidget *ui_AdminOptions::createAccountPage()
+{
+    QWidget *accountPage = new QWidget();
+    QVBoxLayout *accountLayout = new QVBoxLayout(accountPage);
+
+    QGroupBox *registrationGroup = new QGroupBox(tr("Add user"), accountPage);
+    QHBoxLayout *registrationLayout = new QHBoxLayout(registrationGroup);
+    QLabel *usernameLabel = new QLabel(tr("Username:"), registrationGroup);
+    QLineEdit *usernameEdit = new QLineEdit(registrationGroup);
+    usernameEdit->setObjectName(QStringLiteral("newAccountUsername"));
+    usernameEdit->setMaxLength(64);
+    usernameEdit->setClearButtonEnabled(true);
+    QPushButton *addUserButton = new QPushButton(tr("Add User"), registrationGroup);
+    addUserButton->setIcon(m_mainWindow->m_UI->AccountIcon);
+    registrationLayout->addWidget(usernameLabel);
+    registrationLayout->addWidget(usernameEdit, 1);
+    registrationLayout->addWidget(addUserButton);
+    accountLayout->addWidget(registrationGroup);
+
+    QHBoxLayout *tableHeaderLayout = new QHBoxLayout();
+    QLabel *tableLabel = new QLabel(tr("Registered accounts"), accountPage);
+    QPushButton *refreshButton = new QPushButton(tr("Refresh"), accountPage);
+    refreshButton->setIcon(
+        accountPage->style()->standardIcon(QStyle::SP_BrowserReload));
+    tableHeaderLayout->addWidget(tableLabel);
+    tableHeaderLayout->addStretch();
+    tableHeaderLayout->addWidget(refreshButton);
+    accountLayout->addLayout(tableHeaderLayout);
+
+    QTableWidget *table = new QTableWidget(accountPage);
+    table->setObjectName(QStringLiteral("accountsTable"));
+    table->setColumnCount(6);
+    table->setHorizontalHeaderLabels({
+        tr("ID"),
+        tr("Username"),
+        tr("Display name"),
+        tr("Role"),
+        tr("Password"),
+        tr("Registered at")
+    });
+    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table->setSelectionMode(QAbstractItemView::SingleSelection);
+    table->setAlternatingRowColors(true);
+    table->verticalHeader()->setVisible(false);
+    table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+    table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
+    table->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
+    table->horizontalHeader()->setSectionResizeMode(5, QHeaderView::ResizeToContents);
+    accountLayout->addWidget(table, 1);
+
+    QLabel *statusLabel = new QLabel(accountPage);
+    statusLabel->setWordWrap(true);
+    accountLayout->addWidget(statusLabel);
+
+    QGroupBox *passwordGroup = new QGroupBox(tr("Admin password"), accountPage);
+    QVBoxLayout *passwordLayout = new QVBoxLayout(passwordGroup);
+    QFormLayout *passwordForm = new QFormLayout();
+    QLineEdit *currentPasswordEdit = new QLineEdit(passwordGroup);
+    QLineEdit *newPasswordEdit = new QLineEdit(passwordGroup);
+    QLineEdit *confirmPasswordEdit = new QLineEdit(passwordGroup);
+    currentPasswordEdit->setObjectName(QStringLiteral("adminCurrentPassword"));
+    newPasswordEdit->setObjectName(QStringLiteral("adminNewPassword"));
+    confirmPasswordEdit->setObjectName(QStringLiteral("adminConfirmPassword"));
+    currentPasswordEdit->setEchoMode(QLineEdit::Password);
+    newPasswordEdit->setEchoMode(QLineEdit::Password);
+    confirmPasswordEdit->setEchoMode(QLineEdit::Password);
+    currentPasswordEdit->setMaxLength(256);
+    newPasswordEdit->setMaxLength(256);
+    confirmPasswordEdit->setMaxLength(256);
+    passwordForm->addRow(tr("Current password:"), currentPasswordEdit);
+    passwordForm->addRow(tr("New password:"), newPasswordEdit);
+    passwordForm->addRow(tr("Confirm password:"), confirmPasswordEdit);
+    passwordLayout->addLayout(passwordForm);
+
+    QHBoxLayout *passwordButtonLayout = new QHBoxLayout();
+    QPushButton *changePasswordButton = new QPushButton(
+        tr("Change Password"), passwordGroup);
+    passwordButtonLayout->addStretch();
+    passwordButtonLayout->addWidget(changePasswordButton);
+    passwordLayout->addLayout(passwordButtonLayout);
+    passwordGroup->setEnabled(false);
+    accountLayout->addWidget(passwordGroup);
+
+    const auto reloadAccounts = [this, table, statusLabel, passwordGroup]() {
+        table->setRowCount(0);
+        passwordGroup->setEnabled(false);
+
+        if (!m_mainWindow->m_httpServer) {
+            statusLabel->setText(tr("The account database is unavailable."));
+            return;
+        }
+
+        QString errorMessage;
+        const QList<UserSummary> accounts =
+            m_mainWindow->m_httpServer->accountSummaries(&errorMessage);
+        if (!errorMessage.isEmpty()) {
+            statusLabel->setText(errorMessage);
+            return;
+        }
+
+        bool adminFound = false;
+        table->setRowCount(accounts.size());
+        for (int row = 0; row < accounts.size(); ++row) {
+            const UserSummary &account = accounts.at(row);
+            QTableWidgetItem *idItem = new QTableWidgetItem();
+            idItem->setData(Qt::DisplayRole, account.id);
+            table->setItem(row, 0, idItem);
+            table->setItem(row, 1, new QTableWidgetItem(account.username));
+            table->setItem(row, 2, new QTableWidgetItem(account.displayName));
+            table->setItem(row, 3, new QTableWidgetItem(account.role));
+            const QString passwordStatus =
+                account.username == QStringLiteral("admin")
+                    ? tr("Protected")
+                    : (account.usesDefaultPassword
+                           ? tr("123456 (default)")
+                           : tr("Changed"));
+            table->setItem(row, 4, new QTableWidgetItem(passwordStatus));
+            table->setItem(row, 5, new QTableWidgetItem(account.createdAt));
+            adminFound = adminFound
+                || account.username == QStringLiteral("admin");
+        }
+
+        passwordGroup->setEnabled(adminFound);
+        statusLabel->setText(adminFound
+            ? tr("%1 account(s)").arg(accounts.size())
+            : tr("%1 account(s). The admin account was not found.")
+                  .arg(accounts.size()));
+    };
+
+    connect(refreshButton, &QPushButton::clicked,
+            accountPage, reloadAccounts);
+    connect(addUserButton, &QPushButton::clicked,
+            accountPage, [this, accountPage, usernameEdit]() {
+        const QString username = usernameEdit->text().trimmed();
+        if (username.isEmpty()) {
+            QMessageBox::warning(accountPage,
+                                 tr("Add user"),
+                                 tr("Enter a username."));
+            return;
+        }
+
+        QString errorMessage;
+        UserSummary createdUser;
+        if (!m_mainWindow->m_httpServer
+            || !m_mainWindow->m_httpServer->createManagedUser(
+                username, &createdUser, &errorMessage)) {
+            QMessageBox::warning(
+                accountPage,
+                tr("Add user"),
+                errorMessage.isEmpty()
+                    ? tr("The account database is unavailable.")
+                    : errorMessage);
+            return;
+        }
+
+        usernameEdit->clear();
+        QMessageBox::information(
+            accountPage,
+            tr("Add user"),
+            tr("User %1 was created with the initial password 123456.")
+                .arg(createdUser.username));
+    });
+    connect(usernameEdit, &QLineEdit::returnPressed,
+            addUserButton, &QPushButton::click);
+    if (m_mainWindow->m_httpServer) {
+        connect(m_mainWindow->m_httpServer, &HttpServer::accountsChanged,
+                accountPage, reloadAccounts);
+    }
+    connect(changePasswordButton, &QPushButton::clicked,
+            accountPage,
+            [this, accountPage, currentPasswordEdit, newPasswordEdit,
+             confirmPasswordEdit]() {
+        const QString currentPassword = currentPasswordEdit->text();
+        const QString newPassword = newPasswordEdit->text();
+        const QString confirmPassword = confirmPasswordEdit->text();
+        if (currentPassword.isEmpty() || newPassword.isEmpty()
+            || confirmPassword.isEmpty()) {
+            QMessageBox::warning(accountPage,
+                                 tr("Admin password"),
+                                 tr("Complete all password fields."));
+            return;
+        }
+        if (newPassword != confirmPassword) {
+            QMessageBox::warning(accountPage,
+                                 tr("Admin password"),
+                                 tr("The new passwords do not match."));
+            return;
+        }
+        if (newPassword.size() < 8 || newPassword.size() > 256) {
+            QMessageBox::warning(
+                accountPage,
+                tr("Admin password"),
+                tr("The new password must contain 8 to 256 characters."));
+            return;
+        }
+
+        QString errorMessage;
+        if (!m_mainWindow->m_httpServer
+            || !m_mainWindow->m_httpServer->changeAdminPassword(
+                currentPassword, newPassword, &errorMessage)) {
+            QMessageBox::warning(
+                accountPage,
+                tr("Admin password"),
+                errorMessage.isEmpty()
+                    ? tr("The account database is unavailable.")
+                    : errorMessage);
+            return;
+        }
+
+        currentPasswordEdit->clear();
+        newPasswordEdit->clear();
+        confirmPasswordEdit->clear();
+        QMessageBox::information(
+            accountPage,
+            tr("Admin password"),
+            tr("The admin password was updated. All accounts must sign in again."));
+    });
+
+    reloadAccounts();
+    return accountPage;
+}
+
 QDialog *ui_AdminOptions::setupOptionsDialog() {
     QDialog *optionsDialog = new QDialog(m_mainWindow);
     optionsDialog->setWindowTitle(tr("Preferences"));
@@ -211,6 +440,10 @@ QDialog *ui_AdminOptions::setupOptionsDialog() {
     shortcutsItem->setText(0, tr("Shortcuts"));
     shortcutsItem->setIcon(0, m_mainWindow->m_UI->ShortcutIcon);
 
+    QTreeWidgetItem *accountItem = new QTreeWidgetItem(treeWidget);
+    accountItem->setText(0, tr("Account"));
+    accountItem->setIcon(0, m_mainWindow->m_UI->AccountIcon);
+
     // 将搜索框和树形结构添加到左侧布局中
     leftDialogLayout->addWidget(searchLineEdit);
     leftDialogLayout->addWidget(treeWidget);
@@ -238,39 +471,40 @@ QDialog *ui_AdminOptions::setupOptionsDialog() {
     QWidget *basicPage = createBasicPage();         // Basic 页面
     QWidget *systemPage    = createSystemPage();       // System 页面
     QWidget *shortcutsPage = createShortcutsPage();    // Shortcuts 页面
+    QWidget *accountPage = createAccountPage();        // Account 页面
 
 
     // 将页面添加到堆叠窗口
-    stackedWidget->addWidget(generalPage);
-    stackedWidget->addWidget(basicPage);
-    stackedWidget->addWidget(languagePage);
-    stackedWidget->addWidget(themePage);
-    stackedWidget->addWidget(systemPage);
-    stackedWidget->addWidget(shortcutsPage);
+    generalGroup->setData(0, Qt::UserRole,
+                          stackedWidget->addWidget(generalPage));
+    basicGroup->setData(0, Qt::UserRole,
+                        stackedWidget->addWidget(basicPage));
+    languageItem->setData(0, Qt::UserRole,
+                          stackedWidget->addWidget(languagePage));
+    themeItem->setData(0, Qt::UserRole,
+                       stackedWidget->addWidget(themePage));
+    systemItem->setData(0, Qt::UserRole,
+                        stackedWidget->addWidget(systemPage));
+    shortcutsItem->setData(0, Qt::UserRole,
+                           stackedWidget->addWidget(shortcutsPage));
+    accountItem->setData(0, Qt::UserRole,
+                         stackedWidget->addWidget(accountPage));
 
 
     // 连接树形结构的信号到堆叠窗口的槽
-    connect(treeWidget, &QTreeWidget::itemSelectionChanged, this, [this, stackedWidget, treeWidget, proLabel]() {
+    connect(treeWidget, &QTreeWidget::itemSelectionChanged, this, [stackedWidget, treeWidget, proLabel]() {
         QTreeWidgetItem *currentItem = treeWidget->currentItem();
         if (currentItem) {
-            QString text = currentItem->text(0);
-            if (text == tr("General")) {
-                stackedWidget->setCurrentIndex(0);
-            } else if (text == tr("Basic")) {
-                stackedWidget->setCurrentIndex(1);
-            } else if (text == tr("Language")) {
-                stackedWidget->setCurrentIndex(2);
-            } else if (text == tr("Theme")) {
-                stackedWidget->setCurrentIndex(3);
-            } else if (text == tr("System")) {
-                stackedWidget->setCurrentIndex(4);
-            } else if (text == tr("Shortcuts")) {
-                stackedWidget->setCurrentIndex(5);
+            bool indexOk = false;
+            const int pageIndex = currentItem->data(0, Qt::UserRole).toInt(&indexOk);
+            if (indexOk) {
+                stackedWidget->setCurrentIndex(pageIndex);
             }
 
-            proLabel->setText(text); // 更新 proLabel 的内容为当前选中的分支
+            proLabel->setText(currentItem->text(0));
         }
     });
+    treeWidget->setCurrentItem(generalGroup);
 
     // 连接搜索框的 textChanged 信号到搜索函数
     connect(searchLineEdit, &QLineEdit::textChanged, this, [this, treeWidget](const QString &searchText) {

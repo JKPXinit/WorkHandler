@@ -24,6 +24,7 @@ private:
     QWidget * createBasicPage();
     QWidget * createLanguagePage();
     QWidget * createThemePage();
+    QWidget * createAccountPage();
     QWidget * createSystemPage();
     QWidget * createShortcutsPage();
 

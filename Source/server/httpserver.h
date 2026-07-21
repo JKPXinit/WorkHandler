@@ -34,6 +34,13 @@ public:
     bool databaseWasCreated() const;
     bool isRunning() const;
     ServerConfig configuration(QString *errorMessage = nullptr) const;
+    QList<UserSummary> accountSummaries(QString *errorMessage = nullptr) const;
+    bool createManagedUser(const QString &username,
+                           UserSummary *createdUser = nullptr,
+                           QString *errorMessage = nullptr);
+    bool changeAdminPassword(const QString &currentPassword,
+                             const QString &newPassword,
+                             QString *errorMessage = nullptr);
 
 public slots:
     bool startServer(const QString &bindAddress, quint16 port);
@@ -46,6 +53,7 @@ signals:
     void stateChanged(HttpServer::State state, const QString &detail);
     void reachabilityTested(bool reachable, const QString &detail);
     void bootstrapAdminCreated(const QString &username, const QString &password);
+    void accountsChanged();
     void configurationChanged(const QString &serverInterface,
                               quint16 serverPort,
                               bool autoStart,
