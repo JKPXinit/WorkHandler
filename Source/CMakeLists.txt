@@ -78,7 +78,6 @@ set(PROJECT_SOURCES
     myUI/feature/myLogger.cpp
     myUI/feature/myLogger.h
 
-    html.qrc
     image.qrc
     language.qrc
     theme.qrc

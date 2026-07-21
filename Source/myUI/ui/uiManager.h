@@ -70,7 +70,6 @@ private slots:
     void adminModeChange(bool state);
     void initMenuBar ();
     void initDockWindows();
-    void onMenuBar_Issue();
 
 private:
     ThemeManager *m_themeManager;
@@ -94,7 +93,6 @@ private:
     QAction *m_lockManageAction {nullptr};
     QAction *m_saveLayoutAction {nullptr};
     QAction *m_optionsAction    {nullptr};
-    QAction *m_issueAction      {nullptr};
     QAction *m_aboutAction      {nullptr};
 
     // Dock 窗口指针（用于 retranslateUi）

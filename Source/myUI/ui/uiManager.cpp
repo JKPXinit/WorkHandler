@@ -1,9 +1,4 @@
-﻿#include <QDesktopServices>
-#include <QUrl>
-#include <QTemporaryFile>
-#include <QFile>
-#include <QDir>
-#include <QSplashScreen>
+﻿#include <QSplashScreen>
 #include <QSystemTrayIcon>
 #include <QDebug>
 #include <QLabel>
@@ -21,9 +16,7 @@
 #include <QTreeView>
 #include <QFileSystemModel>
 #include <QLineEdit>
-#include <QDesktopServices>
 #include <QPushButton>
-#include <QUrl>
 #include <QSpinBox>
 #include <QRegularExpression>
 #include <QSettings>
@@ -230,8 +223,6 @@ void uiManager::initMenuBar () {
 
     // Help 菜单
     helpMenu = menubar->addMenu(tr("Help"));
-    m_issueAction = helpMenu->addAction(tr("QA issue"));
-    connect(m_issueAction, &QAction::triggered, this, &uiManager::onMenuBar_Issue);
     m_aboutAction = helpMenu->addAction(tr("About"));
 
     // 使用 ShortcutManager 注册快捷键
@@ -303,7 +294,6 @@ void uiManager::retranslateUi() {
     m_optionsAction->setText(tr("Settings"));
 
     // Help 菜单 actions
-    m_issueAction->setText(tr("QA issue"));
     m_aboutAction->setText(tr("About"));
 
     // Dock 窗口标题
@@ -514,27 +504,6 @@ void uiManager::onMenuBar_Help() {
     QDialog *aboutDlg = m_mainWindow->m_aboutDialog->setupAboutDialog();
     aboutDlg->exec();
 
-}
-
-void uiManager::onMenuBar_Issue()
-{
-    // 从资源里读出 html 内容
-    QFile qrcFile(":/prefix4/html/issueState.html");
-    if (!qrcFile.open(QIODevice::ReadOnly)) return;
-
-    QByteArray html = qrcFile.readAll();
-    qrcFile.close();
-
-    // 写到临时文件
-    QTemporaryFile tmp(QDir::temp().filePath("XXXXXX.html"));
-    tmp.setAutoRemove(false);          // 让文件关闭后仍存在
-    if (!tmp.open()) return;
-    tmp.write(html);
-    tmp.flush();
-    tmp.close();                       // 现在 tmp.fileName() 就是磁盘路径
-
-    // 交给默认浏览器
-    QDesktopServices::openUrl(QUrl::fromLocalFile(tmp.fileName()));
 }
 
 void uiManager::initSplash()
