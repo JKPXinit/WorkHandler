@@ -164,3 +164,23 @@ add_custom_command(TARGET ${APP_TARGET} POST_BUILD
         "$<TARGET_FILE_DIR:${APP_TARGET}>"
     COMMENT "Copy QtDock runtime library next to ${APP_TARGET}"
 )
+
+include(CTest)
+if(BUILD_TESTING)
+    find_package(Qt6 REQUIRED COMPONENTS Test)
+    qt_add_executable(workhandler_httpserver_tests
+        tests/httpserverintegrationtest.cpp
+    )
+    set_target_properties(workhandler_httpserver_tests PROPERTIES
+        AUTOUIC OFF
+        AUTORCC OFF
+    )
+    target_link_libraries(workhandler_httpserver_tests PRIVATE
+        Qt6::Core
+        Qt6::Network
+        Qt6::Test
+        workhandler_backend
+    )
+    add_test(NAME workhandler_httpserver_tests
+             COMMAND workhandler_httpserver_tests)
+endif()
