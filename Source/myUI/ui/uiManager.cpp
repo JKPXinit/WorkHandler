@@ -33,6 +33,7 @@
 #include "passwordverfy.h"
 #include "myLogger.h"
 #include "logviewerdialog.h"
+#include "httpservermanagerdialog.h"
 #include "aboutdialog.h"
 #include "softwareconfig.h"
 #include "thememanager.h"
@@ -128,6 +129,16 @@ void uiManager::setupUI() {
 
 // 创建窗口
 void uiManager::initDockWindows() {
+
+    m_httpServerManagerDock = new ads::CDockWidget(tr("HTTP Server"), parent);
+    m_httpServerManagerDock->setObjectName("HttpServerManagerDock");
+    m_mainWindow->m_httpServerManagerDialog = new HttpServerManagerDialog(m_mainWindow);
+    httpServerManagerView =
+        m_mainWindow->m_httpServerManagerDialog->setupHttpServerManagerDialog();
+    m_httpServerManagerDock->setWidget(httpServerManagerView);
+    m_mainWindow->m_DockManager->addDockWidget(ads::LeftDockWidgetArea,
+                                                m_httpServerManagerDock);
+    displayMenu->addAction(m_httpServerManagerDock->toggleViewAction());
 
     m_emptyViewDock = new ads::CDockWidget(tr("Empty view") ,parent);
     m_emptyViewDock->setObjectName("EmptyViewDock");
@@ -300,6 +311,9 @@ void uiManager::retranslateUi() {
     // Dock 窗口标题
     if (m_emptyViewDock) m_emptyViewDock->setWindowTitle(tr("Empty view"));
     if (m_logViewDock)   m_logViewDock->setWindowTitle(tr("Log viewer"));
+    if (m_httpServerManagerDock) {
+        m_httpServerManagerDock->setWindowTitle(tr("HTTP Server"));
+    }
 
     LOG_INFO("UI retranslated");
 }

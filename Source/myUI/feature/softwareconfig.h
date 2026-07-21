@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QFile>
 #include <QMap>
+#include <QtGlobal>
 
 #include "public.h"
 
@@ -37,6 +38,14 @@ typedef struct m_Options {
         int  logRotationMaxBackups;     // 最多保留的备份文件数
     };
     systemConfig_t m_systemConfig;
+
+    struct httpServerConfig_t {
+        QString interfaceName;       // 上次选择的网卡系统名称
+        QString selectedAddress;     // 用于绑定或展示的 IPv4 地址
+        quint16 port;                // HTTP 监听端口
+        bool bindAllInterfaces;      // 是否绑定 0.0.0.0
+    };
+    httpServerConfig_t m_httpServerConfig;
 
     struct adminConfig_t {
         bool adminMode;     // 高级模式 true：启用 ,false：不启用
@@ -81,6 +90,16 @@ public:
     void setLogRotationIntervalDays(int days) { m_Config->m_systemConfig.logRotationIntervalDays = days; }
     int logRotationMaxBackups() const { return m_Config->m_systemConfig.logRotationMaxBackups; }
     void setLogRotationMaxBackups(int count) { m_Config->m_systemConfig.logRotationMaxBackups = count; }
+
+    // HTTP server config
+    QString httpServerInterfaceName() const { return m_Config->m_httpServerConfig.interfaceName; }
+    void setHttpServerInterfaceName(const QString &name) { m_Config->m_httpServerConfig.interfaceName = name; }
+    QString httpServerSelectedAddress() const { return m_Config->m_httpServerConfig.selectedAddress; }
+    void setHttpServerSelectedAddress(const QString &address) { m_Config->m_httpServerConfig.selectedAddress = address; }
+    quint16 httpServerPort() const { return m_Config->m_httpServerConfig.port; }
+    void setHttpServerPort(quint16 port) { m_Config->m_httpServerConfig.port = port; }
+    bool httpServerBindAllInterfaces() const { return m_Config->m_httpServerConfig.bindAllInterfaces; }
+    void setHttpServerBindAllInterfaces(bool enabled) { m_Config->m_httpServerConfig.bindAllInterfaces = enabled; }
 
     // Admin config
     bool adminMode() const { return m_Config->m_adminConfig.adminMode; }

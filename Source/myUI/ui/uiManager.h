@@ -17,6 +17,7 @@ class MainWindow;
 class ThemeManager;
 class ui_AdminOptions;
 class logViewerDialog;
+class HttpServerManagerDialog;
 class QSystemTrayIcon;
 class QSplashScreen;
 namespace ads { class CDockWidget; }
@@ -36,6 +37,7 @@ public:
     QDialog *adminOptsDialog;
     QDialog *emptyViewDialog;
     QDialog *logVieweDialog;
+    QDialog *httpServerManagerView;
 
     QIcon appIcon;
     QIcon OptionsIcon;
@@ -98,6 +100,7 @@ private:
     // Dock 窗口指针（用于 retranslateUi）
     ads::CDockWidget *m_emptyViewDock {nullptr};
     ads::CDockWidget *m_logViewDock   {nullptr};
+    ads::CDockWidget *m_httpServerManagerDock {nullptr};
 
     bool newWindow_offest = true;
 
