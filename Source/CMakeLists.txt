@@ -71,8 +71,6 @@ set(PROJECT_SOURCES
 
     myUI/feature/softwareconfig.cpp
     myUI/feature/softwareconfig.h
-    myUI/feature/passwordverfy.cpp
-    myUI/feature/passwordverfy.h
     myUI/feature/shortcutmanager.cpp
     myUI/feature/shortcutmanager.h
     myUI/feature/exitmodedialog.cpp

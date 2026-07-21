@@ -9,7 +9,6 @@ class uiManager;
 class SoftwareConfig;
 class ThemeManager;
 class LanguageManager;
-class PasswordVerfy;
 class emptyDialog;
 class ShortcutManager;
 class logViewerDialog;
@@ -29,14 +28,10 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
-Q_SIGNALS:
-    void adminModeChanged(bool granted);    // Admin 模式状态变更
-
 public:
     SoftwareConfig * m_softwareconfig;
     ThemeManager *m_thememanager;
     LanguageManager *m_Languagemanager;
-    PasswordVerfy *m_passwordverfy;
     uiManager *m_UI;
     emptyDialog *m_emptyDialog;
     logViewerDialog *m_logViewerDialog;
@@ -49,10 +44,6 @@ public:
 
 private slots:
     void initConfigUI();
-    void onAdminModeGranted();
-    void onAdminModeRejected();
-    void onRequestAdminAuth();      // 响应 uiManager 的密码验证请求
-    void onAdminModeExited();       // 响应 uiManager 的主动退出 Admin 模式
 
 private:
     Ui::MainWindow *ui;

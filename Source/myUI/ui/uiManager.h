@@ -6,7 +6,6 @@
 #include <QStatusBar>
 #include <QObject>
 #include <QTranslator>
-#include <QCheckBox>
 
 #include "public.h"
 
@@ -32,9 +31,6 @@ public:
     bool onCloseEvent(QCloseEvent *);
 
 public:
-    QDialog *optionsDialog;
-    QCheckBox *adminModeCheckBox;
-    QDialog *adminOptsDialog;
     QDialog *emptyViewDialog;
     QDialog *logVieweDialog;
     QDialog *httpServerManagerView;
@@ -57,11 +53,6 @@ public slots:
     void retranslateUi();
     void languageComBox_currenIndexChanged(int index);
     void themeComboBox_currenIndexChanged(int index);
-    void onAdminAuthResult(bool granted);   // 收到密码验证结果
-
-signals:
-    void requestAdminAuth();        // 请求 MainWindow 发起密码验证
-    void adminModeExited();         // 通知 MainWindow 用户主动退出 Admin 模式
 
 private slots:
 
@@ -69,13 +60,12 @@ private slots:
     void onMenuBar_Options();
     void onMenuBar_Exit();
     void onMenuBar_Help();
-    void adminModeChange(bool state);
     void initMenuBar ();
     void initDockWindows();
 
 private:
     ThemeManager *m_themeManager;
-    ui_AdminOptions *m_AdminOptions;
+    ui_AdminOptions *m_options;
 
     QMainWindow *parent;
     MainWindow *m_mainWindow;  // 指向 MainWindow 的指针

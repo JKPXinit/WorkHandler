@@ -225,17 +225,6 @@ m_Options_t *SoftwareConfig::strXml_to_Options(QString strxml) {
                     }
                 } // HttpServer
 
-                if (xmlReader.name() == "Advanced" && xmlReader.isStartElement()) {
-                    while (!(xmlReader.name() == "Advanced" && xmlReader.isEndElement())) {
-                        xmlReader.readNextStartElement();
-
-                        if (xmlReader.name() == "adminMode") {
-                            QString sudoValue = xmlReader.readElementText();
-                            OptionsTmp->m_adminConfig.adminMode = (sudoValue == "true");
-                        }
-                    }
-                } // Advanced
-
                 if (xmlReader.name() == "Shortcuts" && xmlReader.isStartElement()) {
                     while (!(xmlReader.name() == "Shortcuts" && xmlReader.isEndElement())) {
                         xmlReader.readNextStartElement();
@@ -281,8 +270,6 @@ void SoftwareConfig::Default_Config() {
     m_Config->m_httpServerConfig.autoStart = true;
     m_Config->m_httpServerConfig.keepOriginal = false;
     m_Config->m_httpServerConfig.maxImageWidth = 1920;
-    m_Config->m_adminConfig.adminMode = false;
-
     Write_config(); // 写入配置文件
 }
 
@@ -346,10 +333,6 @@ QString SoftwareConfig::Options_to_strXml(m_Options_t *OptionsTmp) {
     writer.writeTextElement("maxImageWidth",
                             QString::number(OptionsTmp->m_httpServerConfig.maxImageWidth));
     writer.writeEndElement();               // HTTP 服务设置
-
-    writer.writeStartElement("Advanced");
-    writer.writeTextElement("adminMode", OptionsTmp->m_adminConfig.adminMode ? "true" : "false");
-    writer.writeEndElement();               // Advanced 设置
 
     writer.writeStartElement("Shortcuts");
     for (auto it = OptionsTmp->m_shortcutConfig.keys.constBegin();

@@ -6,31 +6,15 @@
 #include <QPropertyAnimation>
 #include <QGraphicsOpacityEffect>
 #include <QMessageBox>
-#include <QComboBox>
 #include <QCoreApplication>
-#include <QStorageInfo>
-#include <QProgressBar>
-#include <QHBoxLayout>
 #include <QWidget>
 #include <QString>
-#include <QGroupBox>
-#include <QTreeView>
-#include <QFileSystemModel>
-#include <QLineEdit>
-#include <QPushButton>
-#include <QSpinBox>
-#include <QRegularExpression>
 #include <QSettings>
-#include <QTreeWidget>
-#include <QStackedWidget>
-#include <QFormLayout>
-#include <QPlainTextEdit>
 
 #include "uiManager.h"
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include "emptydialog.h"
-#include "passwordverfy.h"
 #include "myLogger.h"
 #include "logviewerdialog.h"
 #include "httpservermanagerdialog.h"
@@ -53,7 +37,7 @@ uiManager::uiManager(MainWindow *mainWindow)
     m_mainWindow = mainWindow;
 
     m_themeManager = new ThemeManager(this);
-    m_AdminOptions = new ui_AdminOptions(mainWindow);
+    m_options = new ui_AdminOptions(mainWindow);
 
     statusbar = mainWindow->statusBar();    // 初始化状态栏
 
@@ -116,12 +100,12 @@ void uiManager::setupUI() {
     LOG_INFO("UI setup completed");
 
 #else
-    adminOptsDialog = m_AdminOptions->setupadminDialog();
+    QDialog *optionsDialog = m_options->setupOptionsDialog();
 
-    LOG_DEBUG("setupadminDialog stepover");
+    LOG_DEBUG("setupOptionsDialog stepover");
 
     // 显示对话框
-    adminOptsDialog->exec();
+    optionsDialog->exec();
 #endif
 
     return;
@@ -393,116 +377,8 @@ void uiManager::themeComboBox_currenIndexChanged(int index) {
 }
 
 void uiManager::onMenuBar_Options() {
-    // 如果已经处于管理员模式，直接打开管理员设置界面
-    if (m_mainWindow->m_softwareconfig->adminMode()) {
-        adminOptsDialog = m_AdminOptions->setupadminDialog();
-        adminOptsDialog->exec();
-        return;  // 直接返回，不显示普通的 Settings 对话框
-    }
-
-    // 创建一个对话框
-    optionsDialog = new QDialog(parent);
-    optionsDialog->setWindowTitle(tr("Options"));
-    optionsDialog->setMinimumSize(180, 140);
-    optionsDialog->setWindowIcon(OptionsIcon);
-
-    // 创建一个垂直布局
-    QVBoxLayout *layout = new QVBoxLayout(optionsDialog);
-
-    // 创建一个 QComboBox 用于选择语言
-    QComboBox *languageComboBox = new QComboBox(optionsDialog);
-    for (int i = 0 ;i < ENUM_MAX(languageType) ;i++) {
-        languageComboBox->addItem(languageList[i]);
-    }
-
-    // 读取语言配置
-    languageComboBox->setCurrentIndex(m_mainWindow->m_softwareconfig->language());
-
-    // 创建一个 QComboBox 用于选择主题
-    QComboBox *themeComboBox = new QComboBox(optionsDialog);
-    for (int i = 0 ;i < ENUM_MAX(themeType) ;i++) {
-        themeComboBox->addItem(themeList[i]);
-    }
-
-    // 设置默认主题
-    themeComboBox->setCurrentIndex(m_mainWindow->m_softwareconfig->theme());
-
-    // 初始化 QCheckBox 用于管理员模式
-    adminModeCheckBox = new QCheckBox(tr("Admin Mode"), optionsDialog);
-
-    // 阻止信号，避免设置初始状态时触发 stateChanged
-    adminModeCheckBox->blockSignals(true);
-
-    // 读取管理员模式状态
-    adminModeCheckBox->setChecked(m_mainWindow->m_softwareconfig->adminMode());
-
-    // 恢复信号
-    adminModeCheckBox->blockSignals(false);
-
-    // 添加 languageComboBox 到布局
-    layout->addWidget(new QLabel(tr("UI lanagune :"), optionsDialog));
-    layout->addWidget(languageComboBox);
-    // 添加 themeComboBox 到布局
-    layout->addWidget(new QLabel(tr("UI theme :"), optionsDialog));
-    layout->addWidget(themeComboBox);
-    // 添加管理员模式勾选框到布局
-    layout->addWidget(adminModeCheckBox);
-
-    // 创建按钮布局
-    QHBoxLayout *buttonLayout = new QHBoxLayout();
-
-    // 创建确定和取消按钮
-    QPushButton *okButton     = new QPushButton(tr("Apply"),  optionsDialog);
-    QPushButton *cancelButton = new QPushButton(tr("Cancel"), optionsDialog);
-
-    // 添加按钮到按钮布局
-    buttonLayout->addWidget(okButton);
-    buttonLayout->addWidget(cancelButton);
-
-    // 将按钮布局添加到主布局
-    layout->addLayout(buttonLayout);
-
-    // 设置对话框的布局
-    optionsDialog->setLayout(layout);
-
-    // 连接信号和槽
-    connect(okButton, &QPushButton::clicked, this, [this] {
-        optionsDialog->close();    // 关闭对话框
-    });
-
-    connect(cancelButton, &QPushButton::clicked, this, [this] {
-        optionsDialog->close();    // 关闭对话框
-    });
-
-    connect(themeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &uiManager::themeComboBox_currenIndexChanged);
-    connect(languageComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &uiManager::languageComBox_currenIndexChanged);
-    connect(adminModeCheckBox ,&QCheckBox::stateChanged ,this ,&uiManager::adminModeChange);
-
-    // 显示对话框
+    QDialog *optionsDialog = m_options->setupOptionsDialog();
     optionsDialog->exec();
-}
-
-void uiManager::adminModeChange (bool state) {
-
-    if (state) {
-        // 用户勾选了 Admin Mode，关闭 Settings 对话框后请求密码验证
-        optionsDialog->close();
-        emit requestAdminAuth();
-    } else {
-        // 用户取消勾选 Admin Mode，通知 MainWindow 清除 adminMode 状态
-        emit adminModeExited();
-        LOG_DEBUG("Exited admin mode");
-    }
-
-    return ;
-}
-
-void uiManager::onAdminAuthResult(bool granted)
-{
-    if (granted) {
-        adminOptsDialog = m_AdminOptions->setupadminDialog();
-        adminOptsDialog->exec();
-    }
 }
 
 void uiManager::onMenuBar_Exit() {

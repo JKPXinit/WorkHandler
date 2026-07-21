@@ -15,15 +15,13 @@ public:
     ui_AdminOptions(MainWindow *mainWindow);
 
 public slots:
-    QDialog * setupadminDialog();
+    QDialog *setupOptionsDialog();
 
 private:
     MainWindow *m_mainWindow;  // 指向 MainWindow 的指针
 
     QWidget * createGeneralPage();
     QWidget * createBasicPage();
-    QWidget * createAccountPage();
-    QWidget * createPasswordPage();
     QWidget * createLanguagePage();
     QWidget * createThemePage();
     QWidget * createSystemPage();

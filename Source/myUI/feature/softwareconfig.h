@@ -50,11 +50,6 @@ typedef struct m_Options {
     };
     httpServerConfig_t m_httpServerConfig;
 
-    struct adminConfig_t {
-        bool adminMode;     // 高级模式 true：启用 ,false：不启用
-    };
-    adminConfig_t m_adminConfig;
-
     struct shortcutConfig_t {
         QMap<int, QString> keys;    // ShortcutId(int) → QKeySequence 字符串
     };
@@ -109,10 +104,6 @@ public:
     void setHttpServerKeepOriginal(bool enabled) { m_Config->m_httpServerConfig.keepOriginal = enabled; }
     int httpServerMaxImageWidth() const { return m_Config->m_httpServerConfig.maxImageWidth; }
     void setHttpServerMaxImageWidth(int width) { m_Config->m_httpServerConfig.maxImageWidth = width; }
-
-    // Admin config
-    bool adminMode() const { return m_Config->m_adminConfig.adminMode; }
-    void setAdminMode(bool en) { m_Config->m_adminConfig.adminMode = en; }
 
     // Shortcut config
     const QMap<int, QString>& shortcutKeys() const { return m_Config->m_shortcutConfig.keys; }

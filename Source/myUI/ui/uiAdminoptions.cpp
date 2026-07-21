@@ -6,7 +6,6 @@
 #include <QCheckBox>
 #include <QFileDialog>
 #include <QGroupBox>
-#include <QFormLayout>
 #include <QStackedWidget>
 #include <QDesktopServices>
 #include <QComboBox>
@@ -27,7 +26,6 @@
 #include "exitmodedialog.h"
 #include "myLogger.h"
 #include "uiManager.h"
-#include "passwordverfy.h"
 #include "thememanager.h"
 #include "shortcutmanager.h"
 
@@ -159,124 +157,11 @@ QWidget * ui_AdminOptions::createThemePage() {
     return themePage;
 }
 
-QWidget * ui_AdminOptions::createAccountPage() {
-
-    // 创建堆叠窗口的 Account 页面
-    QWidget *accountPage = new QWidget();
-    QVBoxLayout *accountLayout = new QVBoxLayout(accountPage);
-    QLabel *accountlabel = new QLabel(tr("Account Preferences"), accountPage);
-    accountlabel->setAlignment(Qt::AlignLeft | Qt::AlignTop);
-    accountLayout->addWidget(accountlabel);
-    accountPage->setLayout(accountLayout);
-
-    return accountPage;
-}
-
-QWidget * ui_AdminOptions::createPasswordPage() {
-    // 创建堆叠窗口的 Password 页面
-    QWidget *passwordPage = new QWidget();
-
-    // 创建密码输入框
-    QLineEdit *modifiedLineEdit = new QLineEdit(passwordPage);
-    modifiedLineEdit->setEchoMode(QLineEdit::Password); // 设置密码模式
-    QLineEdit *confirmLineEdit = new QLineEdit(passwordPage);
-    confirmLineEdit->setEchoMode(QLineEdit::Password); // 设置密码模式
-
-    // 创建密码标签
-    QLabel *newpwLabel = new QLabel(tr("New Password :"));
-    QLabel *confirmpwLabel = new QLabel(tr("Confirm New Password :"));
-
-    // 使用 QFormLayout 来对齐标签和输入框
-    QFormLayout *formLayout = new QFormLayout();
-    QHBoxLayout *modifiedLayout = new QHBoxLayout();
-    QHBoxLayout *confirmLayout = new QHBoxLayout();
-
-    // 创建清除按钮
-    QPushButton *clearModifiedButton = new QPushButton(passwordPage);
-    clearModifiedButton->setIcon(m_mainWindow->m_UI->DeleteIcon);
-    QPushButton *clearConfirmButton = new QPushButton(passwordPage);
-    clearConfirmButton->setIcon(m_mainWindow->m_UI->DeleteIcon);
-
-    // 将输入框和清除按钮添加到水平布局中
-    modifiedLayout->addWidget(modifiedLineEdit);
-    modifiedLayout->addWidget(clearModifiedButton);
-    confirmLayout->addWidget(confirmLineEdit);
-    confirmLayout->addWidget(clearConfirmButton);
-
-    // 将水平布局添加到表单布局中
-    formLayout->addRow(newpwLabel, modifiedLayout);
-    formLayout->addRow(confirmpwLabel, confirmLayout);
-
-    // 创建分组框
-    QGroupBox *modifiedPw = new QGroupBox(tr("Modified Password"));
-
-    // 创建 Apply 和 Restore 按钮
-    QPushButton *applyButton = new QPushButton(tr("Apply"));
-    QPushButton *restoreButton = new QPushButton(tr("Restore"));
-
-    // 创建按钮的水平布局
-    QHBoxLayout *buttonLayout = new QHBoxLayout();
-    buttonLayout->addStretch(); // 添加弹性空间，将按钮推到右侧
-    buttonLayout->addWidget(applyButton);
-    buttonLayout->addWidget(restoreButton);
-
-    // 创建一个垂直布局，用于分组框的内部布局
-    QVBoxLayout *groupBoxLayout = new QVBoxLayout();
-    groupBoxLayout->addLayout(formLayout); // 添加表单布局
-    groupBoxLayout->addLayout(buttonLayout); // 添加按钮布局
-
-    // 设置分组框的布局
-    modifiedPw->setLayout(groupBoxLayout);
-
-    // 创建主布局，将分组框添加到主布局中
-    QVBoxLayout *passwordLayout = new QVBoxLayout(passwordPage);
-    passwordLayout->addWidget(modifiedPw);
-
-    // 添加一个可伸缩的空白区域（spacer），放在分组框下方
-    QSpacerItem *spacer = new QSpacerItem(20, 40, QSizePolicy::Minimum, QSizePolicy::Expanding);
-    passwordLayout->addItem(spacer);
-
-    // 将主布局设置为Password页面的布局
-    passwordPage->setLayout(passwordLayout);
-
-    // 连接清除按钮的点击信号到槽函数
-    connect(clearModifiedButton, &QPushButton::clicked, modifiedLineEdit, &QLineEdit::clear);
-    connect(clearConfirmButton, &QPushButton::clicked, confirmLineEdit, &QLineEdit::clear);
-
-    // 连接 Apply 和 Restore 按钮的点击信号到槽函数
-    connect(applyButton, &QPushButton::clicked, this, [this ,modifiedLineEdit ,confirmLineEdit]() {
-
-        if (modifiedLineEdit->text() == confirmLineEdit->text()) {  // 两次输入相同
-            if (this->m_mainWindow->m_passwordverfy->modifiedPassword(confirmLineEdit->text())) {  // 调用修改密码成功
-                QMessageBox::information(m_mainWindow, tr("Information"), tr("Password change successed ！"));
-            } else { // 失败
-                QMessageBox::warning(m_mainWindow, tr("Warning"), tr("Password change failed ！"));
-                modifiedLineEdit->clear();
-                confirmLineEdit->clear();
-            }
-        } else { // 两次输入不同
-            QMessageBox::warning(m_mainWindow, tr("Warning"), tr("The password entered twice is not the same !"));
-            modifiedLineEdit->clear();
-            confirmLineEdit->clear();
-        }
-
-
-    });
-    connect(restoreButton, &QPushButton::clicked, this, [this]() {
-        // 处理 Restore 按钮的点击事件
-        LOG_DEBUG("Restore button clicked");
-        m_mainWindow->m_passwordverfy->defaultStoredHash();
-    });
-
-    return passwordPage;
-}
-
-
-QDialog * ui_AdminOptions::setupadminDialog() {
-    QDialog *adminDialog = new QDialog(m_mainWindow);
-    adminDialog->setWindowTitle(tr("Administrator Preferences"));
-    adminDialog->setWindowIcon(m_mainWindow->m_UI->AdministratorIcon);
-    adminDialog->resize(800, 600); // 调整对话框大小以适应新的布局
+QDialog *ui_AdminOptions::setupOptionsDialog() {
+    QDialog *optionsDialog = new QDialog(m_mainWindow);
+    optionsDialog->setWindowTitle(tr("Preferences"));
+    optionsDialog->setWindowIcon(m_mainWindow->m_UI->OptionsIcon);
+    optionsDialog->resize(800, 600); // 调整对话框大小以适应新的布局
 
     // 创建一个垂直布局，用于包含上下两个 layout
     QVBoxLayout *mainDialogLayout = new QVBoxLayout();
@@ -292,13 +177,13 @@ QDialog * ui_AdminOptions::setupadminDialog() {
     upLayout->addLayout(rightDialogLayout);
 
     // 创建搜索框
-    QLineEdit *searchLineEdit = new QLineEdit(adminDialog);
+    QLineEdit *searchLineEdit = new QLineEdit(optionsDialog);
     searchLineEdit->setPlaceholderText(tr("Search..."));
     searchLineEdit->setMinimumWidth(150);
     searchLineEdit->setMaximumWidth(200);
 
     // 创建左侧的树形结构
-    QTreeWidget *treeWidget = new QTreeWidget(adminDialog);
+    QTreeWidget *treeWidget = new QTreeWidget(optionsDialog);
     treeWidget->setHeaderHidden(true); // 隐藏表头
     treeWidget->setMinimumWidth(200);
     treeWidget->setMaximumWidth(200);
@@ -326,30 +211,24 @@ QDialog * ui_AdminOptions::setupadminDialog() {
     shortcutsItem->setText(0, tr("Shortcuts"));
     shortcutsItem->setIcon(0, m_mainWindow->m_UI->ShortcutIcon);
 
-    QTreeWidgetItem *accountGroup = new QTreeWidgetItem(treeWidget);
-    accountGroup->setText(0, tr("Account"));
-    QTreeWidgetItem *passwordItem = new QTreeWidgetItem(accountGroup);
-    passwordItem->setText(0, tr("Password"));
-    passwordItem->setIcon(0, m_mainWindow->m_UI->PasswordIcon);
-
     // 将搜索框和树形结构添加到左侧布局中
     leftDialogLayout->addWidget(searchLineEdit);
     leftDialogLayout->addWidget(treeWidget);
 
     // 添加右侧的分支标签
-    QLabel *proLabel = new QLabel(tr("General"), adminDialog); // 初始值为 "General"
+    QLabel *proLabel = new QLabel(tr("General"), optionsDialog); // 初始值为 "General"
     proLabel->setAlignment(Qt::AlignLeft | Qt::AlignTop);
     proLabel->setStyleSheet("font-weight: bold; font-size: 16px;");
     rightDialogLayout->addWidget(proLabel);
 
     // 添加右侧的分割线
-    QFrame *line = new QFrame(adminDialog);
+    QFrame *line = new QFrame(optionsDialog);
     line->setFrameShape(QFrame::HLine);
     line->setFrameShadow(QFrame::Sunken);
     rightDialogLayout->addWidget(line);
 
     // 创建右侧的堆叠窗口
-    QStackedWidget *stackedWidget = new QStackedWidget(adminDialog);
+    QStackedWidget *stackedWidget = new QStackedWidget(optionsDialog);
     rightDialogLayout->addWidget(stackedWidget);
 
     // 创建堆叠窗口
@@ -357,8 +236,6 @@ QDialog * ui_AdminOptions::setupadminDialog() {
     QWidget *languagePage = createLanguagePage();   // Language 页面
     QWidget *themePage = createThemePage();         // Theme 页面
     QWidget *basicPage = createBasicPage();         // Basic 页面
-    QWidget *accountPage = createAccountPage();     // Account 页面
-    QWidget *passwordPage = createPasswordPage();   // Password 页面
     QWidget *systemPage    = createSystemPage();       // System 页面
     QWidget *shortcutsPage = createShortcutsPage();    // Shortcuts 页面
 
@@ -368,8 +245,6 @@ QDialog * ui_AdminOptions::setupadminDialog() {
     stackedWidget->addWidget(basicPage);
     stackedWidget->addWidget(languagePage);
     stackedWidget->addWidget(themePage);
-    stackedWidget->addWidget(accountPage);
-    stackedWidget->addWidget(passwordPage);
     stackedWidget->addWidget(systemPage);
     stackedWidget->addWidget(shortcutsPage);
 
@@ -387,14 +262,10 @@ QDialog * ui_AdminOptions::setupadminDialog() {
                 stackedWidget->setCurrentIndex(2);
             } else if (text == tr("Theme")) {
                 stackedWidget->setCurrentIndex(3);
-            } else if (text == tr("Account")) {
-                stackedWidget->setCurrentIndex(4);
-            } else if (text == tr("Password")) {
-                stackedWidget->setCurrentIndex(5);
             } else if (text == tr("System")) {
-                stackedWidget->setCurrentIndex(6);
+                stackedWidget->setCurrentIndex(4);
             } else if (text == tr("Shortcuts")) {
-                stackedWidget->setCurrentIndex(7);
+                stackedWidget->setCurrentIndex(5);
             }
 
             proLabel->setText(text); // 更新 proLabel 的内容为当前选中的分支
@@ -411,12 +282,12 @@ QDialog * ui_AdminOptions::setupadminDialog() {
     QPushButton *okButton = new QPushButton(tr("Ok"));
     QPushButton *cannelButton = new QPushButton(tr("Cannel"));
 
-    connect(okButton ,&QPushButton::clicked ,this ,[this]{
-        this->m_mainWindow->m_UI->adminOptsDialog->close();
+    connect(okButton, &QPushButton::clicked, optionsDialog, [optionsDialog] {
+        optionsDialog->close();
     });
 
-    connect(cannelButton ,&QPushButton::clicked ,this ,[this]{
-        this->m_mainWindow->m_UI->adminOptsDialog->close();
+    connect(cannelButton, &QPushButton::clicked, optionsDialog, [optionsDialog] {
+        optionsDialog->close();
     });
 
     // 添加弹性空间，将按钮推到右侧
@@ -429,9 +300,9 @@ QDialog * ui_AdminOptions::setupadminDialog() {
     mainDialogLayout->addStretch(); // 添加弹性空间，将按钮推到下方
     mainDialogLayout->addLayout(downLayout);
 
-    adminDialog->setLayout(mainDialogLayout);
+    optionsDialog->setLayout(mainDialogLayout);
 
-    return adminDialog;
+    return optionsDialog;
 }
 
 void ui_AdminOptions::searchTreeWidget(QTreeWidget *treeWidget, const QString &searchText) {

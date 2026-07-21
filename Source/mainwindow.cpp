@@ -5,7 +5,6 @@
 #include "thememanager.h"
 #include "languagemanager.h"
 #include "softwareconfig.h"
-#include "passwordverfy.h"
 #include "exitmodedialog.h"
 #include "myLogger.h"
 #include "shortcutmanager.h"
@@ -27,7 +26,6 @@ MainWindow::MainWindow(QWidget *parent)
     m_softwareconfig = new SoftwareConfig(this);
     m_thememanager = new ThemeManager();
     m_Languagemanager = new LanguageManager(this);
-    m_passwordverfy = new PasswordVerfy(this);
     m_shortcutManager = new ShortcutManager(this);
     m_aboutDialog = nullptr;
 
@@ -36,20 +34,6 @@ MainWindow::MainWindow(QWidget *parent)
     m_UI = new uiManager(this);
 
     m_UI->setupUI();    // 显示 UI 界面
-
-    // PasswordVerfy 信号解耦连线
-    connect(m_passwordverfy, &PasswordVerfy::adminModeGranted,
-            this, &MainWindow::onAdminModeGranted);
-    connect(m_passwordverfy, &PasswordVerfy::adminModeRejected,
-            this, &MainWindow::onAdminModeRejected);
-
-    // uiManager ↔ PasswordVerfy 解耦连线
-    connect(m_UI, &uiManager::requestAdminAuth,
-            this, &MainWindow::onRequestAdminAuth);
-    connect(m_UI, &uiManager::adminModeExited,
-            this, &MainWindow::onAdminModeExited);
-    connect(this, &MainWindow::adminModeChanged,
-            m_UI, &uiManager::onAdminAuthResult);
 
     // ShortcutManager 信号解耦连线
     connect(m_shortcutManager, &ShortcutManager::shortcutConfigSaved,
@@ -198,9 +182,6 @@ MainWindow::MainWindow(QWidget *parent)
 }
 
 void MainWindow::initConfigUI() {
-
-    m_softwareconfig->setAdminMode(false);  // 软件重启后自动变为非管理员模式
-
     // 初始化日志系统
     LogConfig logConfig;
     int logMode = m_softwareconfig->logOutputMode();
@@ -280,36 +261,12 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
 
 
-void MainWindow::onAdminModeGranted()
-{
-    m_softwareconfig->setAdminMode(true);
-}
-
-void MainWindow::onAdminModeRejected()
-{
-    m_UI->adminModeCheckBox->setChecked(false);
-}
-
-void MainWindow::onRequestAdminAuth()
-{
-    // 同步调用密码验证（pwinputDialog 内部会 emit adminModeGranted/Rejected）
-    // 验证结果通过 adminModeChanged 信号通知 uiManager 决定是否打开 Admin 对话框
-    bool granted = m_passwordverfy->pwinputDialog();
-    emit adminModeChanged(granted);
-}
-
-void MainWindow::onAdminModeExited()
-{
-    m_softwareconfig->setAdminMode(false);
-}
-
 MainWindow::~MainWindow(){
     LOG_INFO("Application shutting down...");
     if (m_httpServer) {
         m_httpServer->stopServer();
     }
-    m_softwareconfig->setAdminMode(false);
-    m_softwareconfig->Write_config();   // 主窗口析构时，管理员模式恢复初始
+    m_softwareconfig->Write_config();
 
     // 关闭日志系统
     myLogger::instance()->shutdown();
