@@ -44,6 +44,9 @@ typedef struct m_Options {
         QString selectedAddress;     // 用于绑定或展示的 IPv4 地址
         quint16 port;                // HTTP 监听端口
         bool bindAllInterfaces;      // 是否绑定 0.0.0.0
+        bool autoStart;              // 应用启动时自动启动 HTTP 服务
+        bool keepOriginal;           // 图片处理后是否保留原图
+        int maxImageWidth;           // 图片处理最大宽度
     };
     httpServerConfig_t m_httpServerConfig;
 
@@ -100,6 +103,12 @@ public:
     void setHttpServerPort(quint16 port) { m_Config->m_httpServerConfig.port = port; }
     bool httpServerBindAllInterfaces() const { return m_Config->m_httpServerConfig.bindAllInterfaces; }
     void setHttpServerBindAllInterfaces(bool enabled) { m_Config->m_httpServerConfig.bindAllInterfaces = enabled; }
+    bool httpServerAutoStart() const { return m_Config->m_httpServerConfig.autoStart; }
+    void setHttpServerAutoStart(bool enabled) { m_Config->m_httpServerConfig.autoStart = enabled; }
+    bool httpServerKeepOriginal() const { return m_Config->m_httpServerConfig.keepOriginal; }
+    void setHttpServerKeepOriginal(bool enabled) { m_Config->m_httpServerConfig.keepOriginal = enabled; }
+    int httpServerMaxImageWidth() const { return m_Config->m_httpServerConfig.maxImageWidth; }
+    void setHttpServerMaxImageWidth(int width) { m_Config->m_httpServerConfig.maxImageWidth = width; }
 
     // Admin config
     bool adminMode() const { return m_Config->m_adminConfig.adminMode; }

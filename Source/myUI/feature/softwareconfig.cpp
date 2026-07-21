@@ -93,6 +93,9 @@ m_Options_t *SoftwareConfig::strXml_to_Options(QString strxml) {
     OptionsTmp->m_httpServerConfig.selectedAddress.clear();
     OptionsTmp->m_httpServerConfig.port = 8080;
     OptionsTmp->m_httpServerConfig.bindAllInterfaces = false;
+    OptionsTmp->m_httpServerConfig.autoStart = true;
+    OptionsTmp->m_httpServerConfig.keepOriginal = false;
+    OptionsTmp->m_httpServerConfig.maxImageWidth = 1920;
 
     QXmlStreamReader xmlReader(strxml);     // 读取 XML 迭代器
 
@@ -201,6 +204,24 @@ m_Options_t *SoftwareConfig::strXml_to_Options(QString strxml) {
                             OptionsTmp->m_httpServerConfig.bindAllInterfaces =
                                 (xmlReader.readElementText() == "true");
                         }
+
+                        if (xmlReader.name() == "autoStart") {
+                            OptionsTmp->m_httpServerConfig.autoStart =
+                                (xmlReader.readElementText() == "true");
+                        }
+
+                        if (xmlReader.name() == "keepOriginal") {
+                            OptionsTmp->m_httpServerConfig.keepOriginal =
+                                (xmlReader.readElementText() == "true");
+                        }
+
+                        if (xmlReader.name() == "maxImageWidth") {
+                            bool ok = false;
+                            const int width = xmlReader.readElementText().toInt(&ok);
+                            if (ok && width >= 320 && width <= 16384) {
+                                OptionsTmp->m_httpServerConfig.maxImageWidth = width;
+                            }
+                        }
                     }
                 } // HttpServer
 
@@ -257,6 +278,9 @@ void SoftwareConfig::Default_Config() {
     m_Config->m_httpServerConfig.selectedAddress.clear();
     m_Config->m_httpServerConfig.port = 8080;
     m_Config->m_httpServerConfig.bindAllInterfaces = false;
+    m_Config->m_httpServerConfig.autoStart = true;
+    m_Config->m_httpServerConfig.keepOriginal = false;
+    m_Config->m_httpServerConfig.maxImageWidth = 1920;
     m_Config->m_adminConfig.adminMode = false;
 
     Write_config(); // 写入配置文件
@@ -315,6 +339,12 @@ QString SoftwareConfig::Options_to_strXml(m_Options_t *OptionsTmp) {
     writer.writeTextElement("port", QString::number(OptionsTmp->m_httpServerConfig.port));
     writer.writeTextElement("bindAllInterfaces",
                             OptionsTmp->m_httpServerConfig.bindAllInterfaces ? "true" : "false");
+    writer.writeTextElement("autoStart",
+                            OptionsTmp->m_httpServerConfig.autoStart ? "true" : "false");
+    writer.writeTextElement("keepOriginal",
+                            OptionsTmp->m_httpServerConfig.keepOriginal ? "true" : "false");
+    writer.writeTextElement("maxImageWidth",
+                            QString::number(OptionsTmp->m_httpServerConfig.maxImageWidth));
     writer.writeEndElement();               // HTTP 服务设置
 
     writer.writeStartElement("Advanced");

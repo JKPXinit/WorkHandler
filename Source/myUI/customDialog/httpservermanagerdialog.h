@@ -45,12 +45,23 @@ public:
 public slots:
     void setServerState(ServerState state, const QString &detail = QString());
     void setReachabilityState(ReachabilityState state, const QString &detail = QString());
+    void applyServerConfiguration(const QString &serverInterface,
+                                  quint16 serverPort,
+                                  bool autoStart,
+                                  bool keepOriginal,
+                                  int maxImageWidth);
+    void showBootstrapCredentials(const QString &username, const QString &password);
 
 signals:
     void startServerRequested(const QString &bindAddress, quint16 port);
     void stopServerRequested();
     void restartServerRequested(const QString &bindAddress, quint16 port);
     void reachabilityTestRequested(const QUrl &url);
+    void configurationSaveRequested(const QString &serverInterface,
+                                    quint16 serverPort,
+                                    bool autoStart,
+                                    bool keepOriginal,
+                                    int maxImageWidth);
 
 private slots:
     void refreshNetworkInterfaces();
@@ -81,6 +92,9 @@ private:
     QComboBox *m_addressCombo {nullptr};
     QSpinBox *m_portSpinBox {nullptr};
     QCheckBox *m_bindAllCheckBox {nullptr};
+    QCheckBox *m_autoStartCheckBox {nullptr};
+    QCheckBox *m_keepOriginalCheckBox {nullptr};
+    QSpinBox *m_maxImageWidthSpinBox {nullptr};
     QLineEdit *m_localUrlEdit {nullptr};
     QLineEdit *m_lanUrlEdit {nullptr};
     QLabel *m_serverStateLabel {nullptr};

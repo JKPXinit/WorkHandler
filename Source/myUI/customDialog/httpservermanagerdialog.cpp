@@ -39,7 +39,7 @@ QDialog *HttpServerManagerDialog::setupHttpServerManagerDialog()
 
     m_dialog = new QDialog(m_mainWindow);
     m_dialog->setObjectName("HttpServerManagerDialog");
-    m_dialog->setMinimumSize(430, 440);
+    m_dialog->setMinimumSize(430, 520);
 
     setupUi();
     refreshNetworkInterfaces();
@@ -80,6 +80,23 @@ void HttpServerManagerDialog::setupUi()
     networkLayout->addRow(tr("Port:"), m_portSpinBox);
     networkLayout->addRow(QString(), m_bindAllCheckBox);
     mainLayout->addWidget(networkGroup);
+
+    auto *runtimeGroup = new QGroupBox(tr("Runtime Configuration"), m_dialog);
+    auto *runtimeLayout = new QFormLayout(runtimeGroup);
+    m_autoStartCheckBox = new QCheckBox(tr("Start with the application"), runtimeGroup);
+    m_autoStartCheckBox->setChecked(
+        m_mainWindow->m_softwareconfig->httpServerAutoStart());
+    m_keepOriginalCheckBox = new QCheckBox(tr("Keep original uploaded images"), runtimeGroup);
+    m_keepOriginalCheckBox->setChecked(
+        m_mainWindow->m_softwareconfig->httpServerKeepOriginal());
+    m_maxImageWidthSpinBox = new QSpinBox(runtimeGroup);
+    m_maxImageWidthSpinBox->setRange(320, 16384);
+    m_maxImageWidthSpinBox->setValue(
+        m_mainWindow->m_softwareconfig->httpServerMaxImageWidth());
+    runtimeLayout->addRow(QString(), m_autoStartCheckBox);
+    runtimeLayout->addRow(QString(), m_keepOriginalCheckBox);
+    runtimeLayout->addRow(tr("Maximum image width:"), m_maxImageWidthSpinBox);
+    mainLayout->addWidget(runtimeGroup);
 
     auto *endpointGroup = new QGroupBox(tr("Service Endpoints"), m_dialog);
     auto *endpointLayout = new QFormLayout(endpointGroup);
@@ -317,7 +334,17 @@ void HttpServerManagerDialog::saveConfiguration()
     config->setHttpServerSelectedAddress(selectedAddress());
     config->setHttpServerPort(static_cast<quint16>(m_portSpinBox->value()));
     config->setHttpServerBindAllInterfaces(m_bindAllCheckBox->isChecked());
+    config->setHttpServerAutoStart(m_autoStartCheckBox->isChecked());
+    config->setHttpServerKeepOriginal(m_keepOriginalCheckBox->isChecked());
+    config->setHttpServerMaxImageWidth(m_maxImageWidthSpinBox->value());
     config->Write_config();
+
+    emit configurationSaveRequested(
+        effectiveBindAddress(),
+        static_cast<quint16>(m_portSpinBox->value()),
+        m_autoStartCheckBox->isChecked(),
+        m_keepOriginalCheckBox->isChecked(),
+        m_maxImageWidthSpinBox->value());
 
     showFeedback(tr("HTTP server configuration saved."));
     LOG_INFO(QString("HTTP server configuration saved: %1:%2")
@@ -330,6 +357,7 @@ void HttpServerManagerDialog::requestStart()
     if (!validateConfiguration()) {
         return;
     }
+    saveConfiguration();
     showFeedback(tr("Start request sent. Waiting for the server response."));
     emit startServerRequested(effectiveBindAddress(),
                               static_cast<quint16>(m_portSpinBox->value()));
@@ -346,6 +374,7 @@ void HttpServerManagerDialog::requestRestart()
     if (!validateConfiguration()) {
         return;
     }
+    saveConfiguration();
     showFeedback(tr("Restart request sent. Waiting for the server response."));
     emit restartServerRequested(effectiveBindAddress(),
                                 static_cast<quint16>(m_portSpinBox->value()));
@@ -431,6 +460,52 @@ void HttpServerManagerDialog::setReachabilityState(ReachabilityState state,
     }
     m_reachabilityLabel->setText(text);
     m_testButton->setEnabled(state != ReachabilityState::Testing);
+}
+
+void HttpServerManagerDialog::applyServerConfiguration(const QString &serverInterface,
+                                                       quint16 serverPort,
+                                                       bool autoStart,
+                                                       bool keepOriginal,
+                                                       int maxImageWidth)
+{
+    if (!m_dialog) {
+        return;
+    }
+
+    m_portSpinBox->setValue(serverPort);
+    m_autoStartCheckBox->setChecked(autoStart);
+    m_keepOriginalCheckBox->setChecked(keepOriginal);
+    m_maxImageWidthSpinBox->setValue(maxImageWidth);
+
+    const bool bindAll = serverInterface == QHostAddress(QHostAddress::AnyIPv4).toString();
+    m_bindAllCheckBox->setChecked(bindAll);
+    if (!bindAll) {
+        for (int index = 0; index < m_interfaceCombo->count(); ++index) {
+            const QString interfaceName = m_interfaceCombo->itemData(index).toString();
+            const QNetworkInterface networkInterface =
+                QNetworkInterface::interfaceFromName(interfaceName);
+            bool addressFound = false;
+            for (const QNetworkAddressEntry &entry : networkInterface.addressEntries()) {
+                if (entry.ip().toString() == serverInterface) {
+                    addressFound = true;
+                    break;
+                }
+            }
+            if (addressFound) {
+                m_interfaceCombo->setCurrentIndex(index);
+                populateAddresses(serverInterface);
+                break;
+            }
+        }
+    }
+    updateUrls();
+}
+
+void HttpServerManagerDialog::showBootstrapCredentials(const QString &username,
+                                                       const QString &password)
+{
+    showFeedback(tr("Initial administrator: %1 / %2. Store this password now; it will not be shown again.")
+                     .arg(username, password));
 }
 
 void HttpServerManagerDialog::updateControlState()
