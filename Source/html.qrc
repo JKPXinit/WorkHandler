@@ -1,5 +1,5 @@
 <RCC>
     <qresource prefix="/prefix4">
-        <file>html/issueState.html</file>
+        <file>html/index.html</file>
     </qresource>
 </RCC>
