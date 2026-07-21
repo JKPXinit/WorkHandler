@@ -1,0 +1,16 @@
+<RCC>
+    <qresource prefix="/prefix1">
+        <file>icon/acconut.png</file>
+        <file>icon/Administrator.png</file>
+        <file>icon/basic.png</file>
+        <file>icon/delete.png</file>
+        <file>icon/language.png</file>
+        <file>icon/password.png</file>
+        <file>icon/search.png</file>
+        <file>icon/settings.png</file>
+        <file>icon/theme.png</file>
+        <file>icon/template.png</file>
+        <file>icon/system.png</file>
+        <file>icon/shortcut.png</file>
+    </qresource>
+</RCC>

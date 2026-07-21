@@ -19,3 +19,20 @@
 *.exe
 *.out
 *.app
+
+# Project Customer
+.vscode/
+.codex/
+.agents/
+build/
+Documents/
+Source/.qtcreator/
+agentsOutput/
+dist/
+AGENTS.md
+
+# Keep third-party
+!Source/3rdparty/
+!Source/3rdparty/**
+Source/3rdparty/QtDock/include/debug/                                                                                                                                                                               
+Source/3rdparty/QtDock/include/release/ 

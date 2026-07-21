@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Issue Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --primary: #76b900;
+  --primary-dark: #5a8d00;
+  --ink: #000000;
+  --canvas: #ffffff;
+  --surface-dark: #000000;
+  --surface-soft: #f7f7f7;
+  --surface-elevated: #1a1a1a;
+  --hairline: #cccccc;
+  --hairline-strong: #5e5e5e;
+  --body: #1a1a1a;
+  --mute: #757575;
+  --stone: #898989;
+  --ash: #a7a7a7;
+  --on-dark: #ffffff;
+  --on-dark-mute: rgba(255,255,255,0.7);
+  --radius-sm: 2px;
+  --section: 64px;
+  --gutter: 24px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  font-family: "Inter", Arial, sans-serif;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: 0;
+  background: var(--canvas);
+  color: var(--body);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.chrome-inner,
+.section-inner,
+.hero-inner,
+.footer-inner {
+  width: min(1280px, calc(100% - 96px));
+  margin: 0 auto;
+}
+
+.utility-bar {
+  height: 32px;
+  background: var(--surface-dark);
+  color: var(--on-dark);
+  border-bottom: 1px solid var(--hairline-strong);
+}
+
+.utility-inner {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.utility-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: var(--on-dark-mute);
+}
+
+.utility-label {
+  color: var(--on-dark);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.5;
+  text-transform: uppercase;
+}
+
+.primary-nav {
+  height: 64px;
+  background: var(--surface-dark);
+  color: var(--on-dark);
+}
+
+.nav-inner {
+  height: 64px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 32px;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.brand-mark {
+  width: 32px;
+  height: 20px;
+  display: inline-block;
+  background: var(--primary);
+  border-radius: var(--radius-sm);
+}
+
+.nav-links,
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.nav-links {
+  justify-content: center;
+}
+
+.nav-link {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--on-dark-mute);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.nav-link:hover {
+  color: var(--on-dark);
+}
+
+.hero-card-dark {
+  background: var(--surface-dark);
+  color: var(--on-dark);
+  padding: 80px 48px;
+}
+
+.hero-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(320px, 0.78fr);
+  align-items: center;
+  gap: 64px;
+}
+
+.eyebrow {
+  display: block;
+  margin: 0 0 16px;
+  color: var(--on-dark);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.43;
+  text-transform: uppercase;
+}
+
+.section-eyebrow {
+  color: var(--body);
+}
+
+.hero-title {
+  max-width: 620px;
+  margin: 0;
+  color: var(--on-dark);
+  font-size: 48px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.hero-desc {
+  max-width: 720px;
+  margin: 24px 0 0;
+  color: var(--on-dark-mute);
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1.75;
+  letter-spacing: 0;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 32px;
+}
+
+.button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.button-primary {
+  padding: 11px 24px;
+  border: 1px solid var(--primary);
+  background: var(--primary);
+  color: var(--ink);
+}
+
+.button-primary:active {
+  border-color: var(--primary-dark);
+  background: var(--primary-dark);
+}
+
+.button-outline-on-dark {
+  padding: 11px 13px;
+  border: 1px solid var(--on-dark);
+  background: transparent;
+  color: var(--on-dark);
+}
+
+.hero-visual {
+  min-width: 0;
+}
+
+.visual-shell {
+  position: relative;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-elevated);
+  padding: 32px;
+}
+
+.corner-square,
+.visual-shell::before,
+.issue-card::before,
+.stat-card::before {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: var(--primary);
+  border-radius: 0;
+}
+
+.visual-shell::before {
+  top: 0;
+  left: 0;
+}
+
+.visual-title {
+  margin: 0 0 24px;
+  color: var(--on-dark);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.visual-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.visual-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 16px;
+  align-items: center;
+  min-height: 44px;
+  padding: 12px 16px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-sm);
+  color: var(--on-dark-mute);
+  font-size: 15px;
+  line-height: 1.67;
+}
+
+.visual-row strong {
+  color: var(--on-dark);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.43;
+  text-transform: uppercase;
+}
+
+.content {
+  background: var(--canvas);
+}
+
+.summary-section,
+.issue-section {
+  padding: var(--section) 0 0;
+}
+
+.section-head {
+  display: grid;
+  grid-template-columns: minmax(0, 0.66fr) minmax(260px, 0.34fr);
+  align-items: end;
+  gap: 32px;
+  margin-bottom: 32px;
+}
+
+.section-title {
+  margin: 0;
+  color: var(--ink);
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.section-copy {
+  margin: 0;
+  color: var(--body);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 24px;
+}
+
+.stat-card {
+  position: relative;
+  min-height: 132px;
+  padding: 32px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  background: var(--canvas);
+  color: var(--ink);
+}
+
+.stat-card::before {
+  top: 0;
+  left: 0;
+}
+
+.stat-value {
+  margin: 0;
+  color: var(--primary);
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.stat-label {
+  margin: 8px 0 0;
+  color: var(--body);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.issue-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 0.52fr) minmax(320px, 0.48fr);
+  align-items: end;
+  gap: 32px;
+  margin-bottom: 32px;
+}
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.filter-btn {
+  min-height: 44px;
+  padding: 10px 18px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14.4px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.144px;
+}
+
+.filter-btn:hover,
+.filter-btn.active {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--on-dark);
+}
+
+.issue-list {
+  margin: 0;
+}
+
+.issue-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+}
+
+.issue-card {
+  position: relative;
+  min-height: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 32px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  background: var(--canvas);
+  color: var(--ink);
+}
+
+.issue-card::before {
+  top: 0;
+  left: 0;
+}
+
+.issue-card:hover {
+  background: var(--surface-soft);
+}
+
+.issue-meta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.issue-id {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  color: var(--mute);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.issue-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.issue-title {
+  margin: 0;
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.issue-desc {
+  margin: 16px 0 0;
+  color: var(--body);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.67;
+  word-break: break-word;
+}
+
+.badge {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  color: var(--body);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.43;
+  white-space: nowrap;
+}
+
+.empty-state {
+  grid-column: 1 / -1;
+  padding: 32px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  color: var(--mute);
+  font-size: 16px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.cta-strip-dark {
+  margin-top: var(--section);
+  padding: 64px 48px;
+  background: var(--surface-dark);
+  color: var(--on-dark);
+}
+
+.cta-inner {
+  width: min(1280px, calc(100% - 96px));
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 32px;
+}
+
+.cta-title {
+  margin: 0;
+  color: var(--on-dark);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.cta-copy {
+  margin: 12px 0 0;
+  color: var(--on-dark-mute);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.footer-section {
+  padding: 64px 48px;
+  background: var(--surface-dark);
+  color: var(--on-dark-mute);
+}
+
+.footer-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 24px;
+}
+
+.footer-column {
+  border-top: 1px solid var(--hairline-strong);
+  padding-top: 16px;
+}
+
+.footer-title {
+  margin: 0 0 12px;
+  color: var(--on-dark);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.footer-link {
+  display: block;
+  padding: 4px 0;
+  color: var(--on-dark-mute);
+  font-size: 15px;
+  line-height: 1.67;
+}
+
+.footer-link:hover {
+  color: var(--on-dark);
+}
+
+.footer-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 64px;
+  padding-top: 24px;
+  border-top: 1px solid var(--hairline-strong);
+  color: var(--mute);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.5;
+  text-transform: uppercase;
+}
+
+@media (max-width: 1024px) {
+  .chrome-inner,
+  .section-inner,
+  .hero-inner,
+  .footer-inner,
+  .cta-inner {
+    width: min(100% - 48px, 1280px);
+  }
+
+  .nav-links {
+    display: none;
+  }
+
+  .hero-inner,
+  .section-head,
+  .issue-toolbar,
+  .cta-inner {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-bar {
+    justify-content: flex-start;
+  }
+
+  .footer-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .utility-group:last-child,
+  .nav-actions {
+    display: none;
+  }
+
+  .hero-card-dark {
+    padding: 48px 24px;
+  }
+
+  .hero-title,
+  .section-title {
+    font-size: 36px;
+  }
+
+  .hero-desc {
+    font-size: 20px;
+    line-height: 1.5;
+  }
+
+  .summary-section,
+  .issue-section {
+    padding-top: 48px;
+  }
+
+  .footer-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .chrome-inner,
+  .section-inner,
+  .hero-inner,
+  .footer-inner,
+  .cta-inner {
+    width: min(100% - 32px, 1280px);
+  }
+
+  .utility-inner {
+    justify-content: center;
+  }
+
+  .hero-card-dark,
+  .cta-strip-dark,
+  .footer-section {
+    padding: 32px 16px;
+  }
+
+  .hero-title,
+  .section-title {
+    font-size: 32px;
+  }
+
+  .hero-desc {
+    font-size: 18px;
+  }
+
+  .visual-shell,
+  .stat-card,
+  .issue-card {
+    padding: 24px;
+  }
+
+  .summary-section,
+  .issue-section {
+    padding-top: 32px;
+  }
+
+  .issue-grid,
+  .summary {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .footer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .footer-bottom {
+    margin-top: 32px;
+  }
+}
+</style>
+</head>
+<body>
+<header class="site-chrome">
+  <div class="utility-bar">
+    <div class="chrome-inner utility-inner">
+      <span class="utility-label">PAGE_DEMO STATUS</span>
+      <div class="utility-group">
+        <span>Qt Desktop Template</span>
+        <span>Issue State</span>
+      </div>
+    </div>
+  </div>
+
+  <nav class="primary-nav" aria-label="Primary">
+    <div class="chrome-inner nav-inner">
+      <a class="brand" href="#overview">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>PAGE_DEMO</span>
+      </a>
+      <div class="nav-links" aria-label="Sections">
+        <a class="nav-link" href="#overview">Overview</a>
+        <a class="nav-link" href="#issueListSection">Issues</a>
+        <a class="nav-link" href="#support">Support</a>
+      </div>
+      <div class="nav-actions">
+        <a class="nav-link repo-link" href="#" target="_blank" rel="noopener">GitHub Issues</a>
+      </div>
+    </div>
+  </nav>
+</header>
+
+<section class="hero-card-dark">
+  <div class="hero-inner">
+    <div>
+      <span class="eyebrow">Issue Status</span>
+      <h1 class="hero-title" id="pageTitle"></h1>
+      <p class="hero-desc" id="pageDesc"></p>
+      <div class="hero-actions">
+        <a class="button button-primary" href="#issueListSection">查看问题</a>
+        <a class="button button-outline-on-dark repo-link" href="#" target="_blank" rel="noopener">GitHub Issues</a>
+      </div>
+    </div>
+
+    <div class="hero-visual" aria-hidden="true">
+      <div class="visual-shell">
+        <p class="visual-title">Runtime Quality Board</p>
+        <div class="visual-grid">
+          <div class="visual-row"><span>Docking / Layout</span><strong>Tracked</strong></div>
+          <div class="visual-row"><span>Configuration / XML</span><strong>Review</strong></div>
+          <div class="visual-row"><span>Shortcut / Logging</span><strong>Active</strong></div>
+          <div class="visual-row"><span>UI / Language</span><strong>Open</strong></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<main class="content">
+  <section class="summary-section" id="overview">
+    <div class="section-inner">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow section-eyebrow">Status Overview</span>
+          <h2 class="section-title">当前问题概览</h2>
+        </div>
+        <p class="section-copy">统计当前维护清单中的记录数量，并按处理状态聚合。</p>
+      </div>
+      <div class="summary" id="summary"></div>
+    </div>
+  </section>
+
+  <section class="issue-section" id="issueListSection">
+    <div class="section-inner">
+      <div class="issue-toolbar">
+        <div>
+          <span class="eyebrow section-eyebrow">Issue Grid</span>
+          <h2 class="section-title">问题清单</h2>
+        </div>
+        <div class="filter-bar" id="filterBar" aria-label="Issue filters"></div>
+      </div>
+      <div class="issue-list">
+        <div class="issue-grid" id="issueList"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta-strip-dark" id="support">
+    <div class="cta-inner">
+      <div>
+        <h2 class="cta-title">需要补充问题或修正说明？</h2>
+        <p class="cta-copy">通过仓库 Issue 留下复现路径、日志片段和期望行为，便于后续跟踪。</p>
+      </div>
+      <a class="button button-primary repo-link" href="#" target="_blank" rel="noopener">提交反馈</a>
+    </div>
+  </section>
+</main>
+
+<footer class="footer-section">
+  <div class="footer-inner">
+    <div class="footer-grid">
+      <div class="footer-column">
+        <h3 class="footer-title">Products</h3>
+        <a class="footer-link" href="#issueListSection">Dock UI</a>
+        <a class="footer-link" href="#issueListSection">Theme System</a>
+        <a class="footer-link" href="#issueListSection">Shortcut Manager</a>
+      </div>
+      <div class="footer-column">
+        <h3 class="footer-title">Software</h3>
+        <a class="footer-link" href="#issueListSection">Qt Widgets</a>
+        <a class="footer-link" href="#issueListSection">Qt ADS</a>
+        <a class="footer-link" href="#issueListSection">QSS Themes</a>
+      </div>
+      <div class="footer-column">
+        <h3 class="footer-title">Resources</h3>
+        <a class="footer-link" href="#overview">Status Overview</a>
+        <a class="footer-link" href="#issueListSection">Issue Grid</a>
+        <a class="footer-link repo-link" href="#" target="_blank" rel="noopener">GitHub Issues</a>
+      </div>
+      <div class="footer-column">
+        <h3 class="footer-title">Company Info</h3>
+        <a class="footer-link" href="#overview">Page_demo</a>
+        <a class="footer-link" href="#overview">Desktop Template</a>
+        <a class="footer-link" href="#support">Maintainers</a>
+      </div>
+      <div class="footer-column">
+        <h3 class="footer-title">Solutions</h3>
+        <a class="footer-link" href="#issueListSection">Configuration</a>
+        <a class="footer-link" href="#issueListSection">Logging</a>
+        <a class="footer-link" href="#issueListSection">Localization</a>
+      </div>
+      <div class="footer-column">
+        <h3 class="footer-title">Support</h3>
+        <a class="footer-link repo-link" href="#" target="_blank" rel="noopener">Report Issue</a>
+        <a class="footer-link" href="#support">Feedback</a>
+        <a class="footer-link" href="#overview">Summary</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>Page_demo Issue State</span>
+      <span>Qt C++ Desktop Application Template</span>
+    </div>
+  </div>
+</footer>
+<script>
+/* ============================================================
+ * DATA  ——  仅需维护此处
+ * status 可选值: "fixed" | "open" | "known" | "resolved"
+ * ============================================================ */
+const PAGE = {
+  title:   "开发者声明",
+  desc:    "以下为我们对当前已知问题的说明与后续计划：",
+  repoUrl: "https://github.com/yourname/yourrepo"
+};
+
+const ISSUES = [
+  {
+    id:     "TB250001",
+    title:  "debug 模式下运行程序出现 QWidget: Must construct a QApplication before a QWidget",
+    status: "fixed",
+    desc:   "添加 QtDock 运行 debug 需要的 .lib 和 .dll 文件"
+  },
+  {
+    id:     "TB250002",
+    title:  "管理员配置失效，需要反复输入密码",
+    status: "fixed",
+    desc:   "在 onMenuBar_Options() 开始位置检查管理员模式"
+  },
+  {
+    id:     "TB250003",
+    title:  "管理员配置界面中的主题切换失效，选中后无法切换，普通配置界面可以正常使用",
+    status: "fixed",
+    desc:   "修正管理员配置界面主题下拉框的槽函数连接（误连至语言切换槽）"
+  },
+  {
+    id:     "TC250004",
+    title:  "勾选 adminModeCheckBox 后，控制台出现 QWindowsWindow::setGeometry 警告",
+    status: "open",
+    desc:   "将密码输入框及错误提示框的 parent 从已关闭的 optionsDialog 改为 m_mainWindow"
+  },
+  {
+    id:     "TB250005",
+    title:  "配置文件启用日志文件输出后，程序启动仍有日志打印在控制台",
+    status: "fixed",
+    desc:   "调整 uiManager 初始化顺序，确保 myLogger 在 uiManager 构造前完成初始化；删除 myLogger.cpp 中的裸 qDebug 调用"
+  },
+  {
+    id:     "TA260006",
+    title:  "配置文件损坏时无降级恢复机制，用户设置可能全部丢失",
+    status: "open",
+    desc:   "Write_config() 直接覆盖原文件，断电或写入中断会导致 XML 损坏。建议改为先写临时文件再原子替换，并保留上一份配置备份，Read_config() 失败时自动回退备份。"
+  },
+  {
+    id:     "TB260007",
+    title:  "MainWindow 持有所有 Manager 公有指针，正逐渐演变为上帝类",
+    status: "fixed",
+    desc:   "已通过信号槽解耦 Feature 层反向依赖：PasswordVerfy 不再直接操控 uiManager 控件和 SoftwareConfig 数据；uiManager 不再直接调用 PasswordVerfy；ShortcutManager 不再直接调用 SoftwareConfig::Write_config()。所有跨模块通信改由 MainWindow 信号槽中转。"
+  },
+  {
+    id:     "TB260008",
+    title:  "部分头文件存在双向 include，循环依赖风险随项目增长上升",
+    status: "fixed",
+    desc:   "所有 Manager/Dialog 头文件统一改为 class MainWindow; 前向声明，移除 #include \"mainwindow.h\"；对 MainWindow 成员的访问全部移至对应 .cpp 文件中完成。"
+  },
+  {
+    id:     "TB260009",
+    title:  "resetAllShortcuts() 后 QShortcut 对象与 QAction 可能同时存在，导致快捷键触发两次",
+    status: "open",
+    desc:   "通过 registerShortcut() 注册的 QShortcut 对象在 setShortcut() 更新时旧对象未被销毁，新旧两个快捷键同时处于激活状态。建议在更新快捷键时先 delete 旧 QShortcut 再重新创建，或改用统一的 QAction 路径注册。"
+  },
+  {
+    id:     "TC260010",
+    title:  "Admin 模式下的配置变更无操作审计，误改后无法追溯",
+    status: "open",
+    desc:   "管理员模式开启后可修改所有系统配置，但日志中无法区分普通操作与管理员操作。建议 Admin 模式下的配置变更在日志中加 [ADMIN] 前缀标记，便于问题排查。"
+  },
+  {
+    id:     "TC260011",
+    title:  "日志文件无大小限制和轮转机制，长期运行将无限增长",
+    status: "resolved",
+    desc:   "myLogger 以追加方式写入同一文件，程序长期运行后日志文件体积无限制。建议增加按文件大小（如 10 MB）或按日期的日志轮转策略，并支持旧日志自动清理。"
+  },
+  {
+    id:     "TC260012",
+    title:  "语言切换后已打开的对话框不刷新，界面出现新旧语言混用",
+    status: "fixed",
+    desc:   "切换语言时主界面文字随 QTranslator 更新，但已实例化的 QDialog（如管理员设置）仍保留旧语言文字。建议语言切换时关闭所有已打开的子对话框，或向所有打开的窗口广播重绘信号。"
+  },
+  {
+    id:     "TC260013",
+    title:  "首次运行引导体验不合理，退出模式选择出现在关闭程序时",
+    status: "open",
+    desc:   "用户第一次关闭窗口才弹出退出模式选择对话框，时机突兀，新用户体验差。建议改为首次启动时通过欢迎向导引导用户完成语言、主题、退出模式等基础配置。"
+  },
+  {
+    id:     "TD260014",
+    title:  "图标资源路径以裸字符串硬编码在 uiManager，维护成本高",
+    status: "fixed",
+    desc:   "在 public.h 中新增 AppIcons 命名空间，以 constexpr 常量统一定义所有图标路径；uiManager.cpp 和 aboutdialog.cpp 中的 13 处硬编码字符串全部替换为常量引用。"
+  },
+  {
+    id:     "TD260015",
+    title:  "emptydialog 命名语义不清，新开发者易忽略其模板用途",
+    status: "open",
+    desc:   "作为新建 Dock 窗口的参考模板，emptydialog 的名称无法传达其用途，容易被视为无用代码而误删。建议重命名为 templateDialog 或 dockWindowTemplate，并在文件顶部注释中明确标注其模板角色。"
+  },
+  {
+    id:     "TB260016",
+    title:  "SoftwareConfig 直接暴露裸结构体，外部代码绕过接口直接读写配置字段",
+    status: "open",
+    desc:   "m_Config 为 public 指针，各模块通过 m_mainWindow->m_softwareconfig->m_Config->xxx 直接操作配置字段，共计约 42 处。字段改名或结构调整时需全局搜索替换，且无法在写入时做校验或通知。建议为常用配置项提供具名 getter/setter 接口，逐步收拢对裸结构体的直接访问。"
+  }
+];
+
+/* ============================================================
+ * CONFIG — 状态显示配置
+ * ============================================================ */
+const STATUS_CFG = {
+  fixed:   { label: "已修复",   badgeClass: "badge-fixed" },
+  open:    { label: "待处理",   badgeClass: "badge-open" },
+  known:   { label: "已知问题", badgeClass: "badge-known" },
+  resolved:{ label: "已解决",   badgeClass: "badge-resolved" }
+};
+
+/* ============================================================
+ * UTILS
+ * ============================================================ */
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g,  "&amp;")
+    .replace(/</g,  "&lt;")
+    .replace(/>/g,  "&gt;")
+    .replace(/"/g,  "&quot;")
+    .replace(/'/g,  "&#39;");
+}
+
+/* ============================================================
+ * RENDER
+ * ============================================================ */
+function renderIssueCard(issue) {
+  const status = STATUS_CFG[issue.status] ? issue.status : "known";
+  const cfg = STATUS_CFG[status];
+  return `
+<div class="issue-card" data-status="${escapeHtml(status)}">
+  <div class="issue-meta">
+    <span class="issue-id">${escapeHtml(issue.id)}</span>
+    <span class="badge ${cfg.badgeClass}">${cfg.label}</span>
+  </div>
+  <div class="issue-body">
+    <p class="issue-title">${escapeHtml(issue.title)}</p>
+    <p class="issue-desc">${escapeHtml(issue.desc)}</p>
+  </div>
+</div>`;
+}
+
+function renderSummary(issues) {
+  const counts = {};
+  issues.forEach(i => {
+    const status = STATUS_CFG[i.status] ? i.status : "known";
+    counts[status] = (counts[status] || 0) + 1;
+  });
+
+  let html = `<article class="stat-card">
+  <p class="stat-value">${issues.length}</p>
+  <p class="stat-label">全部记录</p>
+</article>`;
+  Object.entries(STATUS_CFG).forEach(([key, cfg]) => {
+    if (counts[key]) {
+      html += `<article class="stat-card">
+  <p class="stat-value">${counts[key]}</p>
+  <p class="stat-label">${cfg.label}</p>
+</article>`;
+    }
+  });
+  return html;
+}
+
+function renderFilterBar(issues) {
+  const present = new Set(issues.map(i => STATUS_CFG[i.status] ? i.status : "known"));
+  let html = `<button class="filter-btn active" data-filter="all">全部</button>`;
+  Object.entries(STATUS_CFG).forEach(([status, cfg]) => {
+    if (present.has(status)) {
+      html += `<button class="filter-btn" data-filter="${status}">${cfg.label}</button>`;
+    }
+  });
+  return html;
+}
+
+function applyFilter(filter) {
+  document.querySelectorAll(".filter-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.filter === filter);
+  });
+
+  let visible = 0;
+  document.querySelectorAll(".issue-card").forEach(card => {
+    const show = filter === "all" || card.dataset.status === filter;
+    card.style.display = show ? "" : "none";
+    if (show) visible++;
+  });
+
+  const empty = document.getElementById("emptyState");
+  if (empty) empty.style.display = visible === 0 ? "" : "none";
+}
+
+/* ============================================================
+ * INIT
+ * ============================================================ */
+(function init() {
+  document.title                                  = PAGE.title;
+  document.getElementById("pageTitle").textContent = PAGE.title;
+  document.getElementById("pageDesc").textContent  = PAGE.desc;
+  document.querySelectorAll(".repo-link").forEach(link => {
+    link.href = PAGE.repoUrl;
+  });
+
+  document.getElementById("summary").innerHTML   = renderSummary(ISSUES);
+  document.getElementById("filterBar").innerHTML = renderFilterBar(ISSUES);
+
+  document.getElementById("filterBar").addEventListener("click", e => {
+    if (e.target.classList.contains("filter-btn")) {
+      applyFilter(e.target.dataset.filter);
+    }
+  });
+
+  document.getElementById("issueList").innerHTML =
+    ISSUES.map(renderIssueCard).join("") +
+    `<div id="emptyState" class="empty-state" style="display:none">暂无匹配的记录</div>`;
+})();
+</script>
+</body>
+</html>
