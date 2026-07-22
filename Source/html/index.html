@@ -583,6 +583,10 @@ svg.icon { width: 18px; height: 18px; flex: 0 0 auto; fill: none; stroke: curren
 .comment-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
 .comment-head span { color: var(--muted); white-space: nowrap; }
 .comment-body { margin: 4px 0 0; overflow-wrap: anywhere; color: var(--ink-soft); font-size: 13px; white-space: pre-wrap; }
+.comment-body .comment-image { display: inline-block; max-width: 100%; margin: 8px 8px 2px 0; vertical-align: top; border: 0; background: transparent; cursor: zoom-in; }
+.comment-body .comment-image img { display: block; width: min(180px, 100%); aspect-ratio: 4/3; object-fit: cover; border: 1px solid var(--hairline); background: var(--parchment); }
+.comment-composer-tools { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.comment-image-hint { color: var(--muted); font-size: 11px; }
 .comment-form { display: grid; gap: 10px; margin-top: 18px; }
 .comment-form textarea {
   width: 100%;
@@ -606,6 +610,9 @@ dialog {
   color: var(--ink);
 }
 dialog::backdrop { background: rgba(0,0,0,0.46); }
+#imagePreviewDialog { width: min(1100px, calc(100% - 32px)); background: #111; }
+#imagePreviewDialog .icon-button { position: absolute; top: 12px; right: 12px; z-index: 1; background: rgba(255,255,255,0.92); }
+#imagePreview { display: block; width: 100%; max-height: calc(100vh - 48px); object-fit: contain; }
 .dialog-shell { max-height: calc(100vh - 48px); display: grid; grid-template-rows: auto minmax(0,1fr) auto; }
 .dialog-head { min-height: 64px; display: flex; align-items: center; gap: 12px; padding: 10px 16px 10px 24px; border-bottom: 1px solid var(--hairline); }
 .dialog-head h2 { flex: 1; margin: 0; font-size: 21px; font-weight: 600; }
@@ -935,6 +942,13 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
   </form>
 </dialog>
 
+<dialog id="imagePreviewDialog" aria-label="图片预览">
+  <button class="icon-button small" type="button" data-action="close-image-preview" title="关闭预览" aria-label="关闭预览">
+    <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg>
+  </button>
+  <img id="imagePreview" alt="">
+</dialog>
+
 <dialog id="confirmDialog" aria-labelledby="confirmDialogTitle">
   <div class="dialog-shell">
     <header class="dialog-head">
@@ -978,7 +992,10 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     selectedIssueId: null,
     selectedIssue: null,
     comments: [],
-    attachments: [],
+    commentImages: [],
+    attachmentObjectUrls: [],
+    attachmentPreviewUrls: [],
+    attachmentLoadVersion: 0,
     filters: { status: '', priority: '', assignee: '', sort: 'created_desc', q: '' },
     sidebarOpen: false,
     confirmAction: null,
@@ -1077,12 +1094,12 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
       { id: 106, block_id: 3, title: '评估 Issue 导出格式', description: '记录后续 CSV 或 JSON 导出的字段需求。', status: 'open', priority: 'low', reporter_id: 2, assignee_id: null, created_at: '2026-07-17T02:15:00Z' }
     ];
     var comments = [
-      { id: 1, issue_id: 101, user_id: 1, content: '先完成前端主流程，后端按已确认契约接入。', created_at: '2026-07-22T09:00:00Z' },
+      { id: 1, issue_id: 101, user_id: 1, content: '先完成前端主流程，后端按已确认契约接入。\n![界面](attachment:1)', created_at: '2026-07-22T09:00:00Z' },
       { id: 2, issue_id: 101, user_id: 2, content: '列表、详情和演示数据已经进入同一套状态模型。', created_at: '2026-07-22T10:30:00Z' },
       { id: 3, issue_id: 102, user_id: 2, content: '普通用户需要一个只读负责人选项接口。', created_at: '2026-07-22T11:10:00Z' }
     ];
     var attachments = [
-      { id: 1, issue_id: 101, uploader_id: 2, filename: 'workhandler-ui.png', file_size: 10233, created_at: '2026-07-22T10:40:00Z', demo_asset: true }
+      { id: 1, issue_id: 101, comment_id: 1, uploader_id: 2, filename: 'workhandler-ui.png', file_size: 10233, created_at: '2026-07-22T10:40:00Z', demo_asset: true }
     ];
     return { users: users, blocks: blocks, issues: issues, comments: comments, attachments: attachments };
   }
@@ -1256,49 +1273,42 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
             resolve(success({ comments: demo.comments.filter(function (item) { return item.issue_id === commentIssueId; }).map(function (item) {
               var copy = Object.assign({}, item);
               copy.user = demo.users.find(function (user) { return user.id === item.user_id; }) || null;
+              copy.attachments = demo.attachments.filter(function (attachment) { return attachment.comment_id === item.id; });
               return copy;
             }) }));
             return;
           }
           if (method === 'POST') {
             var commentId = demo.comments.reduce(function (max, item) { return Math.max(max, item.id); }, 0) + 1;
-            var createdComment = { id: commentId, issue_id: commentIssueId, user_id: demoUser().id, content: body.content, created_at: new Date().toISOString() };
+            var formContent = body instanceof FormData ? String(body.get('content') || '') : String(body.content || '');
+            var formFiles = body instanceof FormData ? body.getAll('images') : [];
+            var createdAttachments = formFiles.map(function (file, index) {
+              var attachmentId = demo.attachments.reduce(function (max, item) { return Math.max(max, item.id); }, 0) + index + 1;
+              return {
+                id: attachmentId,
+                issue_id: commentIssueId,
+                comment_id: commentId,
+                uploader_id: demoUser().id,
+                filename: file.name || 'image.png',
+                file_size: file.size || 0,
+                created_at: new Date().toISOString(),
+                preview_url: URL.createObjectURL(file)
+              };
+            });
+            var createdComment = { id: commentId, issue_id: commentIssueId, user_id: demoUser().id, content: formContent, created_at: new Date().toISOString(), attachments: createdAttachments };
             demo.comments.push(createdComment);
+            createdAttachments.forEach(function (attachment) { demo.attachments.push(attachment); });
             createdComment.user = demoUser();
             resolve(success({ comment: createdComment }, 201));
             return;
           }
         }
-        match = pathname.match(/^\/api\/issues\/(\d+)\/attachments$/);
-        if (match) {
-          var attachmentIssueId = Number(match[1]);
-          if (method === 'GET') {
-            resolve(success({ attachments: demo.attachments.filter(function (item) { return item.issue_id === attachmentIssueId; }) }));
-            return;
-          }
-          if (method === 'POST') {
-            var file = body instanceof FormData ? body.get('file') : null;
-            var attachmentId = demo.attachments.reduce(function (max, item) { return Math.max(max, item.id); }, 0) + 1;
-            var createdAttachment = {
-              id: attachmentId,
-              issue_id: attachmentIssueId,
-              uploader_id: demoUser().id,
-              filename: file && file.name || 'image.png',
-              file_size: file && file.size || 0,
-              created_at: new Date().toISOString(),
-              preview_url: file ? URL.createObjectURL(file) : '',
-              demo_asset: !file
-            };
-            demo.attachments.push(createdAttachment);
-            resolve(success({ attachment: createdAttachment }, 201));
-            return;
-          }
-        }
         match = pathname.match(/^\/api\/attachments\/(\d+)$/);
-        if (match && method === 'DELETE') {
-          var attachmentIdToDelete = Number(match[1]);
-          demo.attachments = demo.attachments.filter(function (item) { return item.id !== attachmentIdToDelete; });
-          resolve(success({ deleted_id: attachmentIdToDelete }));
+        if (match && method === 'GET') {
+          var demoAttachment = demo.attachments.find(function (item) { return item.id === Number(match[1]); });
+          resolve(demoAttachment && demoAttachment.preview_url
+            ? { ok: true, status: 200, data: demoAttachment.preview_url, error: null }
+            : failure(404, 'attachment_not_found', '图片不存在'));
           return;
         }
         match = pathname.match(/^\/api\/issues\/(\d+)$/);
@@ -1622,8 +1632,7 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     }
     var results = await Promise.all([
       request('/api/issues/' + state.selectedIssueId),
-      request('/api/issues/' + state.selectedIssueId + '/comments'),
-      request('/api/issues/' + state.selectedIssueId + '/attachments')
+      request('/api/issues/' + state.selectedIssueId + '/comments')
     ]);
     if (!results[0].ok) {
       showToast(resultMessage(results[0], 'Issue 加载失败'));
@@ -1632,7 +1641,6 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     }
     state.selectedIssue = results[0].data.issue || null;
     state.comments = results[1].ok && Array.isArray(results[1].data.comments) ? results[1].data.comments : [];
-    state.attachments = results[2].ok && Array.isArray(results[2].data.attachments) ? results[2].data.attachments : [];
     if (state.selectedIssue && Number(state.selectedIssue.block_id) !== Number(state.selectedBlockId)) {
       state.selectedBlockId = Number(state.selectedIssue.block_id);
       renderBlocks();
@@ -1643,12 +1651,105 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
   function attachmentUrl(attachment) {
     if (attachment.preview_url) return attachment.preview_url;
     if (attachment.demo_asset) return $('brandAsset').src;
-    return normalizeBaseUrl(state.baseUrl) + '/api/attachments/' + Number(attachment.id) + '?size=thumb';
+    return '';
+  }
+
+  function commentContentHtml(comment) {
+    var content = String(comment.content || '');
+    var attachments = Array.isArray(comment.attachments) ? comment.attachments : [];
+    var byId = {};
+    attachments.forEach(function (attachment) { byId[String(attachment.id)] = attachment; });
+    var html = '';
+    var cursor = 0;
+    var marker = /!\[([^\]\r\n]*)\]\(attachment:(\d+)\)/g;
+    var match;
+    while ((match = marker.exec(content))) {
+      html += escapeHtml(content.slice(cursor, match.index));
+      var attachment = byId[match[2]];
+      if (attachment) {
+        var source = attachmentUrl(attachment);
+        html += '<button class="comment-image" type="button" data-action="preview-image" data-attachment-id="' + Number(attachment.id) + '" data-image-alt="' + escapeHtml(match[1] || attachment.filename) + '">' +
+          '<img alt="' + escapeHtml(match[1] || attachment.filename) + '" data-attachment-image="' + Number(attachment.id) + '"' + (source ? ' src="' + escapeHtml(source) + '"' : '') + '></button>';
+      } else {
+        html += escapeHtml(match[0]);
+      }
+      cursor = marker.lastIndex;
+    }
+    html += escapeHtml(content.slice(cursor));
+    return html.replace(/\r?\n/g, '<br>');
+  }
+
+  function releaseAttachmentObjectUrls() {
+    state.attachmentLoadVersion += 1;
+    state.attachmentObjectUrls.forEach(function (url) { URL.revokeObjectURL(url); });
+    state.attachmentObjectUrls = [];
+    state.attachmentPreviewUrls.forEach(function (url) { URL.revokeObjectURL(url); });
+    state.attachmentPreviewUrls = [];
+  }
+
+  async function loadAttachmentImages() {
+    if (state.demo) return;
+    var loadVersion = state.attachmentLoadVersion;
+    var images = Array.from(document.querySelectorAll('[data-attachment-image]'));
+    await Promise.all(images.map(async function (image) {
+      try {
+        var response = await fetch(
+          normalizeBaseUrl(state.baseUrl) + '/api/attachments/' + Number(image.dataset.attachmentImage) + '?size=thumb',
+          { headers: { Authorization: 'Bearer ' + state.token }, cache: 'no-store' }
+        );
+        if (!response.ok) return;
+        var objectUrl = URL.createObjectURL(await response.blob());
+        if (loadVersion !== state.attachmentLoadVersion || !image.isConnected) {
+          URL.revokeObjectURL(objectUrl);
+          return;
+        }
+        state.attachmentObjectUrls.push(objectUrl);
+        image.src = objectUrl;
+      } catch (error) {
+        image.removeAttribute('src');
+      }
+    }));
+  }
+
+  async function previewAttachment(id, alt) {
+    var dialog = $('imagePreviewDialog');
+    var image = $('imagePreview');
+    if (!dialog || !image) return;
+    image.removeAttribute('src');
+    image.alt = alt || '图片预览';
+    if (state.demo) {
+      var demoAttachment = demo.attachments.find(function (item) { return Number(item.id) === Number(id); });
+      image.src = attachmentUrl(demoAttachment || {});
+    } else {
+      try {
+        var response = await fetch(
+          normalizeBaseUrl(state.baseUrl) + '/api/attachments/' + Number(id),
+          { headers: { Authorization: 'Bearer ' + state.token }, cache: 'no-store' }
+        );
+        if (!response.ok) throw new Error('image');
+        var objectUrl = URL.createObjectURL(await response.blob());
+        state.attachmentPreviewUrls.push(objectUrl);
+        image.src = objectUrl;
+      } catch (error) {
+        showToast('图片加载失败');
+        return;
+      }
+    }
+    if (!dialog.open) dialog.showModal();
+  }
+
+  function closeAttachmentPreview() {
+    if ($('imagePreviewDialog').open) $('imagePreviewDialog').close();
+    $('imagePreview').removeAttribute('src');
+    state.attachmentPreviewUrls.forEach(function (url) { URL.revokeObjectURL(url); });
+    state.attachmentPreviewUrls = [];
   }
 
   function renderDetail() {
     var issue = state.selectedIssue;
     if (!issue) return;
+    state.commentImages = [];
+    releaseAttachmentObjectUrls();
     var editable = canEditIssue(issue);
     var admin = state.currentUser && state.currentUser.role === 'admin';
     var write = canWrite();
@@ -1674,30 +1775,12 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     html += '<div class="meta-item"><span>创建时间</span><strong>' + escapeHtml(formatDate(issue.created_at)) + '</strong></div>';
     html += '</div></section>';
     html += '<section class="detail-section"><h3>描述</h3><p class="detail-description">' + escapeHtml(issue.description || '无描述') + '</p></section>';
-    html += '<section class="detail-section"><h3>附件</h3>';
-    if (state.attachments.length) {
-      html += '<div class="attachment-grid">';
-      state.attachments.forEach(function (attachment) {
-        var canDelete = admin || Number(attachment.uploader_id) === Number(state.currentUser.id);
-        html += '<article class="attachment-card"><img alt="' + escapeHtml(attachment.filename) + '" src="' + escapeHtml(attachmentUrl(attachment)) + '">';
-        html += '<div class="attachment-meta"><span class="attachment-name">' + escapeHtml(attachment.filename) + '</span>';
-        if (canDelete) html += '<button class="attachment-delete" type="button" data-action="delete-attachment" data-id="' + Number(attachment.id) + '" title="删除附件" aria-label="删除附件">' + icon('trash') + '</button>';
-        html += '</div></article>';
-      });
-      html += '</div>';
-    } else {
-      html += '<p class="detail-description">暂无附件</p>';
-    }
-    if (write) {
-      html += '<label class="upload-label">' + icon('upload') + '上传图片<input id="detailAttachmentInput" type="file" accept="image/*" multiple></label>';
-    }
-    html += '</section>';
     html += '<section class="detail-section"><h3>评论</h3><div class="comment-list">';
     if (state.comments.length) {
       state.comments.forEach(function (comment) {
         html += '<article class="comment"><span class="avatar">' + escapeHtml(initials(comment.user)) + '</span><div>';
         html += '<div class="comment-head"><strong>' + escapeHtml(displayName(comment.user)) + '</strong><span>' + escapeHtml(formatDate(comment.created_at)) + '</span></div>';
-        html += '<p class="comment-body">' + escapeHtml(comment.content) + '</p></div></article>';
+        html += '<div class="comment-body">' + commentContentHtml(comment) + '</div></div></article>';
       });
     } else {
       html += '<p class="detail-description">暂无评论</p>';
@@ -1705,22 +1788,24 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     html += '</div>';
     if (write) {
       html += '<form class="comment-form" id="commentForm"><label class="sr-only" for="commentContent">发表评论</label>';
-      html += '<textarea id="commentContent" maxlength="4000" placeholder="发表评论" required></textarea>';
-      html += '<button class="btn-ghost" type="submit">' + icon('message') + '发表评论</button></form>';
+      html += '<textarea id="commentContent" maxlength="4000" placeholder="发表评论"></textarea>';
+      html += '<div class="comment-composer-tools"><span class="comment-image-hint" id="commentImageHint">支持在光标处插入图片</span><label class="btn-ghost" for="commentImageInput">' + icon('upload') + '插入图片<input id="commentImageInput" type="file" accept=".png,.jpg,.jpeg,.webp" multiple hidden></label><button class="btn-ghost" type="submit">' + icon('message') + '发表评论</button></div></form>';
     }
     html += '</section>';
     $('drawerBody').innerHTML = html;
     var commentForm = $('commentForm');
     if (commentForm) commentForm.addEventListener('submit', submitComment);
-    var input = $('detailAttachmentInput');
-    if (input) input.addEventListener('change', uploadDetailAttachments);
+    var imageInput = $('commentImageInput');
+    if (imageInput) imageInput.addEventListener('change', insertCommentImages);
+    loadAttachmentImages();
   }
 
   function closeDrawer(updateHash) {
+    releaseAttachmentObjectUrls();
     state.selectedIssueId = null;
     state.selectedIssue = null;
     state.comments = [];
-    state.attachments = [];
+    state.commentImages = [];
     $('issueDrawer').classList.add('hidden');
     $('workspace').classList.remove('detail-open');
     if (updateHash) {
@@ -1750,7 +1835,6 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
       html += '<option value="' + Number(user.id) + '"' + (Number(issue.assignee_id) === Number(user.id) ? ' selected' : '') + '>' + escapeHtml(displayName(user)) + '</option>';
     });
     html += '</select></div>';
-    html += '<div class="field field-wide"><label for="issueFiles">图片附件</label><input id="issueFiles" type="file" accept="image/*" multiple></div>';
     html += '</div><div class="field-error" id="formError" role="alert"></div>';
     return html;
   }
@@ -1850,15 +1934,6 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
       return;
     }
     var issue = result.data.issue;
-    var files = Array.from($('issueFiles').files || []);
-    if (issue && files.length) {
-      for (var index = 0; index < files.length; index += 1) {
-        var form = new FormData();
-        form.append('file', files[index]);
-        var upload = await request('/api/issues/' + issue.id + '/attachments', { method: 'POST', body: form });
-        if (!upload.ok) showToast(resultMessage(upload, '部分附件上传失败'));
-      }
-    }
     closeFormDialog();
     state.selectedBlockId = Number(issue && issue.block_id || payload.block_id);
     await loadBlocks();
@@ -2001,10 +2076,41 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
   async function submitComment(event) {
     event.preventDefault();
     var content = $('commentContent').value.trim();
-    if (!content) return;
+    var selectedFiles = state.commentImages || [];
+    var files = [];
+    var seenIndexes = {};
+    var invalidReference = false;
+    content = content.replace(/!\[([^\]\r\n]*)\]\(upload:(\d+)\)/g, function (marker, alt, rawIndex) {
+      var sourceIndex = Number(rawIndex);
+      if (!selectedFiles[sourceIndex] || seenIndexes[sourceIndex]) {
+        invalidReference = true;
+        return marker;
+      }
+      seenIndexes[sourceIndex] = true;
+      var nextIndex = files.length;
+      files.push(selectedFiles[sourceIndex]);
+      return '![' + alt + '](upload:' + nextIndex + ')';
+    });
+    if (invalidReference || content.indexOf('upload:') >= 0 && !files.length) {
+      showToast('评论中的图片引用无效');
+      return;
+    }
+    if (!content && !files.length) return;
+    if (files.length > 9) {
+      showToast('每条评论最多插入 9 张图片');
+      return;
+    }
     var button = event.submitter;
     setBusy(button, true, '发表中');
-    var result = await request('/api/issues/' + state.selectedIssueId + '/comments', { method: 'POST', body: { content: content } });
+    var result;
+    if (!files.length) {
+      result = await request('/api/issues/' + state.selectedIssueId + '/comments', { method: 'POST', body: { content: content } });
+    } else {
+      var form = new FormData();
+      form.append('content', content);
+      files.forEach(function (file) { form.append('images', file); });
+      result = await request('/api/issues/' + state.selectedIssueId + '/comments', { method: 'POST', body: form });
+    }
     setBusy(button, false);
     if (!result.ok) {
       showToast(resultMessage(result, '评论发表失败'));
@@ -2015,39 +2121,40 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     showToast('评论已发表');
   }
 
-  async function uploadFiles(issueId, files) {
-    for (var index = 0; index < files.length; index += 1) {
-      if (!files[index].type || files[index].type.indexOf('image/') !== 0) {
-        showToast('只能上传图片文件');
-        continue;
-      }
-      var form = new FormData();
-      form.append('file', files[index]);
-      var result = await request('/api/issues/' + issueId + '/attachments', { method: 'POST', body: form });
-      if (!result.ok) showToast(resultMessage(result, '附件上传失败'));
-    }
-  }
-
-  async function uploadDetailAttachments(event) {
-    var files = Array.from(event.target.files || []);
-    if (!files.length || !state.selectedIssueId) return;
-    await uploadFiles(state.selectedIssueId, files);
-    await openIssue(state.selectedIssueId, false);
-    await loadIssues();
-    showToast('附件已上传');
-  }
-
-  async function deleteAttachment(id) {
-    confirmAction('删除附件', '确认永久删除这个附件？', '删除附件', async function () {
-      var result = await request('/api/attachments/' + id, { method: 'DELETE' });
-      if (!result.ok) {
-        showToast(resultMessage(result, '附件删除失败'));
-        return;
-      }
-      await openIssue(state.selectedIssueId, false);
-      await loadIssues();
-      showToast('附件已删除');
+  function insertCommentImages(event) {
+    var input = event.target;
+    var selectedFiles = Array.from(input.files || []);
+    var files = selectedFiles.filter(function (file) {
+      var type = String(file.type || '').toLowerCase();
+      return type === 'image/png' || type === 'image/jpeg' || type === 'image/webp' ||
+        /\.(png|jpe?g|webp)$/i.test(file.name || '');
     });
+    if (files.length !== selectedFiles.length) {
+      showToast('仅支持 PNG、JPEG 和 WebP 图片');
+    }
+    if (!files.length) return;
+    var current = state.commentImages || [];
+    if (current.length + files.length > 9) {
+      showToast('每条评论最多插入 9 张图片');
+      input.value = '';
+      return;
+    }
+    var textarea = $('commentContent');
+    var start = textarea.selectionStart;
+    var end = textarea.selectionEnd;
+    var prefix = textarea.value.slice(0, start);
+    var suffix = textarea.value.slice(end);
+    var markers = files.map(function (file, index) {
+      var uploadIndex = current.length + index;
+      return '![' + file.name.replace(/[\[\]]/g, '') + '](upload:' + uploadIndex + ')';
+    }).join('\n');
+    textarea.value = prefix + markers + suffix;
+    state.commentImages = current.concat(files);
+    var nextPosition = prefix.length + markers.length;
+    textarea.focus();
+    textarea.setSelectionRange(nextPosition, nextPosition);
+    $('commentImageHint').textContent = state.commentImages.length + ' 张图片待发布';
+    input.value = '';
   }
 
   async function clearFilters() {
@@ -2109,7 +2216,8 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     else if (action === 'edit-issue') openIssueForm(state.selectedIssue);
     else if (action === 'delete-issue') await deleteIssue(id);
     else if (action === 'change-status') await changeStatus(target.dataset.status);
-    else if (action === 'delete-attachment') await deleteAttachment(id);
+    else if (action === 'preview-image') await previewAttachment(Number(target.dataset.attachmentId), target.dataset.imageAlt);
+    else if (action === 'close-image-preview') closeAttachmentPreview();
     else if (action === 'edit-block') {
       var block = state.blocks.find(function (item) { return Number(item.id) === id; });
       openBoardForm(block);
@@ -2133,6 +2241,7 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     $('loginForm').addEventListener('submit', login);
     $('dynamicForm').addEventListener('submit', submitDynamicForm);
     $('confirmButton').addEventListener('click', runConfirmedAction);
+    $('imagePreviewDialog').addEventListener('close', closeAttachmentPreview);
     $('createIssueButton').addEventListener('click', function () { if (canWrite()) openIssueForm(null); });
     $('createPanelButton').addEventListener('click', function () { openBoardForm(null); });
     $('closeDrawerButton').addEventListener('click', function () { closeDrawer(true); });
