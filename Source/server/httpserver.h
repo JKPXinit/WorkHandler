@@ -18,6 +18,9 @@
 class BlockController;
 class BlockDao;
 class BlockService;
+class IssueController;
+class IssueDao;
+class IssueService;
 class QNetworkAccessManager;
 class QTcpServer;
 class QHttpServerRequest;
@@ -117,6 +120,9 @@ private:
     std::unique_ptr<BlockDao> m_blockDao;
     std::unique_ptr<BlockService> m_blockService;
     std::unique_ptr<BlockController> m_blockController;
+    std::unique_ptr<IssueDao> m_issueDao;
+    std::unique_ptr<IssueService> m_issueService;
+    std::unique_ptr<IssueController> m_issueController;
     QHttpServer m_httpServer;
     QTcpServer *m_tcpServer {nullptr};
     QNetworkAccessManager *m_networkManager {nullptr};

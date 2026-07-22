@@ -48,6 +48,7 @@ private slots:
     void healthAndCors();
     void authentication();
     void userOptionsAndBlockCrud();
+    void issueCrudFilteringAndPermissions();
     void userCrudAndLastAdminProtection();
     void userPasswordChangeAndTokenVersion();
     void accountSummaryAndAdminPasswordChange();
@@ -491,6 +492,401 @@ void HttpServerIntegrationTest::userOptionsAndBlockCrud()
                      {}, m_token).status,
              200);
     QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(member.id),
+                     {}, m_token).status,
+             200);
+    QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(guest.id),
+                     {}, m_token).status,
+             200);
+}
+
+void HttpServerIntegrationTest::issueCrudFilteringAndPermissions()
+{
+    QString errorMessage;
+    UserSummary reporter;
+    UserSummary other;
+    UserSummary guest;
+    QVERIFY2(m_server->createManagedUser(
+                 QStringLiteral("issue_reporter"), &reporter, &errorMessage),
+             qPrintable(errorMessage));
+    QVERIFY2(m_server->createManagedUser(
+                 QStringLiteral("issue_other"), &other, &errorMessage),
+             qPrintable(errorMessage));
+    QVERIFY2(m_server->createManagedUser(
+                 QStringLiteral("issue_guest"), &guest, &errorMessage),
+             qPrintable(errorMessage));
+
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/users/%1").arg(guest.id),
+        {{QStringLiteral("username"), guest.username},
+         {QStringLiteral("role"), QStringLiteral("guest")},
+         {QStringLiteral("display_name"), QStringLiteral("Issue Guest")}},
+        m_token).status,
+        200);
+
+    const auto login = [this](const QString &username) {
+        return request(
+            "POST", QStringLiteral("/api/auth/login"),
+            {{QStringLiteral("username"), username},
+             {QStringLiteral("password"), QStringLiteral("123456")}});
+    };
+    const Reply reporterLogin = login(reporter.username);
+    const Reply otherLogin = login(other.username);
+    const Reply guestLogin = login(guest.username);
+    QCOMPARE(reporterLogin.status, 200);
+    QCOMPARE(otherLogin.status, 200);
+    QCOMPARE(guestLogin.status, 200);
+    const QString reporterToken =
+        reporterLogin.json().value(QStringLiteral("data")).toObject()
+            .value(QStringLiteral("token")).toString();
+    const QString otherToken =
+        otherLogin.json().value(QStringLiteral("data")).toObject()
+            .value(QStringLiteral("token")).toString();
+    const QString guestToken =
+        guestLogin.json().value(QStringLiteral("data")).toObject()
+            .value(QStringLiteral("token")).toString();
+    QVERIFY(!reporterToken.isEmpty());
+    QVERIFY(!otherToken.isEmpty());
+    QVERIFY(!guestToken.isEmpty());
+
+    const Reply firstBlockCreated = request(
+        "POST", QStringLiteral("/api/blocks"),
+        {{QStringLiteral("title"), QStringLiteral("Issue Block One")}},
+        m_token);
+    const Reply secondBlockCreated = request(
+        "POST", QStringLiteral("/api/blocks"),
+        {{QStringLiteral("title"), QStringLiteral("Issue Block Two")}},
+        m_token);
+    QCOMPARE(firstBlockCreated.status, 201);
+    QCOMPARE(secondBlockCreated.status, 201);
+    const qint64 firstBlockId = firstBlockCreated.json()
+                                    .value(QStringLiteral("data")).toObject()
+                                    .value(QStringLiteral("block")).toObject()
+                                    .value(QStringLiteral("id")).toInteger();
+    const qint64 secondBlockId = secondBlockCreated.json()
+                                     .value(QStringLiteral("data")).toObject()
+                                     .value(QStringLiteral("block")).toObject()
+                                     .value(QStringLiteral("id")).toInteger();
+    QVERIFY(firstBlockId > 0);
+    QVERIFY(secondBlockId > firstBlockId);
+
+    QCOMPARE(request("GET", QStringLiteral("/api/issues")).status, 401);
+    QCOMPARE(request("GET", QStringLiteral("/api/issues"), {},
+                     guestToken).status,
+             200);
+    QCOMPARE(request(
+        "POST", QStringLiteral("/api/issues"),
+        {{QStringLiteral("block_id"), firstBlockId},
+         {QStringLiteral("title"), QStringLiteral("Denied guest issue")}},
+        guestToken).status,
+        403);
+    QCOMPARE(request(
+        "POST", QStringLiteral("/api/issues"),
+        {{QStringLiteral("block_id"), firstBlockId}}, reporterToken).status,
+        400);
+    QCOMPARE(request(
+        "POST", QStringLiteral("/api/issues"),
+        {{QStringLiteral("block_id"), firstBlockId},
+         {QStringLiteral("title"), QStringLiteral("Invalid priority")},
+         {QStringLiteral("priority"), QStringLiteral("urgent")}},
+        reporterToken).status,
+        400);
+    QCOMPARE(request(
+        "POST", QStringLiteral("/api/issues"),
+        {{QStringLiteral("block_id"), qint64(999999)},
+         {QStringLiteral("title"), QStringLiteral("Missing block")}},
+        reporterToken).status,
+        404);
+    QCOMPARE(request(
+        "POST", QStringLiteral("/api/issues"),
+        {{QStringLiteral("block_id"), firstBlockId},
+         {QStringLiteral("title"), QStringLiteral("Missing assignee")},
+         {QStringLiteral("assignee_id"), qint64(999999)}},
+        reporterToken).status,
+        404);
+
+    const Reply firstCreated = request(
+        "POST", QStringLiteral("/api/issues"),
+        {{QStringLiteral("block_id"), firstBlockId},
+         {QStringLiteral("title"), QStringLiteral("  Alpha issue  ")},
+         {QStringLiteral("description"), QStringLiteral("Network contract")},
+         {QStringLiteral("priority"), QStringLiteral("high")},
+         {QStringLiteral("assignee_id"), other.id}},
+        reporterToken);
+    QCOMPARE(firstCreated.status, 201);
+    const QJsonObject firstIssue = firstCreated.json()
+                                       .value(QStringLiteral("data")).toObject()
+                                       .value(QStringLiteral("issue")).toObject();
+    const qint64 firstIssueId = firstIssue.value(QStringLiteral("id")).toInteger();
+    QVERIFY(firstIssueId > 0);
+    QCOMPARE(firstIssue.value(QStringLiteral("title")).toString(),
+             QStringLiteral("Alpha issue"));
+    QCOMPARE(firstIssue.value(QStringLiteral("status")).toString(),
+             QStringLiteral("open"));
+    QCOMPARE(firstIssue.value(QStringLiteral("reporter_id")).toInteger(),
+             reporter.id);
+    QCOMPARE(firstIssue.value(QStringLiteral("reporter")).toObject()
+                 .value(QStringLiteral("username")).toString(),
+             reporter.username);
+    QCOMPARE(firstIssue.value(QStringLiteral("assignee")).toObject()
+                 .value(QStringLiteral("id")).toInteger(),
+             other.id);
+    QCOMPARE(firstIssue.value(QStringLiteral("comment_count")).toInteger(),
+             qint64(0));
+    QCOMPARE(firstIssue.value(QStringLiteral("attachment_count")).toInteger(),
+             qint64(0));
+
+    const Reply secondCreated = request(
+        "POST", QStringLiteral("/api/issues"),
+        {{QStringLiteral("block_id"), secondBlockId},
+         {QStringLiteral("title"), QStringLiteral("Beta issue")},
+         {QStringLiteral("priority"), QStringLiteral("medium")}},
+        otherToken);
+    const Reply thirdCreated = request(
+        "POST", QStringLiteral("/api/issues"),
+        {{QStringLiteral("block_id"), firstBlockId},
+         {QStringLiteral("title"), QStringLiteral("Gamma issue")},
+         {QStringLiteral("description"), QStringLiteral("Unique needle text")},
+         {QStringLiteral("priority"), QStringLiteral("low")},
+         {QStringLiteral("assignee_id"), QJsonValue(QJsonValue::Null)}},
+        reporterToken);
+    QCOMPARE(secondCreated.status, 201);
+    QCOMPARE(thirdCreated.status, 201);
+    const qint64 secondIssueId = secondCreated.json()
+                                     .value(QStringLiteral("data")).toObject()
+                                     .value(QStringLiteral("issue")).toObject()
+                                     .value(QStringLiteral("id")).toInteger();
+    const qint64 thirdIssueId = thirdCreated.json()
+                                    .value(QStringLiteral("data")).toObject()
+                                    .value(QStringLiteral("issue")).toObject()
+                                    .value(QStringLiteral("id")).toInteger();
+    QVERIFY(secondIssueId > firstIssueId);
+    QVERIFY(thirdIssueId > secondIssueId);
+
+    const Reply blockFiltered = request(
+        "GET", QStringLiteral("/api/issues?block_id=%1&sort=created_desc")
+                   .arg(firstBlockId), {}, guestToken);
+    QCOMPARE(blockFiltered.status, 200);
+    QCOMPARE(blockFiltered.json().value(QStringLiteral("data")).toObject()
+                 .value(QStringLiteral("issues")).toArray().size(),
+             2);
+    const Reply blockRoute = request(
+        "GET", QStringLiteral("/api/blocks/%1/issues").arg(firstBlockId),
+        {}, guestToken);
+    QCOMPARE(blockRoute.status, 200);
+    QCOMPARE(blockRoute.json().value(QStringLiteral("data")).toObject()
+                 .value(QStringLiteral("issues")).toArray().size(),
+             2);
+    QCOMPARE(request("GET", QStringLiteral("/api/blocks/999999/issues"), {},
+                     guestToken).status,
+             404);
+    QCOMPARE(request(
+        "GET", QStringLiteral("/api/issues?priority=high"), {},
+        guestToken).json().value(QStringLiteral("data")).toObject()
+            .value(QStringLiteral("issues")).toArray().size(),
+        1);
+    QCOMPARE(request(
+        "GET", QStringLiteral("/api/issues?assignee_id=%1").arg(other.id), {},
+        guestToken).json().value(QStringLiteral("data")).toObject()
+            .value(QStringLiteral("issues")).toArray().size(),
+        1);
+    QCOMPARE(request(
+        "GET", QStringLiteral("/api/issues?q=needle"), {},
+        guestToken).json().value(QStringLiteral("data")).toObject()
+            .value(QStringLiteral("issues")).toArray().size(),
+        1);
+
+    const Reply prioritySorted = request(
+        "GET", QStringLiteral("/api/issues?sort=priority_desc"), {},
+        guestToken);
+    QCOMPARE(prioritySorted.status, 200);
+    const QJsonArray sortedIssues = prioritySorted.json()
+                                        .value(QStringLiteral("data")).toObject()
+                                        .value(QStringLiteral("issues")).toArray();
+    QCOMPARE(sortedIssues.size(), 3);
+    QCOMPARE(sortedIssues.at(0).toObject()
+                 .value(QStringLiteral("priority")).toString(),
+             QStringLiteral("high"));
+    QCOMPARE(sortedIssues.at(2).toObject()
+                 .value(QStringLiteral("priority")).toString(),
+             QStringLiteral("low"));
+    QCOMPARE(request(
+        "GET", QStringLiteral("/api/issues?status=invalid"), {},
+        guestToken).status,
+        400);
+    QCOMPARE(request(
+        "GET", QStringLiteral("/api/issues?sort=random"), {},
+        guestToken).status,
+        400);
+
+    const Reply detail = request(
+        "GET", QStringLiteral("/api/issues/%1").arg(firstIssueId), {},
+        guestToken);
+    QCOMPARE(detail.status, 200);
+    QCOMPARE(detail.json().value(QStringLiteral("data")).toObject()
+                 .value(QStringLiteral("issue")).toObject()
+                 .value(QStringLiteral("assignee_id")).toInteger(),
+             other.id);
+
+    const QJsonObject editPayload = {
+        {QStringLiteral("title"), QStringLiteral("Alpha issue updated")},
+        {QStringLiteral("block_id"), secondBlockId},
+        {QStringLiteral("priority"), QStringLiteral("low")},
+        {QStringLiteral("assignee_id"), QJsonValue(QJsonValue::Null)}
+    };
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/issues/%1").arg(firstIssueId),
+        editPayload, otherToken).status,
+        403);
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/issues/%1").arg(firstIssueId),
+        editPayload, guestToken).status,
+        403);
+    const Reply updated = request(
+        "PUT", QStringLiteral("/api/issues/%1").arg(firstIssueId),
+        editPayload, reporterToken);
+    QCOMPARE(updated.status, 200);
+    const QJsonObject updatedIssue = updated.json()
+                                         .value(QStringLiteral("data")).toObject()
+                                         .value(QStringLiteral("issue")).toObject();
+    QCOMPARE(updatedIssue.value(QStringLiteral("block_id")).toInteger(),
+             secondBlockId);
+    QVERIFY(updatedIssue.value(QStringLiteral("assignee_id")).isNull());
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/issues/%1").arg(firstIssueId),
+        {{QStringLiteral("status"), QStringLiteral("closed")}},
+        reporterToken).status,
+        400);
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/issues/999999"),
+        {{QStringLiteral("title"), QStringLiteral("Missing")}},
+        reporterToken).status,
+        404);
+
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/issues/%1/status").arg(firstIssueId),
+        {{QStringLiteral("status"), QStringLiteral("resolved")}},
+        otherToken).status,
+        403);
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/issues/%1/status").arg(firstIssueId),
+        {{QStringLiteral("status"), QStringLiteral("resolved")}},
+        guestToken).status,
+        403);
+    const Reply statusChanged = request(
+        "PUT", QStringLiteral("/api/issues/%1/status").arg(firstIssueId),
+        {{QStringLiteral("status"), QStringLiteral("resolved")}},
+        reporterToken);
+    QCOMPARE(statusChanged.status, 200);
+    QCOMPARE(statusChanged.json().value(QStringLiteral("data")).toObject()
+                 .value(QStringLiteral("issue")).toObject()
+                 .value(QStringLiteral("status")).toString(),
+             QStringLiteral("resolved"));
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/issues/%1/status").arg(firstIssueId),
+        {{QStringLiteral("status"), QStringLiteral("invalid")}},
+        reporterToken).status,
+        400);
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/issues/%1").arg(secondIssueId),
+        {{QStringLiteral("priority"), QStringLiteral("high")}},
+        m_token).status,
+        200);
+
+    QCOMPARE(request(
+        "DELETE", QStringLiteral("/api/issues/%1").arg(firstIssueId), {},
+        reporterToken).status,
+        403);
+    QCOMPARE(request(
+        "DELETE", QStringLiteral("/api/issues/%1").arg(secondIssueId), {},
+        guestToken).status,
+        403);
+
+    const QString databasePath =
+        m_temporaryDirectory.filePath(QStringLiteral("issue_panel.db"));
+    const QString setupConnection = QStringLiteral("issue_cascade_setup");
+    {
+        QSqlDatabase database = QSqlDatabase::addDatabase(
+            QStringLiteral("QSQLITE"), setupConnection);
+        database.setDatabaseName(databasePath);
+        QVERIFY(database.open());
+        QSqlQuery query(database);
+        QVERIFY(query.exec(QStringLiteral("PRAGMA foreign_keys = ON")));
+        query.prepare(QStringLiteral(
+            "INSERT INTO comments(issue_id, user_id, content) VALUES(?, ?, ?)"));
+        query.addBindValue(firstIssueId);
+        query.addBindValue(reporter.id);
+        query.addBindValue(QStringLiteral("Cascade comment"));
+        QVERIFY(query.exec());
+        query.prepare(QStringLiteral(
+            "INSERT INTO attachments(issue_id, uploader_id, filename, storage_path) "
+            "VALUES(?, ?, ?, ?)"));
+        query.addBindValue(firstIssueId);
+        query.addBindValue(reporter.id);
+        query.addBindValue(QStringLiteral("issue-cascade.png"));
+        query.addBindValue(QStringLiteral("issue/issue-cascade.png"));
+        QVERIFY(query.exec());
+        database.close();
+    }
+    QSqlDatabase::removeDatabase(setupConnection);
+
+    const Reply countedDetail = request(
+        "GET", QStringLiteral("/api/issues/%1").arg(firstIssueId), {},
+        m_token);
+    QCOMPARE(countedDetail.status, 200);
+    const QJsonObject countedIssue = countedDetail.json()
+                                         .value(QStringLiteral("data")).toObject()
+                                         .value(QStringLiteral("issue")).toObject();
+    QCOMPARE(countedIssue.value(QStringLiteral("comment_count")).toInteger(),
+             qint64(1));
+    QCOMPARE(countedIssue.value(QStringLiteral("attachment_count")).toInteger(),
+             qint64(1));
+    QCOMPARE(request(
+        "DELETE", QStringLiteral("/api/issues/%1").arg(firstIssueId), {},
+        m_token).status,
+        200);
+    QCOMPARE(request("DELETE", QStringLiteral("/api/issues/999999"), {},
+                     m_token).status,
+             404);
+
+    const QString checkConnection = QStringLiteral("issue_cascade_check");
+    {
+        QSqlDatabase database = QSqlDatabase::addDatabase(
+            QStringLiteral("QSQLITE"), checkConnection);
+        database.setDatabaseName(databasePath);
+        QVERIFY(database.open());
+        QSqlQuery query(database);
+        const QStringList cascadeChecks = {
+            QStringLiteral("SELECT COUNT(*) FROM comments WHERE issue_id = ?"),
+            QStringLiteral("SELECT COUNT(*) FROM attachments WHERE issue_id = ?")
+        };
+        for (const QString &statement : cascadeChecks) {
+            query.prepare(statement);
+            query.addBindValue(firstIssueId);
+            QVERIFY(query.exec());
+            QVERIFY(query.next());
+            QCOMPARE(query.value(0).toInt(), 0);
+            query.finish();
+        }
+        database.close();
+    }
+    QSqlDatabase::removeDatabase(checkConnection);
+
+    QCOMPARE(request("DELETE", QStringLiteral("/api/issues/%1").arg(secondIssueId),
+                     {}, m_token).status,
+             200);
+    QCOMPARE(request("DELETE", QStringLiteral("/api/issues/%1").arg(thirdIssueId),
+                     {}, m_token).status,
+             200);
+    QCOMPARE(request("DELETE", QStringLiteral("/api/blocks/%1").arg(firstBlockId),
+                     {}, m_token).status,
+             200);
+    QCOMPARE(request("DELETE", QStringLiteral("/api/blocks/%1").arg(secondBlockId),
+                     {}, m_token).status,
+             200);
+    QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(reporter.id),
+                     {}, m_token).status,
+             200);
+    QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(other.id),
                      {}, m_token).status,
              200);
     QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(guest.id),

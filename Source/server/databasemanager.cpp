@@ -115,6 +115,15 @@ bool DatabaseManager::initialize(QString *errorMessage,
             "assignee_id INTEGER REFERENCES users(id),"
             "created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"),
         QStringLiteral(
+            "CREATE INDEX IF NOT EXISTS idx_issues_block_id "
+            "ON issues(block_id)"),
+        QStringLiteral(
+            "CREATE INDEX IF NOT EXISTS idx_issues_status "
+            "ON issues(status)"),
+        QStringLiteral(
+            "CREATE INDEX IF NOT EXISTS idx_issues_assignee_id "
+            "ON issues(assignee_id)"),
+        QStringLiteral(
             "CREATE TABLE IF NOT EXISTS comments ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT,"
             "issue_id INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,"

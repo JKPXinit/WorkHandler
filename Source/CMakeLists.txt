@@ -91,6 +91,12 @@ set(BACKEND_SOURCES
     server/blocks/blockdao.h
     server/blocks/blockservice.cpp
     server/blocks/blockservice.h
+    server/issues/issuecontroller.cpp
+    server/issues/issuecontroller.h
+    server/issues/issuedao.cpp
+    server/issues/issuedao.h
+    server/issues/issueservice.cpp
+    server/issues/issueservice.h
     server/databasemanager.cpp
     server/databasemanager.h
     server/httpserver.cpp
