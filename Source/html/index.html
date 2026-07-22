@@ -3,14 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light dark">
-<title>WorkHandler | API 工作台</title>
+<meta name="color-scheme" content="light">
+<title>WorkHandler | Issue 工作台</title>
 <style>
 :root {
   --blue: #0066cc;
   --blue-focus: #0071e3;
   --blue-dark: #2997ff;
   --ink: #1d1d1f;
+  --ink-soft: #333333;
   --muted: #7a7a7a;
   --canvas: #ffffff;
   --parchment: #f5f5f7;
@@ -22,139 +23,168 @@
   --dark-line: #48484a;
   --on-dark: #ffffff;
   --on-dark-muted: #cccccc;
-  --radius: 18px;
+  --danger: #8a1c1c;
+  --radius-sm: 8px;
+  --radius-md: 11px;
+  --radius-lg: 18px;
   --pill: 9999px;
-  --container: 1180px;
+  --nav-height: 44px;
+  --subnav-height: 52px;
+  --sidebar-width: 264px;
+  --drawer-width: 432px;
+  --container: 1440px;
   font-family: "SF Pro Text", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: var(--ink);
   background: var(--canvas);
   letter-spacing: 0;
 }
 
-* { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
+* { box-sizing: border-box; letter-spacing: 0; }
+html, body { min-width: 320px; min-height: 100%; }
 body {
   margin: 0;
-  min-width: 320px;
   background: var(--canvas);
   color: var(--ink);
   font-size: 17px;
   font-weight: 400;
   line-height: 1.47;
-  letter-spacing: 0;
 }
 button, input, select, textarea { font: inherit; letter-spacing: 0; }
 button, a { -webkit-tap-highlight-color: transparent; }
+button { border: 0; }
 button:focus-visible, a:focus-visible, input:focus-visible,
 select:focus-visible, textarea:focus-visible {
   outline: 2px solid var(--blue-focus);
   outline-offset: 2px;
 }
 button:active { transform: scale(0.95); }
+button:disabled { cursor: not-allowed; opacity: 0.45; transform: none; }
 a { color: inherit; text-decoration: none; }
 img { display: block; max-width: 100%; }
+svg.icon { width: 18px; height: 18px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.hidden { display: none !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 
 .global-nav {
-  height: 44px;
+  height: var(--nav-height);
   background: var(--black);
   color: var(--on-dark);
 }
-.nav-inner, .sub-nav-inner, .tile-inner, .footer-inner {
+.global-nav-inner {
   width: min(var(--container), calc(100% - 48px));
+  height: 100%;
   margin: 0 auto;
-}
-.nav-inner {
-  height: 44px;
   display: flex;
   align-items: center;
-  gap: 28px;
+  gap: 24px;
   font-size: 12px;
   line-height: 1;
 }
-.brand { font-weight: 600; margin-right: auto; }
-.nav-link { color: #d2d2d7; }
-.nav-link:hover { color: var(--on-dark); }
-.session-chip {
-  max-width: 260px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.brand-link { font-weight: 600; margin-right: auto; }
+.global-link { color: #d2d2d7; background: transparent; cursor: pointer; padding: 8px 0; }
+.global-link:hover { color: var(--on-dark); }
+.demo-badge {
+  padding: 5px 9px;
+  border: 1px solid var(--dark-line);
+  border-radius: var(--pill);
   color: #d2d2d7;
+  font-size: 10px;
 }
+.profile-wrap { position: relative; }
+.profile-button {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--ink);
+  color: var(--on-dark);
+  cursor: pointer;
+  font-size: 12px;
+}
+.avatar {
+  width: 24px;
+  height: 24px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #d2d2d7;
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 600;
+}
+.profile-menu {
+  position: absolute;
+  top: 39px;
+  right: 0;
+  z-index: 80;
+  width: 224px;
+  padding: 8px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  background: var(--canvas);
+  color: var(--ink);
+}
+.profile-summary { padding: 10px 12px 12px; border-bottom: 1px solid var(--hairline); }
+.profile-summary strong, .profile-summary span { display: block; overflow-wrap: anywhere; }
+.profile-summary span { margin-top: 3px; color: var(--muted); font-size: 12px; }
+.menu-action {
+  width: 100%;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  font-size: 14px;
+}
+.menu-action:hover { background: var(--parchment); }
 
 .sub-nav {
   position: sticky;
   top: 0;
-  z-index: 20;
-  min-height: 52px;
-  background: rgba(245, 245, 247, 0.92);
-  color: var(--ink);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  z-index: 40;
+  height: var(--subnav-height);
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+  background: rgba(245,245,247,0.92);
   backdrop-filter: saturate(180%) blur(20px);
 }
 .sub-nav-inner {
-  min-height: 52px;
+  width: min(var(--container), calc(100% - 48px));
+  height: 100%;
+  margin: 0 auto;
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 14px;
 }
 .sub-title {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: "SF Pro Display", system-ui, -apple-system, sans-serif;
   font-size: 21px;
   font-weight: 600;
   line-height: 1.19;
 }
-.sub-status { margin-left: auto; color: var(--muted); font-size: 14px; }
-
-.tile { padding: 80px 0; }
-.tile-light { background: var(--canvas); color: var(--ink); }
-.tile-parchment { background: var(--parchment); color: var(--ink); }
-.tile-dark { background: var(--tile-dark); color: var(--on-dark); }
-.tile-dark-2 { background: var(--tile-dark-2); color: var(--on-dark); }
-.tile-inner { min-width: 0; }
-.split {
-  display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(360px, 1.1fr);
-  gap: 64px;
-  align-items: center;
-}
-.section-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 32px;
-  margin-bottom: 32px;
-}
-.eyebrow {
-  margin: 0 0 12px;
-  color: var(--muted);
+.sub-count { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.sub-search { position: relative; width: min(360px, 32vw); margin-left: auto; }
+.sub-search svg { position: absolute; left: 14px; top: 13px; color: var(--muted); pointer-events: none; }
+.sub-search input {
+  width: 100%;
+  height: 40px;
+  padding: 8px 16px 8px 42px;
+  border: 1px solid rgba(0,0,0,0.08);
+  border-radius: var(--pill);
+  background: var(--canvas);
+  color: var(--ink);
   font-size: 14px;
-  font-weight: 600;
-  line-height: 1.29;
 }
-.tile-dark .eyebrow, .tile-dark-2 .eyebrow { color: var(--on-dark-muted); }
-h1, h2, h3, p { overflow-wrap: anywhere; }
-h1, h2 {
-  margin: 0;
-  font-family: "SF Pro Display", system-ui, -apple-system, sans-serif;
-  font-size: 40px;
-  font-weight: 600;
-  line-height: 1.1;
-  letter-spacing: 0;
-}
-h3 { margin: 0; font-size: 21px; font-weight: 600; line-height: 1.19; }
-.lead {
-  margin: 18px 0 0;
-  color: #333333;
-  font-family: "SF Pro Display", system-ui, -apple-system, sans-serif;
-  font-size: 24px;
-  font-weight: 300;
-  line-height: 1.5;
-  letter-spacing: 0;
-}
-.tile-dark .lead, .tile-dark-2 .lead { color: var(--on-dark-muted); }
-.actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
-
 .btn {
   min-height: 44px;
   display: inline-flex;
@@ -164,159 +194,438 @@ h3 { margin: 0; font-size: 21px; font-weight: 600; line-height: 1.19; }
   padding: 11px 22px;
   border: 1px solid transparent;
   border-radius: var(--pill);
-  cursor: pointer;
-  color: var(--on-dark);
   background: var(--blue);
+  color: var(--on-dark);
+  cursor: pointer;
   font-size: 17px;
   font-weight: 400;
   line-height: 1.2;
-  transition: transform 120ms ease, opacity 120ms ease;
 }
 .btn:hover { background: var(--blue-focus); }
-.btn:disabled { cursor: not-allowed; opacity: 0.46; transform: none; }
-.btn-secondary { color: var(--blue); background: transparent; border-color: var(--blue); }
-.btn-secondary:hover { color: var(--on-dark); background: var(--blue); }
-.tile-dark .btn-secondary, .tile-dark-2 .btn-secondary {
-  color: var(--blue-dark);
-  border-color: var(--blue-dark);
+.btn-secondary { border-color: var(--blue); background: transparent; color: var(--blue); }
+.btn-secondary:hover { background: var(--blue); color: var(--on-dark); }
+.btn-utility {
+  min-height: 38px;
+  padding: 8px 15px;
+  border-radius: var(--radius-sm);
+  background: var(--ink);
+  color: var(--on-dark);
+  font-size: 14px;
 }
-.btn-compact { min-height: 36px; padding: 8px 15px; font-size: 14px; }
-.icon { width: 18px; height: 18px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 2; }
+.btn-utility:hover { background: var(--tile-dark-2); }
+.btn-ghost {
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--pearl);
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+.btn-ghost:hover { border-color: var(--blue); color: var(--blue); }
+.btn-danger { border-color: #d6b6b6; background: var(--canvas); color: var(--danger); }
+.btn-danger:hover { border-color: var(--danger); background: #fff7f7; color: var(--danger); }
+.icon-button {
+  width: 44px;
+  height: 44px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 44px;
+  border: 1px solid var(--hairline);
+  border-radius: 50%;
+  background: var(--canvas);
+  color: var(--ink);
+  cursor: pointer;
+}
+.icon-button:hover { border-color: var(--blue); color: var(--blue); }
+.icon-button.dark { border-color: var(--dark-line); background: var(--tile-dark); color: var(--on-dark); }
+.icon-button.small { width: 34px; height: 34px; min-height: 34px; flex-basis: 34px; }
 
-.product-mark { display: flex; justify-content: center; margin-bottom: 28px; }
-.product-mark img {
+.login-view {
+  min-height: 100vh;
+  min-height: 100svh;
+  display: grid;
+  grid-template-rows: var(--nav-height) 1fr auto;
+  background: var(--tile-dark);
+}
+.login-main {
+  display: grid;
+  place-items: center;
+  padding: 64px 24px;
+  color: var(--on-dark);
+}
+.login-layout {
+  width: min(980px, 100%);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 420px);
+  gap: 80px;
+  align-items: center;
+}
+.login-brand { min-width: 0; }
+.brand-asset {
   width: 112px;
   height: 112px;
-  object-fit: cover;
+  margin-bottom: 32px;
   border-radius: 24px;
-  box-shadow: rgba(0, 0, 0, 0.22) 3px 5px 30px 0;
+  object-fit: cover;
+  box-shadow: rgba(0,0,0,0.22) 3px 5px 30px 0;
 }
-.connection-surface {
-  padding: 28px;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius);
-  background: var(--pearl);
+.login-brand h1 {
+  margin: 0;
+  font-family: "SF Pro Display", system-ui, -apple-system, sans-serif;
+  font-size: 56px;
+  font-weight: 600;
+  line-height: 1.07;
+  letter-spacing: 0;
 }
-.connection-meta {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 20px;
+.login-brand p {
+  margin: 18px 0 0;
+  color: var(--on-dark-muted);
+  font-family: "SF Pro Display", system-ui, -apple-system, sans-serif;
+  font-size: 24px;
+  font-weight: 300;
+  line-height: 1.5;
 }
-.metric { min-width: 0; padding-top: 14px; border-top: 1px solid var(--hairline); }
-.metric-label { display: block; color: var(--muted); font-size: 12px; }
-.metric-value { display: block; margin-top: 5px; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
-
-.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 17px; }
-.form-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.login-form {
+  padding: 32px;
+  border: 1px solid var(--dark-line);
+  border-radius: var(--radius-lg);
+  background: #1d1d1f;
+}
+.login-form h2 { margin: 0 0 24px; font-size: 21px; font-weight: 600; }
+.form-stack { display: grid; gap: 17px; }
 .field { min-width: 0; }
-.field-wide { grid-column: 1 / -1; }
 .field label { display: block; margin-bottom: 7px; font-size: 14px; font-weight: 600; }
-.field-hint { color: var(--muted); font-size: 12px; }
-input, select, textarea {
+.field input, .field select, .field textarea {
   width: 100%;
   min-height: 44px;
   padding: 10px 14px;
   border: 1px solid var(--hairline);
-  border-radius: 11px;
+  border-radius: var(--radius-md);
   background: var(--canvas);
   color: var(--ink);
   font-size: 17px;
 }
-textarea { min-height: 130px; resize: vertical; font-family: Consolas, "SFMono-Regular", monospace; font-size: 14px; line-height: 1.5; }
-.tile-dark input, .tile-dark select, .tile-dark textarea,
-.tile-dark-2 input, .tile-dark-2 select, .tile-dark-2 textarea {
-  border-color: var(--dark-line);
-  background: #1d1d1f;
-  color: var(--on-dark);
-}
-.inline-input { display: flex; gap: 10px; align-items: center; }
-.inline-input input { min-width: 0; }
-.check-row { min-height: 44px; display: flex; align-items: center; gap: 10px; }
-.check-row input { width: 20px; min-height: 20px; accent-color: var(--blue); }
-
-.auth-surface {
-  padding: 32px;
+.field textarea { min-height: 132px; resize: vertical; line-height: 1.47; }
+.login-form .field input { border-color: var(--dark-line); background: var(--tile-dark); color: var(--on-dark); }
+.field-error { min-height: 20px; margin-top: 6px; color: #ffb4ab; font-size: 12px; }
+.login-actions { margin-top: 24px; display: flex; align-items: center; gap: 14px; }
+.login-actions .btn { min-width: 118px; }
+.service-state { color: var(--on-dark-muted); font-size: 12px; }
+.service-state.ok { color: var(--blue-dark); }
+.demo-roles { display: flex; gap: 8px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--dark-line); }
+.demo-role {
+  min-height: 36px;
+  flex: 1;
   border: 1px solid var(--dark-line);
-  border-radius: var(--radius);
-  background: #1d1d1f;
+  border-radius: var(--pill);
+  background: transparent;
+  color: var(--on-dark-muted);
+  cursor: pointer;
+  font-size: 12px;
 }
-.auth-stack { display: grid; gap: 16px; }
-.session-line { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--dark-line); }
-.session-line code { color: var(--blue-dark); }
-
-.utility-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.6fr); gap: 24px; }
-.utility-card {
-  min-width: 0;
+.demo-role:hover { border-color: var(--blue-dark); color: var(--blue-dark); }
+.login-footer {
   padding: 24px;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius);
-  background: var(--canvas);
+  background: var(--parchment);
+  color: var(--muted);
+  text-align: center;
+  font-size: 12px;
+  line-height: 2.41;
 }
-.card-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
-.table-wrap { width: 100%; overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-th, td { padding: 13px 12px; border-bottom: 1px solid var(--hairline); text-align: left; vertical-align: middle; }
-th { color: var(--muted); font-size: 12px; font-weight: 600; }
-tbody tr { cursor: pointer; }
-tbody tr:hover, tbody tr.selected { background: var(--parchment); }
-.empty-row { color: var(--muted); text-align: center; cursor: default; }
-.role-chip, .status-chip {
+
+.app-view { min-height: 100vh; background: var(--canvas); }
+.workspace {
+  min-height: calc(100vh - var(--nav-height) - var(--subnav-height));
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  max-width: var(--container);
+  margin: 0 auto;
+}
+.workspace.detail-open { grid-template-columns: var(--sidebar-width) minmax(0, 1fr) var(--drawer-width); }
+.sidebar {
+  min-width: 0;
+  border-right: 1px solid var(--hairline);
+  background: var(--parchment);
+}
+.sidebar-inner {
+  position: sticky;
+  top: var(--subnav-height);
+  height: calc(100vh - var(--subnav-height));
+  display: flex;
+  flex-direction: column;
+  padding: 24px 16px 16px;
+}
+.sidebar-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 8px 16px; }
+.sidebar-head h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.panel-list { min-height: 0; overflow-y: auto; display: grid; align-content: start; gap: 4px; }
+.panel-item { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 4px; }
+.panel-select {
+  width: 100%;
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: 10px minmax(0,1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+.panel-select:hover, .panel-select.active { background: var(--canvas); }
+.panel-select.active { color: var(--blue); }
+.panel-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--blue); }
+.panel-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; }
+.panel-count { color: var(--muted); font-size: 12px; }
+.panel-tools { display: flex; }
+.panel-tool {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.panel-tool:hover { background: var(--canvas); color: var(--blue); }
+.panel-tool svg { width: 14px; height: 14px; }
+.sidebar-foot { margin-top: auto; padding: 16px 8px 0; border-top: 1px solid var(--hairline); color: var(--muted); font-size: 12px; }
+.sidebar-foot strong { display: block; color: var(--ink); font-size: 14px; overflow-wrap: anywhere; }
+.sidebar-backdrop { display: none; }
+
+.issue-main { min-width: 0; background: var(--canvas); }
+.metrics-band {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0,1fr));
+  border-bottom: 1px solid var(--hairline);
+  background: var(--parchment);
+}
+.metric { min-width: 0; padding: 20px 24px; border-right: 1px solid var(--hairline); }
+.metric:last-child { border-right: 0; }
+.metric-label { display: block; color: var(--muted); font-size: 12px; }
+.metric-value { display: block; margin-top: 4px; font-size: 24px; font-weight: 600; line-height: 1.2; }
+.filter-band {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--hairline);
+}
+.segmented {
+  min-height: 38px;
   display: inline-flex;
   align-items: center;
-  min-height: 28px;
-  padding: 5px 10px;
+  padding: 3px;
   border: 1px solid var(--hairline);
-  border-radius: var(--pill);
-  color: var(--ink);
-  background: var(--pearl);
+  border-radius: var(--radius-sm);
+  background: var(--parchment);
+}
+.segmented button {
+  min-height: 30px;
+  padding: 5px 11px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
   font-size: 12px;
   white-space: nowrap;
 }
-.status-chip.ok { color: var(--blue); border-color: var(--blue); }
-
-.dark-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
-.dark-panel { padding: 28px; border: 1px solid var(--dark-line); border-radius: var(--radius); background: #1d1d1f; }
-.dark-panel h3 { margin-bottom: 22px; }
-
-.inspector-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; }
-.response-panel { min-width: 0; }
-.response-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
-.code-block {
-  min-height: 96px;
-  max-height: 390px;
-  overflow: auto;
-  margin: 0;
-  padding: 18px;
+.segmented button.active { background: var(--blue); color: var(--on-dark); }
+.filter-select {
+  min-height: 38px;
+  max-width: 170px;
+  padding: 7px 32px 7px 11px;
   border: 1px solid var(--hairline);
-  border-radius: 8px;
-  background: #1d1d1f;
-  color: #f5f5f7;
-  font: 14px/1.55 Consolas, "SFMono-Regular", monospace;
-  white-space: pre-wrap;
+  border-radius: var(--radius-sm);
+  background: var(--canvas);
+  color: var(--ink);
+  font-size: 12px;
+}
+.filter-clear { margin-left: auto; background: transparent; color: var(--blue); cursor: pointer; font-size: 12px; }
+.issue-table { min-width: 0; }
+.issue-header, .issue-row {
+  display: grid;
+  grid-template-columns: minmax(220px,1fr) 112px 90px 150px 132px 62px;
+  align-items: center;
+  column-gap: 12px;
+}
+.issue-header {
+  min-height: 42px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.issue-row {
+  width: 100%;
+  min-height: 68px;
+  padding: 10px 24px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--canvas);
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+.issue-row:hover { background: var(--pearl); }
+.issue-title { min-width: 0; }
+.issue-title strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 600; }
+.issue-title span { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; }
+.issue-cell { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  max-width: 100%;
+  padding: 5px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--pill);
+  background: var(--pearl);
+  color: var(--ink-soft);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.chip.active { border-color: var(--blue); color: var(--blue); }
+.attachment-cell { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); }
+.list-state {
+  min-height: 320px;
+  display: grid;
+  place-items: center;
+  padding: 48px 24px;
+  color: var(--muted);
+  text-align: center;
+}
+.list-state-inner { max-width: 420px; }
+.list-state h3 { margin: 0; color: var(--ink); font-size: 21px; font-weight: 600; }
+.list-state p { margin: 8px 0 0; font-size: 14px; }
+
+.issue-drawer {
+  min-width: 0;
+  border-left: 1px solid var(--hairline);
+  background: var(--canvas);
+}
+.drawer-inner { position: sticky; top: var(--subnav-height); height: calc(100vh - var(--subnav-height)); overflow-y: auto; }
+.drawer-head {
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px 10px 24px;
+  border-bottom: 1px solid var(--hairline);
+  background: rgba(255,255,255,0.94);
+  backdrop-filter: saturate(180%) blur(20px);
+}
+.drawer-head h2 { min-width: 0; flex: 1; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 17px; font-weight: 600; }
+.drawer-body { padding: 24px; }
+.detail-kicker { margin: 0 0 8px; color: var(--muted); font-size: 12px; }
+.detail-title {
+  margin: 0;
+  font-family: "SF Pro Display", system-ui, -apple-system, sans-serif;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.2;
   overflow-wrap: anywhere;
 }
-.code-label { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 18px 0 8px; font-size: 14px; font-weight: 600; }
-.activity-list { list-style: none; padding: 0; margin: 0; }
-.activity-item { padding: 13px 0; border-bottom: 1px solid var(--hairline); font-size: 14px; }
-.activity-line { display: flex; justify-content: space-between; gap: 12px; }
-.activity-path { margin-top: 4px; color: var(--muted); overflow-wrap: anywhere; }
-.smoke-list { display: grid; gap: 8px; margin-top: 20px; }
-.smoke-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; }
-.smoke-state { color: var(--muted); }
-.smoke-state.ok { color: var(--blue); }
+.detail-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.detail-section { padding: 24px 0; border-bottom: 1px solid var(--hairline); }
+.detail-section:last-child { border-bottom: 0; }
+.detail-section h3 { margin: 0 0 14px; font-size: 14px; font-weight: 600; }
+.detail-description { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink-soft); font-size: 14px; line-height: 1.6; }
+.meta-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+.meta-item span { display: block; color: var(--muted); font-size: 11px; }
+.meta-item strong { display: block; margin-top: 3px; overflow-wrap: anywhere; font-size: 13px; font-weight: 600; }
+.status-flow { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+.status-button {
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  background: var(--canvas);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+.status-button.active { border-color: var(--blue); background: var(--pearl); color: var(--blue); }
+.attachment-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.attachment-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--pearl);
+}
+.attachment-card img { width: 100%; aspect-ratio: 4/3; object-fit: cover; background: var(--parchment); }
+.attachment-meta { display: flex; align-items: center; gap: 8px; padding: 9px 10px; }
+.attachment-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.attachment-delete { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: transparent; color: var(--muted); cursor: pointer; }
+.attachment-delete:hover { color: var(--danger); }
+.upload-label {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 15px;
+  border: 1px solid var(--blue);
+  border-radius: var(--pill);
+  color: var(--blue);
+  cursor: pointer;
+  font-size: 14px;
+}
+.upload-label input { display: none; }
+.comment-list { display: grid; gap: 16px; }
+.comment { display: grid; grid-template-columns: 32px minmax(0,1fr); gap: 10px; }
+.comment .avatar { width: 32px; height: 32px; }
+.comment-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+.comment-head span { color: var(--muted); white-space: nowrap; }
+.comment-body { margin: 4px 0 0; overflow-wrap: anywhere; color: var(--ink-soft); font-size: 13px; white-space: pre-wrap; }
+.comment-form { display: grid; gap: 10px; margin-top: 18px; }
+.comment-form textarea {
+  width: 100%;
+  min-height: 88px;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  resize: vertical;
+  color: var(--ink);
+  font-size: 14px;
+}
 
-.footer { padding: 64px 0; background: var(--parchment); color: #333333; }
-.footer-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 32px; }
-.footer h3 { margin-bottom: 12px; font-size: 14px; }
-.footer a, .footer code { display: block; color: #333333; font-size: 12px; line-height: 2.41; overflow-wrap: anywhere; }
-.footer-bottom { margin-top: 42px; padding-top: 18px; border-top: 1px solid var(--hairline); color: var(--muted); font-size: 12px; }
+dialog {
+  width: min(640px, calc(100% - 32px));
+  max-height: calc(100vh - 48px);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--canvas);
+  color: var(--ink);
+}
+dialog::backdrop { background: rgba(0,0,0,0.46); }
+.dialog-shell { max-height: calc(100vh - 48px); display: grid; grid-template-rows: auto minmax(0,1fr) auto; }
+.dialog-head { min-height: 64px; display: flex; align-items: center; gap: 12px; padding: 10px 16px 10px 24px; border-bottom: 1px solid var(--hairline); }
+.dialog-head h2 { flex: 1; margin: 0; font-size: 21px; font-weight: 600; }
+.dialog-body { min-height: 0; overflow-y: auto; padding: 24px; }
+.dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; padding: 16px 24px; border-top: 1px solid var(--hairline); background: var(--parchment); }
+.form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 17px; }
+.field-wide { grid-column: 1/-1; }
+.color-options { display: flex; flex-wrap: wrap; gap: 10px; }
+.color-choice { position: relative; }
+.color-choice input { position: absolute; opacity: 0; pointer-events: none; }
+.color-swatch { width: 44px; height: 44px; display: block; border: 3px solid var(--canvas); border-radius: 50%; background: var(--swatch); outline: 1px solid var(--hairline); cursor: pointer; }
+.color-choice input:checked + .color-swatch { outline: 2px solid var(--blue-focus); outline-offset: 2px; }
+.confirm-copy { margin: 0; color: var(--ink-soft); overflow-wrap: anywhere; }
+.confirm-copy strong { color: var(--ink); }
 
 .toast {
   position: fixed;
   right: 24px;
   bottom: 24px;
-  z-index: 40;
+  z-index: 120;
   max-width: min(420px, calc(100% - 48px));
   padding: 13px 18px;
   border: 1px solid var(--hairline);
@@ -329,27 +638,98 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
   transition: opacity 180ms ease, transform 180ms ease;
 }
 .toast.show { opacity: 1; transform: translateY(0); }
-.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 
-@media (max-width: 920px) {
-  .split, .utility-grid, .dark-grid, .inspector-grid { grid-template-columns: 1fr; gap: 32px; }
-  .form-grid.three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .footer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .nav-link { display: none; }
+@media (max-width: 1068px) {
+  .workspace, .workspace.detail-open { grid-template-columns: 232px minmax(0,1fr); }
+  .issue-drawer {
+    position: fixed;
+    top: calc(var(--nav-height) + var(--subnav-height));
+    right: 0;
+    bottom: 0;
+    z-index: 55;
+    width: min(var(--drawer-width), calc(100% - 64px));
+  }
+  .drawer-inner { position: static; height: 100%; }
+  .issue-header, .issue-row { grid-template-columns: minmax(200px,1fr) 104px 82px 124px 56px; }
+  .issue-header > :nth-child(5), .issue-row > :nth-child(5) { display: none; }
 }
-@media (max-width: 620px) {
-  .nav-inner, .sub-nav-inner, .tile-inner, .footer-inner { width: min(100% - 32px, var(--container)); }
-  .tile { padding: 48px 0; }
-  h1, h2 { font-size: 34px; line-height: 1.2; }
-  .lead { font-size: 21px; }
-  .sub-status { display: none; }
-  .form-grid, .form-grid.three, .connection-meta { grid-template-columns: 1fr; }
+@media (max-width: 833px) {
+  .global-nav-inner, .sub-nav-inner { width: min(var(--container), calc(100% - 32px)); }
+  .global-link { display: none; }
+  .workspace, .workspace.detail-open { grid-template-columns: minmax(0,1fr); }
+  .sidebar {
+    position: fixed;
+    top: calc(var(--nav-height) + var(--subnav-height));
+    left: 0;
+    bottom: 0;
+    z-index: 65;
+    width: min(320px, calc(100% - 48px));
+    border-right: 1px solid var(--hairline);
+    transform: translateX(-102%);
+    transition: transform 180ms ease;
+  }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar-inner { position: static; height: 100%; }
+  .sidebar-backdrop {
+    position: fixed;
+    inset: calc(var(--nav-height) + var(--subnav-height)) 0 0;
+    z-index: 60;
+    background: rgba(0,0,0,0.36);
+  }
+  .sidebar-backdrop.show { display: block; }
+  .mobile-panels { display: inline-grid !important; }
+  .sub-search { width: min(280px, 38vw); }
+  .issue-header, .issue-row { grid-template-columns: minmax(180px,1fr) 104px 82px 56px; }
+  .issue-header > :nth-child(4), .issue-row > :nth-child(4) { display: none; }
+}
+@media (max-width: 640px) {
+  .login-main { padding: 48px 16px; }
+  .login-layout { grid-template-columns: 1fr; gap: 40px; }
+  .login-brand { text-align: center; }
+  .brand-asset { width: 88px; height: 88px; margin: 0 auto 24px; border-radius: 20px; }
+  .login-brand h1 { font-size: 34px; line-height: 1.2; }
+  .login-brand p { font-size: 21px; }
+  .login-form { padding: 24px; }
+  .profile-button .profile-name { display: none; }
+  .sub-count { display: none; }
+  .sub-title { max-width: 132px; font-size: 17px; }
+  .sub-search { display: none; }
+  .sub-nav-inner .btn { margin-left: auto; min-height: 40px; padding: 8px 15px; font-size: 14px; }
+  .metrics-band { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .metric { padding: 16px; }
+  .metric:nth-child(2) { border-right: 0; }
+  .metric:nth-child(-n+2) { border-bottom: 1px solid var(--hairline); }
+  .metric-value { font-size: 21px; }
+  .filter-band { padding: 12px 16px; }
+  .segmented { width: 100%; overflow-x: auto; }
+  .segmented button { flex: 1; }
+  .filter-select { flex: 1; max-width: none; }
+  .filter-clear { margin-left: 0; }
+  .issue-header { display: none; }
+  .issue-row {
+    min-height: 92px;
+    grid-template-columns: minmax(0,1fr) auto;
+    grid-template-areas: "title status" "title priority";
+    row-gap: 7px;
+    padding: 14px 16px;
+  }
+  .issue-row .issue-title { grid-area: title; align-self: center; }
+  .issue-row > :nth-child(2) { grid-area: status; }
+  .issue-row > :nth-child(3) { grid-area: priority; }
+  .issue-row > :nth-child(n+4) { display: none; }
+  .issue-drawer { top: var(--nav-height); width: 100%; }
+  .drawer-inner { height: calc(100vh - var(--nav-height)); }
+  .drawer-body { padding: 20px 16px; }
+  .detail-title { font-size: 24px; }
+  .attachment-grid { grid-template-columns: 1fr; }
+  dialog { width: 100%; max-width: none; max-height: 100vh; height: 100vh; border: 0; border-radius: 0; }
+  .dialog-shell { max-height: 100vh; height: 100%; }
+  .dialog-body { padding: 20px 16px; }
+  .dialog-actions { padding: 14px 16px; }
+  .form-grid { grid-template-columns: 1fr; }
   .field-wide { grid-column: auto; }
-  .section-head { align-items: flex-start; flex-direction: column; }
-  .actions, .inline-input { align-items: stretch; flex-direction: column; }
-  .btn { width: 100%; }
-  .footer-grid { grid-template-columns: 1fr; }
-  .session-chip { max-width: 130px; }
+  .dialog-actions .btn, .dialog-actions .btn-ghost { flex: 1; }
+  .toast { right: 16px; bottom: 16px; max-width: calc(100% - 32px); border-radius: var(--radius-md); }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
@@ -357,780 +737,1479 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
 </style>
 </head>
 <body>
-<nav class="global-nav" aria-label="全局导航">
-  <div class="nav-inner">
-    <a class="brand" href="#connection">WorkHandler</a>
-    <a class="nav-link" href="#authentication">认证</a>
-    <a class="nav-link" href="#users">用户</a>
-    <a class="nav-link" href="#server">服务</a>
-    <a class="nav-link" href="#inspector">响应</a>
-    <span class="session-chip" id="navSession">未登录</span>
-  </div>
-</nav>
+<svg class="sr-only" aria-hidden="true">
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="m18 6-12 12M6 6l12 12"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M18 5l2 2M15 8l2 2"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M10 17l5-5-5-5M15 12H3M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-paperclip" viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66L9.41 17.4a2 2 0 0 1-2.83-2.83l8.49-8.48"/></symbol>
+  <symbol id="i-message" viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 3v12M7 8l5-5 5 5M5 21h14"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+  <symbol id="i-panels" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></symbol>
+</svg>
 
-<div class="sub-nav">
-  <div class="sub-nav-inner">
-    <span class="sub-title">阶段一 API 工作台</span>
-    <span class="sub-status" id="subStatus">服务未检测</span>
-    <button class="btn btn-compact" id="smokeTopButton" type="button">
-      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
-      冒烟测试
-    </button>
-  </div>
-</div>
-
-<main>
-  <section class="tile tile-light" id="connection">
-    <div class="tile-inner split">
-      <div>
-        <p class="eyebrow">WorkHandler 0.0.1</p>
-        <h1>连接 Qt 服务。</h1>
-        <p class="lead">QHttpServer · SQLite · REST API</p>
-        <div class="actions">
-          <button class="btn" id="healthButton" type="button">
-            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14h4l2-7 4 12 2-5h4"/></svg>
-            健康检查
-          </button>
-          <button class="btn btn-secondary" id="smokeButton" type="button">
-            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
-            运行冒烟测试
-          </button>
-        </div>
+<section class="login-view" id="loginView">
+  <nav class="global-nav" aria-label="登录导航">
+    <div class="global-nav-inner">
+      <span class="brand-link">WorkHandler</span>
+      <span class="demo-badge hidden" id="loginDemoBadge">DEMO</span>
+      <span class="global-link">Issue 工作台</span>
+    </div>
+  </nav>
+  <main class="login-main">
+    <div class="login-layout">
+      <div class="login-brand">
+        <img class="brand-asset" id="brandAsset" alt="WorkHandler 应用图标" src="data:image/png;base64,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">
+        <h1>WorkHandler</h1>
+        <p>个人工作 Issue 面板</p>
       </div>
-
-      <div>
-        <div class="product-mark">
-          <img alt="WorkHandler 应用图标" src="data:image/png;base64,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">
-        </div>
-        <div class="connection-surface">
+      <form class="login-form" id="loginForm" novalidate>
+        <h2>登录工作台</h2>
+        <div class="form-stack">
           <div class="field">
-            <label for="baseUrl">API 地址</label>
-            <div class="inline-input">
-              <input id="baseUrl" type="url" inputmode="url" autocomplete="url" spellcheck="false">
-              <button class="btn btn-compact" id="saveBaseButton" type="button">保存</button>
-            </div>
+            <label for="loginUsername">用户名</label>
+            <input id="loginUsername" name="username" autocomplete="username" required>
           </div>
-          <div class="connection-meta">
-            <div class="metric"><span class="metric-label">状态</span><span class="metric-value" id="healthState">未检测</span></div>
-            <div class="metric"><span class="metric-label">版本</span><span class="metric-value" id="healthVersion">-</span></div>
-            <div class="metric"><span class="metric-label">监听地址</span><span class="metric-value" id="healthAddress">-</span></div>
+          <div class="field">
+            <label for="loginPassword">密码</label>
+            <input id="loginPassword" name="password" type="password" autocomplete="current-password" required>
           </div>
-          <div class="smoke-list" id="smokeList" aria-live="polite"></div>
         </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="tile tile-dark" id="authentication">
-    <div class="tile-inner split">
-      <div>
-        <p class="eyebrow">Authentication</p>
-        <h2>当前会话。</h2>
-        <p class="lead" id="sessionSummary">尚未建立认证会话</p>
-        <div class="actions">
-          <button class="btn" id="meButton" type="button">当前用户</button>
-          <button class="btn btn-secondary" id="logoutButton" type="button">退出登录</button>
+        <div class="field-error" id="loginError" role="alert"></div>
+        <div class="login-actions">
+          <button class="btn" id="loginButton" type="submit">登录</button>
+          <span class="service-state" id="serviceState">正在检测服务</span>
         </div>
-      </div>
-      <div class="auth-stack">
-        <form class="auth-surface" id="loginForm">
-          <div class="form-grid">
-            <div class="field">
-              <label for="loginUsername">用户名</label>
-              <input id="loginUsername" name="username" autocomplete="username" required>
-            </div>
-            <div class="field">
-              <label for="loginPassword">密码</label>
-              <input id="loginPassword" name="password" type="password" autocomplete="current-password" required>
-            </div>
-          </div>
-          <div class="actions">
-            <button class="btn" type="submit">
-              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>
-              登录
-            </button>
-          </div>
-          <div class="session-line">
-            <span class="field-hint">Authorization</span><br>
-            <code id="tokenPreview">Bearer -</code>
-          </div>
-        </form>
-        <form class="auth-surface" id="passwordForm">
-          <h3>修改我的密码</h3>
-          <div class="form-grid">
-            <div class="field">
-              <label for="newPassword">新密码</label>
-              <input id="newPassword" type="password" minlength="8" maxlength="256" autocomplete="new-password" required>
-            </div>
-            <div class="field">
-              <label for="confirmPassword">确认密码</label>
-              <input id="confirmPassword" type="password" minlength="8" maxlength="256" autocomplete="new-password" required>
-            </div>
-          </div>
-          <div class="actions">
-            <button class="btn" id="changePasswordButton" type="submit">修改密码</button>
-          </div>
-        </form>
-      </div>
+        <div class="demo-roles hidden" id="demoRoles" aria-label="演示角色">
+          <button class="demo-role" type="button" data-demo-user="admin">Admin</button>
+          <button class="demo-role" type="button" data-demo-user="operator">User</button>
+          <button class="demo-role" type="button" data-demo-user="viewer">Guest</button>
+        </div>
+      </form>
     </div>
-  </section>
+  </main>
+  <footer class="login-footer">WorkHandler · Phase 2</footer>
+</section>
 
-  <section class="tile tile-parchment" id="users">
-    <div class="tile-inner">
-      <div class="section-head">
-        <div><p class="eyebrow">Admin · Users</p><h2>用户账户。</h2></div>
-        <div class="actions">
-          <button class="btn" id="listUsersButton" type="button">
-            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"/></svg>
-            刷新列表
+<section class="app-view hidden" id="appView">
+  <nav class="global-nav" aria-label="全局导航">
+    <div class="global-nav-inner">
+      <a class="brand-link" href="#/">WorkHandler</a>
+      <button class="global-link" type="button" data-action="all-issues">全部 Issue</button>
+      <span class="demo-badge hidden" id="appDemoBadge">DEMO</span>
+      <div class="profile-wrap">
+        <button class="profile-button" id="profileButton" type="button" aria-haspopup="true" aria-expanded="false">
+          <span class="avatar" id="navAvatar">W</span>
+          <span class="profile-name" id="navUserName">用户</span>
+        </button>
+        <div class="profile-menu hidden" id="profileMenu" role="menu">
+          <div class="profile-summary">
+            <strong id="profileDisplayName">用户</strong>
+            <span id="profileRole">-</span>
+          </div>
+          <button class="menu-action" type="button" data-action="password" role="menuitem">
+            <svg class="icon" aria-hidden="true"><use href="#i-key"></use></svg>修改密码
+          </button>
+          <button class="menu-action" type="button" data-action="logout" role="menuitem">
+            <svg class="icon" aria-hidden="true"><use href="#i-logout"></use></svg>退出登录
           </button>
         </div>
       </div>
-      <div class="utility-grid">
-        <article class="utility-card">
-          <div class="card-head"><h3>账户列表</h3><span class="status-chip" id="userCount">0 个账户</span></div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>ID</th><th>用户名</th><th>显示名</th><th>角色</th><th>创建时间</th></tr></thead>
-              <tbody id="userRows"><tr><td class="empty-row" colspan="5">尚未加载</td></tr></tbody>
-            </table>
-          </div>
-        </article>
-        <form class="utility-card" id="userForm">
-          <div class="card-head"><h3>账户编辑</h3><button class="btn btn-secondary btn-compact" id="clearUserButton" type="button">清空</button></div>
-          <div class="form-grid">
-            <div class="field"><label for="userId">用户 ID</label><input id="userId" inputmode="numeric"></div>
-            <div class="field"><label for="userRole">角色</label><select id="userRole"><option value="guest">guest</option><option value="user">user</option><option value="admin">admin</option></select></div>
-            <div class="field field-wide"><label for="userName">用户名</label><input id="userName" autocomplete="off" required></div>
-            <div class="field field-wide"><label for="displayName">显示名</label><input id="displayName" autocomplete="off"></div>
-          </div>
-          <div class="actions">
-            <button class="btn btn-secondary" id="loadUserButton" type="button">读取</button>
-            <button class="btn btn-secondary" id="updateUserButton" type="button">更新</button>
-            <button class="btn btn-secondary" id="deleteUserButton" type="button">删除</button>
-          </div>
-        </form>
-      </div>
     </div>
-  </section>
+  </nav>
 
-  <section class="tile tile-dark-2" id="server">
-    <div class="tile-inner">
-      <div class="section-head">
-        <div><p class="eyebrow">Admin · Server</p><h2>服务与请求。</h2></div>
-      </div>
-      <div class="dark-grid">
-        <form class="dark-panel" id="requestForm">
-          <h3>自定义请求</h3>
-          <div class="form-grid three">
-            <div class="field"><label for="requestMethod">Method</label><select id="requestMethod"><option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option></select></div>
-            <div class="field field-wide"><label for="requestPath">Path</label><input id="requestPath" value="/api/health" spellcheck="false"></div>
-            <div class="field"><label for="authMode">Authorization</label><select id="authMode"><option value="bearer">Bearer Token</option><option value="raw">Raw Token</option><option value="none">None</option></select></div>
-            <div class="field field-wide"><label for="requestBody">JSON Body</label><textarea id="requestBody" spellcheck="false" placeholder="{}"></textarea></div>
-          </div>
-          <div class="actions"><button class="btn" type="submit">发送请求</button><button class="btn btn-secondary" id="resetRequestButton" type="button">重置</button></div>
-        </form>
-      </div>
+  <div class="sub-nav">
+    <div class="sub-nav-inner">
+      <button class="icon-button small mobile-panels hidden" id="mobilePanelsButton" type="button" title="打开面板列表" aria-label="打开面板列表">
+        <svg class="icon" aria-hidden="true"><use href="#i-menu"></use></svg>
+      </button>
+      <span class="sub-title" id="currentPanelTitle">工作面板</span>
+      <span class="sub-count" id="currentIssueCount">0 个 Issue</span>
+      <label class="sub-search">
+        <span class="sr-only">搜索 Issue</span>
+        <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg>
+        <input id="issueSearch" type="search" placeholder="搜索 Issue" autocomplete="off">
+      </label>
+      <button class="btn" id="createIssueButton" type="button">
+        <svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg>
+        <span>新建 Issue</span>
+      </button>
     </div>
-  </section>
-
-  <section class="tile tile-light" id="inspector">
-    <div class="tile-inner">
-      <div class="section-head">
-        <div><p class="eyebrow">Request Inspector</p><h2>请求与响应。</h2></div>
-        <div class="actions"><button class="btn btn-secondary" id="copyResponseButton" type="button">复制响应</button><button class="btn btn-secondary" id="clearActivityButton" type="button">清空记录</button></div>
-      </div>
-      <div class="inspector-grid">
-        <article class="utility-card response-panel">
-          <div class="response-meta"><span class="status-chip" id="responseStatus">尚无请求</span><span class="field-hint" id="responseDuration">-</span><span class="field-hint" id="responseUrl"></span></div>
-          <div class="code-label"><span>Request</span></div><pre class="code-block" id="requestOutput">等待请求</pre>
-          <div class="code-label"><span>Response Headers</span></div><pre class="code-block" id="headerOutput">-</pre>
-          <div class="code-label"><span>Response Body</span></div><pre class="code-block" id="responseOutput">-</pre>
-        </article>
-        <aside class="utility-card"><div class="card-head"><h3>最近请求</h3><span class="status-chip" id="activityCount">0</span></div><ol class="activity-list" id="activityList"><li class="empty-row">尚无记录</li></ol></aside>
-      </div>
-    </div>
-  </section>
-</main>
-
-<footer class="footer">
-  <div class="footer-inner">
-    <div class="footer-grid">
-      <div><h3>Health</h3><code>GET /api/health</code></div>
-      <div><h3>Authentication</h3><code>POST /api/auth/login</code><code>POST /api/auth/logout</code><code>GET /api/auth/me</code><code>PUT /api/auth/password</code></div>
-      <div><h3>Users</h3><code>GET /api/users</code><code>GET · PUT · DELETE /api/users/:id</code></div>
-      <div><h3>Server</h3><code>GET /api/server/config</code></div>
-    </div>
-    <div class="footer-bottom">WorkHandler · Phase 1 API Workbench</div>
   </div>
-</footer>
+
+  <div class="workspace" id="workspace">
+    <aside class="sidebar" id="sidebar" aria-label="工作面板">
+      <div class="sidebar-inner">
+        <div class="sidebar-head">
+          <h2>工作面板</h2>
+          <button class="icon-button small hidden" id="createPanelButton" type="button" title="新建面板" aria-label="新建面板">
+            <svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg>
+          </button>
+        </div>
+        <div class="panel-list" id="panelList"></div>
+        <div class="sidebar-foot">
+          <strong id="sidebarUser">-</strong>
+          <span id="sidebarRole">-</span>
+        </div>
+      </div>
+    </aside>
+    <button class="sidebar-backdrop" id="sidebarBackdrop" type="button" aria-label="关闭面板列表"></button>
+
+    <main class="issue-main">
+      <section class="metrics-band" aria-label="Issue 统计">
+        <div class="metric"><span class="metric-label">当前结果</span><strong class="metric-value" id="metricTotal">0</strong></div>
+        <div class="metric"><span class="metric-label">待处理</span><strong class="metric-value" id="metricOpen">0</strong></div>
+        <div class="metric"><span class="metric-label">进行中</span><strong class="metric-value" id="metricProgress">0</strong></div>
+        <div class="metric"><span class="metric-label">已完成</span><strong class="metric-value" id="metricDone">0</strong></div>
+      </section>
+
+      <section class="filter-band" aria-label="Issue 筛选">
+        <div class="segmented" id="statusFilter" aria-label="状态筛选">
+          <button class="active" type="button" data-filter-status="">全部</button>
+          <button type="button" data-filter-status="open">待处理</button>
+          <button type="button" data-filter-status="in_progress">进行中</button>
+          <button type="button" data-filter-status="resolved">已解决</button>
+          <button type="button" data-filter-status="closed">已关闭</button>
+        </div>
+        <select class="filter-select" id="priorityFilter" aria-label="优先级筛选">
+          <option value="">全部优先级</option>
+          <option value="high">高</option>
+          <option value="medium">中</option>
+          <option value="low">低</option>
+        </select>
+        <select class="filter-select" id="assigneeFilter" aria-label="负责人筛选">
+          <option value="">全部负责人</option>
+        </select>
+        <select class="filter-select" id="sortFilter" aria-label="排序方式">
+          <option value="created_desc">最新创建</option>
+          <option value="created_asc">最早创建</option>
+          <option value="priority_desc">优先级</option>
+          <option value="title_asc">标题</option>
+        </select>
+        <button class="filter-clear" id="clearFiltersButton" type="button">清除筛选</button>
+      </section>
+
+      <section class="issue-table" aria-label="Issue 列表">
+        <div class="issue-header" aria-hidden="true">
+          <span>Issue</span><span>状态</span><span>优先级</span><span>负责人</span><span>创建时间</span><span>附件</span>
+        </div>
+        <div id="issueRows"></div>
+      </section>
+    </main>
+
+    <aside class="issue-drawer hidden" id="issueDrawer" aria-label="Issue 详情">
+      <div class="drawer-inner">
+        <header class="drawer-head">
+          <h2 id="drawerHeading">Issue 详情</h2>
+          <button class="icon-button small" id="closeDrawerButton" type="button" title="关闭详情" aria-label="关闭详情">
+            <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg>
+          </button>
+        </header>
+        <div class="drawer-body" id="drawerBody"></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<dialog id="formDialog" aria-labelledby="formDialogTitle">
+  <form class="dialog-shell" id="dynamicForm" method="dialog" novalidate>
+    <header class="dialog-head">
+      <h2 id="formDialogTitle">编辑</h2>
+      <button class="icon-button small" type="button" data-action="close-form" title="关闭" aria-label="关闭">
+        <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg>
+      </button>
+    </header>
+    <div class="dialog-body" id="formDialogBody"></div>
+    <footer class="dialog-actions">
+      <button class="btn-ghost" type="button" data-action="close-form">取消</button>
+      <button class="btn" id="formSubmitButton" type="submit">保存</button>
+    </footer>
+  </form>
+</dialog>
+
+<dialog id="confirmDialog" aria-labelledby="confirmDialogTitle">
+  <div class="dialog-shell">
+    <header class="dialog-head">
+      <h2 id="confirmDialogTitle">确认操作</h2>
+      <button class="icon-button small" type="button" data-action="close-confirm" title="关闭" aria-label="关闭">
+        <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg>
+      </button>
+    </header>
+    <div class="dialog-body"><p class="confirm-copy" id="confirmDialogCopy"></p></div>
+    <footer class="dialog-actions">
+      <button class="btn-ghost" type="button" data-action="close-confirm">取消</button>
+      <button class="btn btn-danger" id="confirmButton" type="button">确认删除</button>
+    </footer>
+  </div>
+</dialog>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
-(() => {
-  "use strict";
+(function () {
+  'use strict';
 
-  const $ = (id) => document.getElementById(id);
-  const storageKeys = { baseUrl: "workhandler.apiBase", token: "workhandler.token" };
-  const requestedBaseUrl = new URLSearchParams(window.location.search).get("api");
-  const liveServerOrigin = /^55\d{2}$/.test(window.location.port)
-    && /\/Source\/html\//i.test(window.location.pathname);
-  const savedBaseUrl = localStorage.getItem(storageKeys.baseUrl);
-  let savedBaseIsLiveServer = false;
-  try { savedBaseIsLiveServer = /^55\d{2}$/.test(new URL(savedBaseUrl).port); }
-  catch {}
-  const defaultBaseUrl = liveServerOrigin
-    ? `${window.location.protocol}//${window.location.hostname || "127.0.0.1"}:8080`
-    : /^https?:$/.test(window.location.protocol)
-      ? window.location.origin
-      : "http://127.0.0.1:8080";
-  const state = {
-    baseUrl: requestedBaseUrl
-      || (liveServerOrigin && savedBaseIsLiveServer ? "" : savedBaseUrl)
-      || defaultBaseUrl,
-    token: sessionStorage.getItem(storageKeys.token) || "",
+  var $ = function (id) { return document.getElementById(id); };
+  var params = new URLSearchParams(window.location.search);
+  var storageKeys = { baseUrl: 'workhandler.apiBase', token: 'workhandler.token' };
+  var liveServerOrigin = /^55\d{2}$/.test(window.location.port) && /\/Source\/html\//i.test(window.location.pathname);
+  var savedBaseUrl = localStorage.getItem(storageKeys.baseUrl);
+  var defaultBaseUrl = liveServerOrigin
+    ? window.location.protocol + '//' + (window.location.hostname || '127.0.0.1') + ':8080'
+    : /^https?:$/.test(window.location.protocol) ? window.location.origin : 'http://127.0.0.1:8080';
+
+  var state = {
+    demo: params.get('demo') === '1',
+    baseUrl: params.get('api') || savedBaseUrl || defaultBaseUrl,
+    token: sessionStorage.getItem(storageKeys.token) || '',
     currentUser: null,
-    activity: [],
-    lastResponseText: ""
+    blocks: [],
+    issues: [],
+    userOptions: [],
+    selectedBlockId: null,
+    selectedIssueId: null,
+    selectedIssue: null,
+    comments: [],
+    attachments: [],
+    filters: { status: '', priority: '', assignee: '', sort: 'created_desc', q: '' },
+    sidebarOpen: false,
+    confirmAction: null,
+    modalMode: '',
+    editingId: null,
+    demoRole: 'admin'
   };
-  let toastTimer = 0;
+
+  var labels = {
+    status: { open: '待处理', in_progress: '进行中', resolved: '已解决', closed: '已关闭' },
+    priority: { low: '低', medium: '中', high: '高' },
+    role: { admin: '管理员', user: '用户', guest: '访客' }
+  };
+
+  function icon(name) {
+    return '<svg class="icon" aria-hidden="true"><use href="#i-' + name + '"></use></svg>';
+  }
+
+  function escapeHtml(value) {
+    return String(value === null || value === undefined ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+  }
+
+  function initials(user) {
+    var text = user && (user.display_name || user.username) || 'W';
+    return text.trim().slice(0, 2).toUpperCase();
+  }
+
+  function displayName(user) {
+    return user && (user.display_name || user.username) || '未分配';
+  }
+
+  function formatDate(value) {
+    if (!value) return '-';
+    var date = new Date(String(value).replace(' ', 'T') + (String(value).indexOf('Z') < 0 ? 'Z' : ''));
+    if (Number.isNaN(date.getTime())) return String(value);
+    return new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(date);
+  }
 
   function normalizeBaseUrl(value) {
-    const trimmed = String(value || "").trim().replace(/\/+$/, "");
-    if (!/^https?:\/\//i.test(trimmed)) throw new Error("API 地址必须以 http:// 或 https:// 开头");
-    return trimmed;
+    var url = new URL(value || defaultBaseUrl, window.location.href);
+    if (!/^https?:$/.test(url.protocol)) throw new Error('API 地址必须使用 HTTP 或 HTTPS');
+    return url.origin;
   }
 
   function showToast(message) {
-    clearTimeout(toastTimer);
-    $("toast").textContent = message;
-    $("toast").classList.add("show");
-    toastTimer = window.setTimeout(() => $("toast").classList.remove("show"), 2600);
+    var toast = $('toast');
+    toast.textContent = message;
+    toast.classList.add('show');
+    clearTimeout(showToast.timer);
+    showToast.timer = window.setTimeout(function () { toast.classList.remove('show'); }, 2800);
   }
 
-  function setBusy(button, busy) {
+  function setBusy(button, busy, busyText) {
     if (!button) return;
-    button.disabled = busy;
-    button.setAttribute("aria-busy", String(busy));
-  }
-
-  function safeJson(text) {
-    if (!text.trim()) return null;
-    try { return JSON.parse(text); }
-    catch { throw new Error("JSON Body 格式无效"); }
-  }
-
-  function pretty(value) {
-    if (value === undefined || value === null || value === "") return "-";
-    if (typeof value === "string") return value;
-    try { return JSON.stringify(value, null, 2); }
-    catch { return String(value); }
-  }
-
-  function unwrap(payload, key) {
-    if (!payload || typeof payload !== "object") return payload;
-    if (key && payload[key] !== undefined) return payload[key];
-    if (payload.data !== undefined) {
-      if (key && payload.data && payload.data[key] !== undefined) return payload.data[key];
-      return payload.data;
-    }
-    return payload;
-  }
-
-  function buildUrl(path) {
-    const value = String(path || "").trim();
-    if (/^https?:\/\//i.test(value)) return value;
-    return state.baseUrl + (value.startsWith("/") ? value : "/" + value);
-  }
-
-  function getTokenFrom(payload) {
-    if (!payload || typeof payload !== "object") return "";
-    return payload.token || payload.access_token || (payload.data && payload.data.token) || "";
-  }
-
-  function resultError(result, fallback) {
-    const payload = result && result.data;
-    return payload && payload.error && payload.error.message
-      ? payload.error.message
-      : fallback;
-  }
-
-  function headersToObject(headers) {
-    const output = {};
-    headers.forEach((value, key) => { output[key] = value; });
-    return output;
-  }
-
-  function addActivity(result) {
-    state.activity.unshift({
-      method: result.method,
-      path: result.url.replace(state.baseUrl, ""),
-      status: result.status || "ERR",
-      duration: result.duration,
-      ok: result.ok
-    });
-    state.activity = state.activity.slice(0, 10);
-    renderActivity();
-  }
-
-  function renderActivity() {
-    const list = $("activityList");
-    list.replaceChildren();
-    if (!state.activity.length) {
-      const empty = document.createElement("li");
-      empty.className = "empty-row";
-      empty.textContent = "尚无记录";
-      list.appendChild(empty);
+    if (busy) {
+      button.dataset.label = button.textContent;
+      button.textContent = busyText || '处理中';
+      button.disabled = true;
     } else {
-      state.activity.forEach((item) => {
-        const li = document.createElement("li");
-        li.className = "activity-item";
-        const line = document.createElement("div");
-        line.className = "activity-line";
-        const method = document.createElement("strong");
-        method.textContent = item.method;
-        const meta = document.createElement("span");
-        meta.textContent = `${item.status} · ${item.duration} ms`;
-        const path = document.createElement("div");
-        path.className = "activity-path";
-        path.textContent = item.path || "/";
-        line.append(method, meta);
-        li.append(line, path);
-        list.appendChild(li);
-      });
+      button.textContent = button.dataset.label || button.textContent;
+      button.disabled = false;
     }
-    $("activityCount").textContent = String(state.activity.length);
   }
 
-  function renderInspector(result) {
-    const status = $("responseStatus");
-    status.textContent = result.status ? `${result.status} ${result.statusText || ""}`.trim() : "请求失败";
-    status.classList.toggle("ok", result.ok);
-    $("responseDuration").textContent = `${result.duration} ms`;
-    $("responseUrl").textContent = result.url;
-    $("requestOutput").textContent = pretty({
-      method: result.method,
-      url: result.url,
-      headers: result.requestHeaders,
-      body: result.requestBody
+  function success(data, status) {
+    return { ok: true, status: status || 200, data: data || {}, error: null };
+  }
+
+  function failure(status, code, message) {
+    return { ok: false, status: status, data: null, error: { code: code, message: message } };
+  }
+
+  function resultMessage(result, fallback) {
+    return result && result.error && result.error.message || fallback;
+  }
+
+  function makeDemoStore() {
+    var users = [
+      { id: 1, username: 'admin', display_name: '管理员', role: 'admin' },
+      { id: 2, username: 'operator', display_name: '陈默', role: 'user' },
+      { id: 3, username: 'viewer', display_name: '李然', role: 'guest' }
+    ];
+    var blocks = [
+      { id: 1, title: '本周工作', description: '本周需要推进的事项', color: '#0066cc', sort_order: 0 },
+      { id: 2, title: '版本发布', description: '发布前的核对和修复', color: '#5856d6', sort_order: 1 },
+      { id: 3, title: '待整理', description: '尚未排期的想法和请求', color: '#7a7a7a', sort_order: 2 }
+    ];
+    var issues = [
+      { id: 101, block_id: 1, title: '完成阶段二工作台界面', description: '将阶段一 API 工作台替换为面向日常使用的 Issue 工作区，并完成响应式适配。', status: 'in_progress', priority: 'high', reporter_id: 1, assignee_id: 2, created_at: '2026-07-22T08:30:00Z' },
+      { id: 102, block_id: 1, title: '确认面板与 Issue API 契约', description: '核对列表筛选、负责人摘要以及附件接口的返回结构。', status: 'open', priority: 'high', reporter_id: 2, assignee_id: 2, created_at: '2026-07-22T09:10:00Z' },
+      { id: 103, block_id: 1, title: '补充移动端布局验收', description: '检查 390px 宽度下筛选、列表、详情和模态框是否存在溢出。', status: 'resolved', priority: 'medium', reporter_id: 2, assignee_id: 3, created_at: '2026-07-21T06:20:00Z' },
+      { id: 104, block_id: 2, title: '整理 v0.5 发布清单', description: '汇总阶段二验收项并记录尚未完成的后端接口。', status: 'open', priority: 'medium', reporter_id: 1, assignee_id: 1, created_at: '2026-07-20T03:05:00Z' },
+      { id: 105, block_id: 2, title: '验证局域网浏览器访问', description: '使用同网段设备验证登录、列表读取和图片访问。', status: 'closed', priority: 'low', reporter_id: 1, assignee_id: 2, created_at: '2026-07-18T10:45:00Z' },
+      { id: 106, block_id: 3, title: '评估 Issue 导出格式', description: '记录后续 CSV 或 JSON 导出的字段需求。', status: 'open', priority: 'low', reporter_id: 2, assignee_id: null, created_at: '2026-07-17T02:15:00Z' }
+    ];
+    var comments = [
+      { id: 1, issue_id: 101, user_id: 1, content: '先完成前端主流程，后端按已确认契约接入。', created_at: '2026-07-22T09:00:00Z' },
+      { id: 2, issue_id: 101, user_id: 2, content: '列表、详情和演示数据已经进入同一套状态模型。', created_at: '2026-07-22T10:30:00Z' },
+      { id: 3, issue_id: 102, user_id: 2, content: '普通用户需要一个只读负责人选项接口。', created_at: '2026-07-22T11:10:00Z' }
+    ];
+    var attachments = [
+      { id: 1, issue_id: 101, uploader_id: 2, filename: 'workhandler-ui.png', file_size: 10233, created_at: '2026-07-22T10:40:00Z', demo_asset: true }
+    ];
+    return { users: users, blocks: blocks, issues: issues, comments: comments, attachments: attachments };
+  }
+
+  var demo = makeDemoStore();
+
+  function demoUser() {
+    return demo.users.find(function (user) { return user.role === state.demoRole; }) || demo.users[0];
+  }
+
+  function withIssueRelations(issue) {
+    var copy = Object.assign({}, issue);
+    copy.reporter = demo.users.find(function (user) { return user.id === issue.reporter_id; }) || null;
+    copy.assignee = demo.users.find(function (user) { return user.id === issue.assignee_id; }) || null;
+    copy.comment_count = demo.comments.filter(function (item) { return item.issue_id === issue.id; }).length;
+    copy.attachment_count = demo.attachments.filter(function (item) { return item.issue_id === issue.id; }).length;
+    return copy;
+  }
+
+  function demoRequest(path, options) {
+    options = options || {};
+    var method = String(options.method || 'GET').toUpperCase();
+    var url = new URL(path, 'http://demo.local');
+    var pathname = url.pathname;
+    var body = options.body || {};
+
+    return new Promise(function (resolve) {
+      window.setTimeout(function () {
+        var match;
+        if (pathname === '/api/health' && method === 'GET') {
+          resolve(success({ status: 'running', version: 'demo', address: 'demo://local' }));
+          return;
+        }
+        if (pathname === '/api/auth/login' && method === 'POST') {
+          var user = demo.users.find(function (item) { return item.username === body.username; });
+          if (!user || !body.password) {
+            resolve(failure(401, 'invalid_credentials', '用户名或密码不正确'));
+            return;
+          }
+          state.demoRole = user.role;
+          resolve(success({ token: 'demo-token-' + user.role, user: user }));
+          return;
+        }
+        if (pathname === '/api/auth/logout' && method === 'POST') {
+          resolve(success({ logged_out: true }));
+          return;
+        }
+        if (pathname === '/api/auth/me' && method === 'GET') {
+          resolve(state.token ? success({ user: demoUser() }) : failure(401, 'unauthorized', '请先登录'));
+          return;
+        }
+        if (pathname === '/api/auth/password' && method === 'PUT') {
+          resolve(state.demoRole === 'admin'
+            ? failure(403, 'admin_password_desktop_only', 'admin 密码只能在桌面程序中修改')
+            : success({ token: 'demo-token-' + state.demoRole + '-changed', user: demoUser() }));
+          return;
+        }
+        if (pathname === '/api/users/options' && method === 'GET') {
+          resolve(success({ users: demo.users.map(function (user) {
+            return { id: user.id, username: user.username, display_name: user.display_name };
+          }) }));
+          return;
+        }
+        if (pathname === '/api/blocks' && method === 'GET') {
+          var blockRows = demo.blocks.slice().sort(function (a, b) { return a.sort_order - b.sort_order; }).map(function (block) {
+            var copy = Object.assign({}, block);
+            copy.issue_count = demo.issues.filter(function (issue) { return issue.block_id === block.id; }).length;
+            return copy;
+          });
+          resolve(success({ blocks: blockRows }));
+          return;
+        }
+        if (pathname === '/api/blocks' && method === 'POST') {
+          var blockId = demo.blocks.reduce(function (max, block) { return Math.max(max, block.id); }, 0) + 1;
+          var createdBlock = {
+            id: blockId,
+            title: body.title,
+            description: body.description || '',
+            color: body.color || '#0066cc',
+            sort_order: demo.blocks.length
+          };
+          demo.blocks.push(createdBlock);
+          resolve(success({ block: createdBlock }, 201));
+          return;
+        }
+        match = pathname.match(/^\/api\/blocks\/(\d+)$/);
+        if (match) {
+          var targetBlockId = Number(match[1]);
+          var blockIndex = demo.blocks.findIndex(function (item) { return item.id === targetBlockId; });
+          if (blockIndex < 0) {
+            resolve(failure(404, 'block_not_found', '面板不存在'));
+            return;
+          }
+          if (method === 'GET') {
+            resolve(success({ block: demo.blocks[blockIndex] }));
+            return;
+          }
+          if (method === 'PUT') {
+            demo.blocks[blockIndex] = Object.assign({}, demo.blocks[blockIndex], body);
+            resolve(success({ block: demo.blocks[blockIndex] }));
+            return;
+          }
+          if (method === 'DELETE') {
+            demo.blocks.splice(blockIndex, 1);
+            var removedIssueIds = demo.issues.filter(function (item) { return item.block_id === targetBlockId; }).map(function (item) { return item.id; });
+            demo.issues = demo.issues.filter(function (item) { return item.block_id !== targetBlockId; });
+            demo.comments = demo.comments.filter(function (item) { return removedIssueIds.indexOf(item.issue_id) < 0; });
+            demo.attachments = demo.attachments.filter(function (item) { return removedIssueIds.indexOf(item.issue_id) < 0; });
+            resolve(success({ deleted_id: targetBlockId }));
+            return;
+          }
+        }
+        if (pathname === '/api/issues' && method === 'GET') {
+          var rows = demo.issues.slice();
+          var blockQuery = Number(url.searchParams.get('block_id'));
+          var statusQuery = url.searchParams.get('status');
+          var priorityQuery = url.searchParams.get('priority');
+          var assigneeQuery = Number(url.searchParams.get('assignee_id'));
+          var searchQuery = (url.searchParams.get('q') || '').toLowerCase();
+          var sortQuery = url.searchParams.get('sort') || 'created_desc';
+          if (blockQuery) rows = rows.filter(function (item) { return item.block_id === blockQuery; });
+          if (statusQuery) rows = rows.filter(function (item) { return item.status === statusQuery; });
+          if (priorityQuery) rows = rows.filter(function (item) { return item.priority === priorityQuery; });
+          if (assigneeQuery) rows = rows.filter(function (item) { return item.assignee_id === assigneeQuery; });
+          if (searchQuery) rows = rows.filter(function (item) {
+            return item.title.toLowerCase().indexOf(searchQuery) >= 0 || item.description.toLowerCase().indexOf(searchQuery) >= 0;
+          });
+          var priorityRank = { high: 3, medium: 2, low: 1 };
+          rows.sort(function (a, b) {
+            if (sortQuery === 'created_asc') return String(a.created_at).localeCompare(String(b.created_at));
+            if (sortQuery === 'priority_desc') return (priorityRank[b.priority] || 0) - (priorityRank[a.priority] || 0);
+            if (sortQuery === 'title_asc') return a.title.localeCompare(b.title, 'zh-CN');
+            return String(b.created_at).localeCompare(String(a.created_at));
+          });
+          resolve(success({ issues: rows.map(withIssueRelations) }));
+          return;
+        }
+        if (pathname === '/api/issues' && method === 'POST') {
+          var current = demoUser();
+          var issueId = demo.issues.reduce(function (max, issue) { return Math.max(max, issue.id); }, 100) + 1;
+          var createdIssue = {
+            id: issueId,
+            block_id: Number(body.block_id),
+            title: body.title,
+            description: body.description || '',
+            status: 'open',
+            priority: body.priority || 'medium',
+            reporter_id: current.id,
+            assignee_id: body.assignee_id ? Number(body.assignee_id) : null,
+            created_at: new Date().toISOString()
+          };
+          demo.issues.push(createdIssue);
+          resolve(success({ issue: withIssueRelations(createdIssue) }, 201));
+          return;
+        }
+        match = pathname.match(/^\/api\/issues\/(\d+)\/status$/);
+        if (match && method === 'PUT') {
+          var statusIssue = demo.issues.find(function (item) { return item.id === Number(match[1]); });
+          if (!statusIssue) {
+            resolve(failure(404, 'issue_not_found', 'Issue 不存在'));
+            return;
+          }
+          statusIssue.status = body.status;
+          resolve(success({ issue: withIssueRelations(statusIssue) }));
+          return;
+        }
+        match = pathname.match(/^\/api\/issues\/(\d+)\/comments$/);
+        if (match) {
+          var commentIssueId = Number(match[1]);
+          if (method === 'GET') {
+            resolve(success({ comments: demo.comments.filter(function (item) { return item.issue_id === commentIssueId; }).map(function (item) {
+              var copy = Object.assign({}, item);
+              copy.user = demo.users.find(function (user) { return user.id === item.user_id; }) || null;
+              return copy;
+            }) }));
+            return;
+          }
+          if (method === 'POST') {
+            var commentId = demo.comments.reduce(function (max, item) { return Math.max(max, item.id); }, 0) + 1;
+            var createdComment = { id: commentId, issue_id: commentIssueId, user_id: demoUser().id, content: body.content, created_at: new Date().toISOString() };
+            demo.comments.push(createdComment);
+            createdComment.user = demoUser();
+            resolve(success({ comment: createdComment }, 201));
+            return;
+          }
+        }
+        match = pathname.match(/^\/api\/issues\/(\d+)\/attachments$/);
+        if (match) {
+          var attachmentIssueId = Number(match[1]);
+          if (method === 'GET') {
+            resolve(success({ attachments: demo.attachments.filter(function (item) { return item.issue_id === attachmentIssueId; }) }));
+            return;
+          }
+          if (method === 'POST') {
+            var file = body instanceof FormData ? body.get('file') : null;
+            var attachmentId = demo.attachments.reduce(function (max, item) { return Math.max(max, item.id); }, 0) + 1;
+            var createdAttachment = {
+              id: attachmentId,
+              issue_id: attachmentIssueId,
+              uploader_id: demoUser().id,
+              filename: file && file.name || 'image.png',
+              file_size: file && file.size || 0,
+              created_at: new Date().toISOString(),
+              preview_url: file ? URL.createObjectURL(file) : '',
+              demo_asset: !file
+            };
+            demo.attachments.push(createdAttachment);
+            resolve(success({ attachment: createdAttachment }, 201));
+            return;
+          }
+        }
+        match = pathname.match(/^\/api\/attachments\/(\d+)$/);
+        if (match && method === 'DELETE') {
+          var attachmentIdToDelete = Number(match[1]);
+          demo.attachments = demo.attachments.filter(function (item) { return item.id !== attachmentIdToDelete; });
+          resolve(success({ deleted_id: attachmentIdToDelete }));
+          return;
+        }
+        match = pathname.match(/^\/api\/issues\/(\d+)$/);
+        if (match) {
+          var targetIssueId = Number(match[1]);
+          var issueIndex = demo.issues.findIndex(function (item) { return item.id === targetIssueId; });
+          if (issueIndex < 0) {
+            resolve(failure(404, 'issue_not_found', 'Issue 不存在'));
+            return;
+          }
+          if (method === 'GET') {
+            resolve(success({ issue: withIssueRelations(demo.issues[issueIndex]) }));
+            return;
+          }
+          if (method === 'PUT') {
+            demo.issues[issueIndex] = Object.assign({}, demo.issues[issueIndex], body, {
+              block_id: Number(body.block_id || demo.issues[issueIndex].block_id),
+              assignee_id: body.assignee_id ? Number(body.assignee_id) : null
+            });
+            resolve(success({ issue: withIssueRelations(demo.issues[issueIndex]) }));
+            return;
+          }
+          if (method === 'DELETE') {
+            demo.issues.splice(issueIndex, 1);
+            demo.comments = demo.comments.filter(function (item) { return item.issue_id !== targetIssueId; });
+            demo.attachments = demo.attachments.filter(function (item) { return item.issue_id !== targetIssueId; });
+            resolve(success({ deleted_id: targetIssueId }));
+            return;
+          }
+        }
+        resolve(failure(404, 'not_found', '演示接口不存在'));
+      }, 120);
     });
-    $("headerOutput").textContent = pretty(result.responseHeaders);
-    $("responseOutput").textContent = result.error || pretty(result.data !== null ? result.data : result.raw);
-    state.lastResponseText = $("responseOutput").textContent;
-    addActivity(result);
   }
 
-  async function apiRequest(path, options = {}) {
-    const method = options.method || "GET";
-    const url = buildUrl(path);
-    const headers = { Accept: "application/json", ...(options.headers || {}) };
-    const authMode = options.authMode === undefined ? "bearer" : options.authMode;
-    if (authMode !== "none" && state.token) {
-      headers.Authorization = authMode === "raw" ? state.token : `Bearer ${state.token}`;
-    }
-    let body;
-    if (options.body !== undefined && options.body !== null) {
-      headers["Content-Type"] = "application/json";
+  async function httpRequest(path, options) {
+    options = options || {};
+    var method = options.method || 'GET';
+    var headers = Object.assign({ Accept: 'application/json' }, options.headers || {});
+    if (options.auth !== false && state.token) headers.Authorization = 'Bearer ' + state.token;
+    var body;
+    if (options.body instanceof FormData) {
+      body = options.body;
+    } else if (options.body !== undefined && options.body !== null) {
+      headers['Content-Type'] = 'application/json';
       body = JSON.stringify(options.body);
     }
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 10000);
-    const started = performance.now();
-    let result;
-
+    var controller = new AbortController();
+    var timeout = window.setTimeout(function () { controller.abort(); }, 10000);
     try {
-      const response = await fetch(url, { method, headers, body, signal: controller.signal });
-      const raw = await response.text();
-      let data = null;
+      var response = await fetch(normalizeBaseUrl(state.baseUrl) + path, { method: method, headers: headers, body: body, signal: controller.signal });
+      var raw = await response.text();
+      var payload = {};
       if (raw) {
-        try { data = JSON.parse(raw); }
-        catch { data = raw; }
+        try { payload = JSON.parse(raw); }
+        catch (error) { payload = { error: { code: 'invalid_response', message: raw } }; }
       }
-      result = {
-        ok: response.ok,
+      var result = {
+        ok: response.ok && payload.ok !== false,
         status: response.status,
-        statusText: response.statusText,
-        method,
-        url,
-        duration: Math.round(performance.now() - started),
-        requestHeaders: headers,
-        requestBody: options.body ?? null,
-        responseHeaders: headersToObject(response.headers),
-        data,
-        raw,
-        error: ""
+        data: payload.data || (payload.ok === undefined ? payload : {}),
+        error: payload.error || null
       };
+      if (result.status === 401 && path !== '/api/auth/login') endSession('会话已过期，请重新登录');
+      return result;
     } catch (error) {
-      result = {
-        ok: false,
-        status: 0,
-        statusText: "",
-        method,
-        url,
-        duration: Math.round(performance.now() - started),
-        requestHeaders: headers,
-        requestBody: options.body ?? null,
-        responseHeaders: {},
-        data: null,
-        raw: "",
-        error: error.name === "AbortError" ? "请求超时（10 秒）" : `网络或 CORS 错误：${error.message}`
-      };
+      return failure(0, error.name === 'AbortError' ? 'timeout' : 'network_error',
+        error.name === 'AbortError' ? '请求超时，请稍后重试' : '无法连接到服务');
     } finally {
       clearTimeout(timeout);
     }
-    renderInspector(result);
-    if (result.status === 401 && state.token && path !== "/api/auth/login") {
-      state.token = "";
-      state.currentUser = null;
-      sessionStorage.removeItem(storageKeys.token);
-      updateSessionUi();
-    }
-    return result;
   }
 
-  function updateSessionUi() {
-    const token = state.token;
-    const user = state.currentUser;
-    $("tokenPreview").textContent = token ? `Bearer ${token.slice(0, 24)}${token.length > 24 ? "..." : ""}` : "Bearer -";
-    $("navSession").textContent = user
-      ? `${user.display_name || user.username || "用户"} · ${user.role || "-"}`
-      : token ? "Token 已保存" : "未登录";
-    $("sessionSummary").textContent = user
-      ? `${user.display_name || user.username || "当前用户"} · ${user.role || "unknown"}`
-      : token ? "Token 已保存，用户信息未读取" : "尚未建立认证会话";
-    $("logoutButton").disabled = !token;
-    $("meButton").disabled = !token;
-    const canChangePassword = Boolean(
-      token && user && user.username !== "admin");
-    $("newPassword").disabled = !canChangePassword;
-    $("confirmPassword").disabled = !canChangePassword;
-    $("changePasswordButton").disabled = !canChangePassword;
+  function request(path, options) {
+    return state.demo ? demoRequest(path, options) : httpRequest(path, options);
+  }
+
+  function updateAuthUi() {
+    var user = state.currentUser || {};
+    $('navAvatar').textContent = initials(user);
+    $('navUserName').textContent = displayName(user);
+    $('profileDisplayName').textContent = displayName(user);
+    $('profileRole').textContent = labels.role[user.role] || user.role || '-';
+    $('sidebarUser').textContent = displayName(user);
+    $('sidebarRole').textContent = labels.role[user.role] || user.role || '-';
+    $('createPanelButton').classList.toggle('hidden', user.role !== 'admin');
+    $('createIssueButton').disabled = user.role === 'guest';
+  }
+
+  function endSession(message) {
+    state.token = '';
+    state.currentUser = null;
+    state.blocks = [];
+    state.issues = [];
+    state.selectedBlockId = null;
+    state.selectedIssueId = null;
+    sessionStorage.removeItem(storageKeys.token);
+    $('appView').classList.add('hidden');
+    $('loginView').classList.remove('hidden');
+    $('profileMenu').classList.add('hidden');
+    closeDrawer(false);
+    if (message) showToast(message);
   }
 
   async function checkHealth() {
-    const button = $("healthButton");
-    setBusy(button, true);
-    $("healthState").textContent = "检测中";
-    const result = await apiRequest("/api/health", { authMode: "none" });
-    setBusy(button, false);
-    if (result.ok) {
-      const data = unwrap(result.data) || {};
-      $("healthState").textContent = data.status || "可访问";
-      $("healthVersion").textContent = data.version || data.app_version || "-";
-      $("healthAddress").textContent = data.address || data.listen || data.listening_address || "-";
-      $("subStatus").textContent = "服务可访问";
-    } else {
-      $("healthState").textContent = "不可访问";
-      $("healthVersion").textContent = "-";
-      $("healthAddress").textContent = "-";
-      $("subStatus").textContent = "服务不可访问";
+    if (state.demo) {
+      $('serviceState').textContent = '演示数据';
+      $('serviceState').classList.add('ok');
+      return;
     }
-    return result;
-  }
-
-  function renderSmoke(results) {
-    const container = $("smokeList");
-    container.replaceChildren();
-    results.forEach((entry) => {
-      const row = document.createElement("div");
-      row.className = "smoke-item";
-      const name = document.createElement("span");
-      name.textContent = entry.name;
-      const value = document.createElement("span");
-      value.className = `smoke-state${entry.result.ok ? " ok" : ""}`;
-      value.textContent = entry.result.status || "ERR";
-      row.append(name, value);
-      container.appendChild(row);
-    });
-  }
-
-  async function runSmokeTest(trigger) {
-    setBusy(trigger, true);
-    const checks = [{ name: "健康检查", path: "/api/health", authMode: "none" }];
-    if (state.token) {
-      checks.push(
-        { name: "当前用户", path: "/api/auth/me", authMode: "bearer" },
-        { name: "用户列表", path: "/api/users", authMode: "bearer" },
-        { name: "服务配置", path: "/api/server/config", authMode: "bearer" }
-      );
-    }
-    const results = [];
-    for (const check of checks) {
-      results.push({ ...check, result: await apiRequest(check.path, { authMode: check.authMode }) });
-    }
-    renderSmoke(results);
-    setBusy(trigger, false);
-    showToast(results.every((item) => item.result.ok) ? "冒烟测试通过" : "冒烟测试存在失败项");
+    var result = await request('/api/health', { auth: false });
+    $('serviceState').textContent = result.ok ? '服务可访问' : '服务不可访问';
+    $('serviceState').classList.toggle('ok', result.ok);
   }
 
   async function login(event) {
     event.preventDefault();
-    const submit = event.submitter;
-    setBusy(submit, true);
-    const result = await apiRequest("/api/auth/login", {
-      method: "POST",
-      authMode: "none",
-      body: { username: $("loginUsername").value.trim(), password: $("loginPassword").value }
-    });
-    setBusy(submit, false);
-    if (!result.ok) {
-      showToast(resultError(result, "登录失败"));
+    var username = $('loginUsername').value.trim();
+    var password = $('loginPassword').value;
+    $('loginError').textContent = '';
+    if (!username || !password) {
+      $('loginError').textContent = '请输入用户名和密码';
       return;
     }
-    const token = getTokenFrom(result.data);
-    if (!token) { showToast("登录响应中未找到 Token"); return; }
-    state.token = token;
-    sessionStorage.setItem(storageKeys.token, token);
-    $("loginPassword").value = "";
-    updateSessionUi();
-    showToast("登录成功");
-    await loadCurrentUser();
+    var button = $('loginButton');
+    setBusy(button, true, '登录中');
+    var result = await request('/api/auth/login', { method: 'POST', auth: false, body: { username: username, password: password } });
+    setBusy(button, false);
+    if (!result.ok) {
+      $('loginError').textContent = resultMessage(result, '登录失败');
+      return;
+    }
+    state.token = result.data.token || '';
+    state.currentUser = result.data.user || null;
+    sessionStorage.setItem(storageKeys.token, state.token);
+    $('loginPassword').value = '';
+    await enterApp();
   }
 
-  async function loadCurrentUser() {
-    if (!state.token) { showToast("请先登录"); return null; }
-    const result = await apiRequest("/api/auth/me");
-    if (result.ok) {
-      state.currentUser = unwrap(result.data, "user") || {};
-      updateSessionUi();
-    } else {
-      showToast(resultError(result, "无法读取当前用户"));
+  async function restoreSession() {
+    if (!state.token) return false;
+    var result = await request('/api/auth/me');
+    if (!result.ok) return false;
+    state.currentUser = result.data.user || null;
+    await enterApp();
+    return true;
+  }
+
+  async function enterApp() {
+    $('loginView').classList.add('hidden');
+    $('appView').classList.remove('hidden');
+    updateAuthUi();
+    await Promise.all([loadUserOptions(), loadBlocks()]);
+    await applyRoute();
+  }
+
+  async function loadUserOptions() {
+    var result = await request('/api/users/options');
+    if (result.ok && Array.isArray(result.data.users)) {
+      state.userOptions = result.data.users;
+    } else if (state.currentUser) {
+      state.userOptions = [{
+        id: state.currentUser.id,
+        username: state.currentUser.username,
+        display_name: state.currentUser.display_name
+      }];
     }
-    return result;
+    renderAssigneeFilter();
+  }
+
+  async function loadBlocks() {
+    $('panelList').innerHTML = '<div class="list-state"><div class="list-state-inner">正在加载面板</div></div>';
+    var result = await request('/api/blocks');
+    if (!result.ok) {
+      state.blocks = [];
+      $('panelList').innerHTML = '<div class="list-state"><div class="list-state-inner"><p>' + escapeHtml(resultMessage(result, '面板加载失败')) + '</p></div></div>';
+      return false;
+    }
+    state.blocks = Array.isArray(result.data.blocks) ? result.data.blocks : [];
+    if (!state.selectedBlockId || !state.blocks.some(function (block) { return Number(block.id) === Number(state.selectedBlockId); })) {
+      state.selectedBlockId = state.blocks.length ? Number(state.blocks[0].id) : null;
+    }
+    renderBlocks();
+    return true;
+  }
+
+  function renderBlocks() {
+    var admin = state.currentUser && state.currentUser.role === 'admin';
+    var html = '';
+    state.blocks.forEach(function (block, index) {
+      var active = Number(block.id) === Number(state.selectedBlockId);
+      html += '<div class="panel-item">';
+      html += '<button class="panel-select' + (active ? ' active' : '') + '" type="button" data-action="select-block" data-id="' + Number(block.id) + '">';
+      html += '<span class="panel-dot" style="background:' + escapeHtml(block.color || '#0066cc') + '"></span>';
+      html += '<span class="panel-name">' + escapeHtml(block.title) + '</span>';
+      html += '<span class="panel-count">' + (block.issue_count === undefined ? '' : Number(block.issue_count)) + '</span></button>';
+      if (admin) {
+        html += '<div class="panel-tools">';
+        html += '<button class="panel-tool" type="button" data-action="move-block-up" data-id="' + Number(block.id) + '" title="上移面板" aria-label="上移面板"' + (index === 0 ? ' disabled' : '') + '>' + icon('up') + '</button>';
+        html += '<button class="panel-tool" type="button" data-action="edit-block" data-id="' + Number(block.id) + '" title="编辑面板" aria-label="编辑面板">' + icon('edit') + '</button>';
+        html += '</div>';
+      }
+      html += '</div>';
+    });
+    if (!html) {
+      html = '<div class="list-state"><div class="list-state-inner"><h3>没有工作面板</h3><p>' +
+        (admin ? '创建一个面板开始整理 Issue' : '管理员尚未创建工作面板') + '</p></div></div>';
+    }
+    $('panelList').innerHTML = html;
+    updatePanelHeading();
+  }
+
+  function updatePanelHeading() {
+    var block = state.blocks.find(function (item) { return Number(item.id) === Number(state.selectedBlockId); });
+    $('currentPanelTitle').textContent = block ? block.title : '全部 Issue';
+    $('currentIssueCount').textContent = state.issues.length + ' 个 Issue';
+  }
+
+  function buildIssueQuery() {
+    var search = new URLSearchParams();
+    if (state.selectedBlockId) search.set('block_id', String(state.selectedBlockId));
+    if (state.filters.status) search.set('status', state.filters.status);
+    if (state.filters.priority) search.set('priority', state.filters.priority);
+    if (state.filters.assignee) search.set('assignee_id', state.filters.assignee);
+    if (state.filters.q) search.set('q', state.filters.q);
+    search.set('sort', state.filters.sort);
+    return '/api/issues?' + search.toString();
+  }
+
+  async function selectBlock(id, updateHash) {
+    state.selectedBlockId = id ? Number(id) : null;
+    closeSidebar();
+    closeDrawer(false);
+    renderBlocks();
+    if (updateHash !== false) {
+      var nextHash = state.selectedBlockId ? '#/boards/' + state.selectedBlockId : '#/';
+      if (window.location.hash !== nextHash) history.pushState(null, '', nextHash);
+    }
+    await loadIssues();
+  }
+
+  async function loadIssues() {
+    $('issueRows').innerHTML = '<div class="list-state"><div class="list-state-inner">正在加载 Issue</div></div>';
+    var result = await request(buildIssueQuery());
+    if (!result.ok) {
+      state.issues = [];
+      renderMetrics();
+      $('issueRows').innerHTML = '<div class="list-state"><div class="list-state-inner"><h3>无法加载 Issue</h3><p>' +
+        escapeHtml(resultMessage(result, '请稍后重试')) + '</p></div></div>';
+      updatePanelHeading();
+      return;
+    }
+    state.issues = Array.isArray(result.data.issues) ? result.data.issues : [];
+    renderIssues();
+  }
+
+  function renderMetrics() {
+    var issues = state.issues;
+    $('metricTotal').textContent = issues.length;
+    $('metricOpen').textContent = issues.filter(function (item) { return item.status === 'open'; }).length;
+    $('metricProgress').textContent = issues.filter(function (item) { return item.status === 'in_progress'; }).length;
+    $('metricDone').textContent = issues.filter(function (item) { return item.status === 'resolved' || item.status === 'closed'; }).length;
+  }
+
+  function renderIssues() {
+    renderMetrics();
+    updatePanelHeading();
+    if (!state.selectedBlockId && state.blocks.length) {
+      $('issueRows').innerHTML = '<div class="list-state"><div class="list-state-inner"><h3>选择一个工作面板</h3></div></div>';
+      return;
+    }
+    if (!state.issues.length) {
+      var canCreate = state.currentUser && state.currentUser.role !== 'guest';
+      $('issueRows').innerHTML = '<div class="list-state"><div class="list-state-inner"><h3>没有符合条件的 Issue</h3><p>' +
+        (canCreate ? '可以新建 Issue，或调整当前筛选条件' : '请调整当前筛选条件') + '</p></div></div>';
+      return;
+    }
+    var html = '';
+    state.issues.forEach(function (issue) {
+      var assignee = issue.assignee || null;
+      html += '<button class="issue-row" type="button" data-action="open-issue" data-id="' + Number(issue.id) + '">';
+      html += '<span class="issue-title"><strong>' + escapeHtml(issue.title) + '</strong><span>#' + Number(issue.id) + ' · ' +
+        escapeHtml(issue.description || '无描述').slice(0, 72) + '</span></span>';
+      html += '<span class="issue-cell"><span class="chip' + (issue.status === 'in_progress' ? ' active' : '') + '">' +
+        escapeHtml(labels.status[issue.status] || issue.status) + '</span></span>';
+      html += '<span class="issue-cell"><span class="chip">' + escapeHtml(labels.priority[issue.priority] || issue.priority) + '</span></span>';
+      html += '<span class="issue-cell">' + escapeHtml(displayName(assignee)) + '</span>';
+      html += '<span class="issue-cell">' + escapeHtml(formatDate(issue.created_at)) + '</span>';
+      html += '<span class="issue-cell attachment-cell">' + icon('paperclip') + Number(issue.attachment_count || 0) + '</span>';
+      html += '</button>';
+    });
+    $('issueRows').innerHTML = html;
+  }
+
+  function renderAssigneeFilter() {
+    var html = '<option value="">全部负责人</option>';
+    state.userOptions.forEach(function (user) {
+      html += '<option value="' + Number(user.id) + '">' + escapeHtml(displayName(user)) + '</option>';
+    });
+    $('assigneeFilter').innerHTML = html;
+    $('assigneeFilter').value = state.filters.assignee;
+  }
+
+  function canEditIssue(issue) {
+    if (!state.currentUser || !issue) return false;
+    return state.currentUser.role === 'admin' || Number(issue.reporter_id) === Number(state.currentUser.id);
+  }
+
+  function canWrite() {
+    return state.currentUser && state.currentUser.role !== 'guest';
+  }
+
+  async function openIssue(id, updateHash) {
+    state.selectedIssueId = Number(id);
+    $('issueDrawer').classList.remove('hidden');
+    $('workspace').classList.add('detail-open');
+    $('drawerBody').innerHTML = '<div class="list-state"><div class="list-state-inner">正在加载详情</div></div>';
+    if (updateHash !== false) {
+      var nextHash = '#/issues/' + state.selectedIssueId;
+      if (window.location.hash !== nextHash) history.pushState(null, '', nextHash);
+    }
+    var results = await Promise.all([
+      request('/api/issues/' + state.selectedIssueId),
+      request('/api/issues/' + state.selectedIssueId + '/comments'),
+      request('/api/issues/' + state.selectedIssueId + '/attachments')
+    ]);
+    if (!results[0].ok) {
+      showToast(resultMessage(results[0], 'Issue 加载失败'));
+      closeDrawer(true);
+      return;
+    }
+    state.selectedIssue = results[0].data.issue || null;
+    state.comments = results[1].ok && Array.isArray(results[1].data.comments) ? results[1].data.comments : [];
+    state.attachments = results[2].ok && Array.isArray(results[2].data.attachments) ? results[2].data.attachments : [];
+    if (state.selectedIssue && Number(state.selectedIssue.block_id) !== Number(state.selectedBlockId)) {
+      state.selectedBlockId = Number(state.selectedIssue.block_id);
+      renderBlocks();
+    }
+    renderDetail();
+  }
+
+  function attachmentUrl(attachment) {
+    if (attachment.preview_url) return attachment.preview_url;
+    if (attachment.demo_asset) return $('brandAsset').src;
+    return normalizeBaseUrl(state.baseUrl) + '/api/attachments/' + Number(attachment.id) + '?size=thumb';
+  }
+
+  function renderDetail() {
+    var issue = state.selectedIssue;
+    if (!issue) return;
+    var editable = canEditIssue(issue);
+    var admin = state.currentUser && state.currentUser.role === 'admin';
+    var write = canWrite();
+    var reporter = issue.reporter || null;
+    var assignee = issue.assignee || null;
+    $('drawerHeading').textContent = '#' + issue.id;
+    var html = '<p class="detail-kicker">Issue #' + Number(issue.id) + '</p>';
+    html += '<h2 class="detail-title">' + escapeHtml(issue.title) + '</h2>';
+    html += '<div class="detail-actions">';
+    if (editable) html += '<button class="btn-ghost" type="button" data-action="edit-issue" data-id="' + Number(issue.id) + '">' + icon('edit') + '编辑</button>';
+    if (admin) html += '<button class="btn-ghost btn-danger" type="button" data-action="delete-issue" data-id="' + Number(issue.id) + '">' + icon('trash') + '删除</button>';
+    html += '</div>';
+    html += '<section class="detail-section"><h3>状态</h3><div class="status-flow">';
+    Object.keys(labels.status).forEach(function (status) {
+      html += '<button class="status-button' + (issue.status === status ? ' active' : '') + '" type="button" data-action="change-status" data-status="' +
+        escapeHtml(status) + '"' + (write ? '' : ' disabled') + '>' + escapeHtml(labels.status[status]) + '</button>';
+    });
+    html += '</div></section>';
+    html += '<section class="detail-section"><h3>详情</h3><div class="meta-grid">';
+    html += '<div class="meta-item"><span>优先级</span><strong>' + escapeHtml(labels.priority[issue.priority] || issue.priority) + '</strong></div>';
+    html += '<div class="meta-item"><span>负责人</span><strong>' + escapeHtml(displayName(assignee)) + '</strong></div>';
+    html += '<div class="meta-item"><span>创建人</span><strong>' + escapeHtml(displayName(reporter)) + '</strong></div>';
+    html += '<div class="meta-item"><span>创建时间</span><strong>' + escapeHtml(formatDate(issue.created_at)) + '</strong></div>';
+    html += '</div></section>';
+    html += '<section class="detail-section"><h3>描述</h3><p class="detail-description">' + escapeHtml(issue.description || '无描述') + '</p></section>';
+    html += '<section class="detail-section"><h3>附件</h3>';
+    if (state.attachments.length) {
+      html += '<div class="attachment-grid">';
+      state.attachments.forEach(function (attachment) {
+        var canDelete = admin || Number(attachment.uploader_id) === Number(state.currentUser.id);
+        html += '<article class="attachment-card"><img alt="' + escapeHtml(attachment.filename) + '" src="' + escapeHtml(attachmentUrl(attachment)) + '">';
+        html += '<div class="attachment-meta"><span class="attachment-name">' + escapeHtml(attachment.filename) + '</span>';
+        if (canDelete) html += '<button class="attachment-delete" type="button" data-action="delete-attachment" data-id="' + Number(attachment.id) + '" title="删除附件" aria-label="删除附件">' + icon('trash') + '</button>';
+        html += '</div></article>';
+      });
+      html += '</div>';
+    } else {
+      html += '<p class="detail-description">暂无附件</p>';
+    }
+    if (write) {
+      html += '<label class="upload-label">' + icon('upload') + '上传图片<input id="detailAttachmentInput" type="file" accept="image/*" multiple></label>';
+    }
+    html += '</section>';
+    html += '<section class="detail-section"><h3>评论</h3><div class="comment-list">';
+    if (state.comments.length) {
+      state.comments.forEach(function (comment) {
+        html += '<article class="comment"><span class="avatar">' + escapeHtml(initials(comment.user)) + '</span><div>';
+        html += '<div class="comment-head"><strong>' + escapeHtml(displayName(comment.user)) + '</strong><span>' + escapeHtml(formatDate(comment.created_at)) + '</span></div>';
+        html += '<p class="comment-body">' + escapeHtml(comment.content) + '</p></div></article>';
+      });
+    } else {
+      html += '<p class="detail-description">暂无评论</p>';
+    }
+    html += '</div>';
+    if (write) {
+      html += '<form class="comment-form" id="commentForm"><label class="sr-only" for="commentContent">发表评论</label>';
+      html += '<textarea id="commentContent" maxlength="4000" placeholder="发表评论" required></textarea>';
+      html += '<button class="btn-ghost" type="submit">' + icon('message') + '发表评论</button></form>';
+    }
+    html += '</section>';
+    $('drawerBody').innerHTML = html;
+    var commentForm = $('commentForm');
+    if (commentForm) commentForm.addEventListener('submit', submitComment);
+    var input = $('detailAttachmentInput');
+    if (input) input.addEventListener('change', uploadDetailAttachments);
+  }
+
+  function closeDrawer(updateHash) {
+    state.selectedIssueId = null;
+    state.selectedIssue = null;
+    state.comments = [];
+    state.attachments = [];
+    $('issueDrawer').classList.add('hidden');
+    $('workspace').classList.remove('detail-open');
+    if (updateHash) {
+      var nextHash = state.selectedBlockId ? '#/boards/' + state.selectedBlockId : '#/';
+      history.pushState(null, '', nextHash);
+    }
+  }
+
+  function issueFormHtml(issue) {
+    issue = issue || {};
+    var html = '<div class="form-grid">';
+    html += '<div class="field field-wide"><label for="issueTitle">标题</label><input id="issueTitle" maxlength="200" value="' + escapeHtml(issue.title || '') + '" required></div>';
+    html += '<div class="field field-wide"><label for="issueDescription">描述</label><textarea id="issueDescription" maxlength="10000">' + escapeHtml(issue.description || '') + '</textarea></div>';
+    html += '<div class="field"><label for="issueBlock">工作面板</label><select id="issueBlock" required>';
+    state.blocks.forEach(function (block) {
+      var selected = Number(block.id) === Number(issue.block_id || state.selectedBlockId);
+      html += '<option value="' + Number(block.id) + '"' + (selected ? ' selected' : '') + '>' + escapeHtml(block.title) + '</option>';
+    });
+    html += '</select></div>';
+    html += '<div class="field"><label for="issuePriority">优先级</label><select id="issuePriority">';
+    ['high', 'medium', 'low'].forEach(function (priority) {
+      html += '<option value="' + priority + '"' + ((issue.priority || 'medium') === priority ? ' selected' : '') + '>' + labels.priority[priority] + '</option>';
+    });
+    html += '</select></div>';
+    html += '<div class="field field-wide"><label for="issueAssignee">负责人</label><select id="issueAssignee"><option value="">未分配</option>';
+    state.userOptions.forEach(function (user) {
+      html += '<option value="' + Number(user.id) + '"' + (Number(issue.assignee_id) === Number(user.id) ? ' selected' : '') + '>' + escapeHtml(displayName(user)) + '</option>';
+    });
+    html += '</select></div>';
+    html += '<div class="field field-wide"><label for="issueFiles">图片附件</label><input id="issueFiles" type="file" accept="image/*" multiple></div>';
+    html += '</div><div class="field-error" id="formError" role="alert"></div>';
+    return html;
+  }
+
+  function openIssueForm(issue) {
+    state.modalMode = issue ? 'edit-issue' : 'create-issue';
+    state.editingId = issue ? Number(issue.id) : null;
+    $('formDialogTitle').textContent = issue ? '编辑 Issue' : '新建 Issue';
+    $('formSubmitButton').textContent = issue ? '保存修改' : '创建 Issue';
+    $('formDialogBody').innerHTML = issueFormHtml(issue);
+    $('formDialog').showModal();
+    window.setTimeout(function () { $('issueTitle').focus(); }, 0);
+  }
+
+  function boardFormHtml(block) {
+    block = block || {};
+    var colors = ['#0066cc', '#5856d6', '#7a7a7a', '#272729', '#3a7d44', '#9a6700'];
+    var selectedColor = block.color || '#0066cc';
+    var html = '<div class="form-grid">';
+    html += '<div class="field field-wide"><label for="blockTitle">面板名称</label><input id="blockTitle" maxlength="100" value="' + escapeHtml(block.title || '') + '" required></div>';
+    html += '<div class="field field-wide"><label for="blockDescription">说明</label><textarea id="blockDescription" maxlength="1000">' + escapeHtml(block.description || '') + '</textarea></div>';
+    html += '<div class="field field-wide"><label>颜色</label><div class="color-options">';
+    colors.forEach(function (color) {
+      html += '<label class="color-choice"><input type="radio" name="blockColor" value="' + color + '"' + (selectedColor === color ? ' checked' : '') + '>';
+      html += '<span class="color-swatch" style="--swatch:' + color + '"></span><span class="sr-only">' + color + '</span></label>';
+    });
+    html += '</div></div></div><div class="field-error" id="formError" role="alert"></div>';
+    return html;
+  }
+
+  function openBoardForm(block) {
+    state.modalMode = block ? 'edit-block' : 'create-block';
+    state.editingId = block ? Number(block.id) : null;
+    $('formDialogTitle').textContent = block ? '编辑面板' : '新建面板';
+    $('formSubmitButton').textContent = block ? '保存修改' : '创建面板';
+    $('formDialogBody').innerHTML = boardFormHtml(block);
+    $('formDialog').showModal();
+    window.setTimeout(function () { $('blockTitle').focus(); }, 0);
+  }
+
+  function openPasswordForm() {
+    if (state.currentUser && state.currentUser.username === 'admin') {
+      showToast('admin 密码只能在桌面程序中修改');
+      return;
+    }
+    state.modalMode = 'password';
+    state.editingId = null;
+    $('formDialogTitle').textContent = '修改密码';
+    $('formSubmitButton').textContent = '更新密码';
+    $('formDialogBody').innerHTML =
+      '<div class="form-grid"><div class="field field-wide"><label for="newPassword">新密码</label><input id="newPassword" type="password" minlength="8" maxlength="256" autocomplete="new-password" required></div>' +
+      '<div class="field field-wide"><label for="confirmPassword">确认密码</label><input id="confirmPassword" type="password" minlength="8" maxlength="256" autocomplete="new-password" required></div></div>' +
+      '<div class="field-error" id="formError" role="alert"></div>';
+    $('formDialog').showModal();
+    window.setTimeout(function () { $('newPassword').focus(); }, 0);
+  }
+
+  function closeFormDialog() {
+    if ($('formDialog').open) $('formDialog').close();
+    state.modalMode = '';
+    state.editingId = null;
+  }
+
+  async function submitDynamicForm(event) {
+    event.preventDefault();
+    var button = $('formSubmitButton');
+    var errorNode = $('formError');
+    if (errorNode) errorNode.textContent = '';
+    setBusy(button, true, '保存中');
+    try {
+      if (state.modalMode === 'create-issue' || state.modalMode === 'edit-issue') await saveIssue();
+      else if (state.modalMode === 'create-block' || state.modalMode === 'edit-block') await saveBlock();
+      else if (state.modalMode === 'password') await savePassword();
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  async function saveIssue() {
+    var title = $('issueTitle').value.trim();
+    if (!title) {
+      $('formError').textContent = '请输入 Issue 标题';
+      return;
+    }
+    var payload = {
+      title: title,
+      description: $('issueDescription').value.trim(),
+      block_id: Number($('issueBlock').value),
+      priority: $('issuePriority').value,
+      assignee_id: $('issueAssignee').value ? Number($('issueAssignee').value) : null
+    };
+    var editing = state.modalMode === 'edit-issue';
+    var path = editing ? '/api/issues/' + state.editingId : '/api/issues';
+    var result = await request(path, { method: editing ? 'PUT' : 'POST', body: payload });
+    if (!result.ok) {
+      $('formError').textContent = resultMessage(result, 'Issue 保存失败');
+      return;
+    }
+    var issue = result.data.issue;
+    var files = Array.from($('issueFiles').files || []);
+    if (issue && files.length) {
+      for (var index = 0; index < files.length; index += 1) {
+        var form = new FormData();
+        form.append('file', files[index]);
+        var upload = await request('/api/issues/' + issue.id + '/attachments', { method: 'POST', body: form });
+        if (!upload.ok) showToast(resultMessage(upload, '部分附件上传失败'));
+      }
+    }
+    closeFormDialog();
+    state.selectedBlockId = Number(issue && issue.block_id || payload.block_id);
+    await loadBlocks();
+    await selectBlock(state.selectedBlockId, false);
+    if (issue) await openIssue(issue.id, true);
+    showToast(editing ? 'Issue 已更新' : 'Issue 已创建');
+  }
+
+  async function saveBlock() {
+    var title = $('blockTitle').value.trim();
+    if (!title) {
+      $('formError').textContent = '请输入面板名称';
+      return;
+    }
+    var selectedColor = document.querySelector('input[name="blockColor"]:checked');
+    var payload = {
+      title: title,
+      description: $('blockDescription').value.trim(),
+      color: selectedColor ? selectedColor.value : '#0066cc'
+    };
+    var editing = state.modalMode === 'edit-block';
+    var path = editing ? '/api/blocks/' + state.editingId : '/api/blocks';
+    var result = await request(path, { method: editing ? 'PUT' : 'POST', body: payload });
+    if (!result.ok) {
+      $('formError').textContent = resultMessage(result, '面板保存失败');
+      return;
+    }
+    closeFormDialog();
+    if (!editing && result.data.block) state.selectedBlockId = Number(result.data.block.id);
+    await loadBlocks();
+    await selectBlock(state.selectedBlockId, true);
+    showToast(editing ? '面板已更新' : '面板已创建');
+  }
+
+  async function savePassword() {
+    var password = $('newPassword').value;
+    var confirmPassword = $('confirmPassword').value;
+    if (password.length < 8 || password.length > 256) {
+      $('formError').textContent = '密码长度必须为 8 到 256 个字符';
+      return;
+    }
+    if (password !== confirmPassword) {
+      $('formError').textContent = '两次输入的密码不一致';
+      return;
+    }
+    var result = await request('/api/auth/password', { method: 'PUT', body: { new_password: password } });
+    if (!result.ok) {
+      $('formError').textContent = resultMessage(result, '密码修改失败');
+      return;
+    }
+    if (result.data.token) {
+      state.token = result.data.token;
+      sessionStorage.setItem(storageKeys.token, state.token);
+    }
+    if (result.data.user) state.currentUser = result.data.user;
+    closeFormDialog();
+    updateAuthUi();
+    showToast('密码已修改，其他会话已失效');
+  }
+
+  function confirmAction(title, copy, label, callback) {
+    $('confirmDialogTitle').textContent = title;
+    $('confirmDialogCopy').innerHTML = copy;
+    $('confirmButton').textContent = label || '确认删除';
+    state.confirmAction = callback;
+    $('confirmDialog').showModal();
+  }
+
+  function closeConfirmDialog() {
+    if ($('confirmDialog').open) $('confirmDialog').close();
+    state.confirmAction = null;
+  }
+
+  async function runConfirmedAction() {
+    var action = state.confirmAction;
+    closeConfirmDialog();
+    if (action) await action();
+  }
+
+  async function deleteIssue(id) {
+    var issue = state.selectedIssue;
+    confirmAction('删除 Issue', '确认永久删除 <strong>' + escapeHtml(issue && issue.title || ('#' + id)) + '</strong>？评论和附件也会一并删除。', '删除 Issue', async function () {
+      var result = await request('/api/issues/' + id, { method: 'DELETE' });
+      if (!result.ok) {
+        showToast(resultMessage(result, 'Issue 删除失败'));
+        return;
+      }
+      closeDrawer(true);
+      await loadBlocks();
+      await loadIssues();
+      showToast('Issue 已删除');
+    });
+  }
+
+  async function deleteBlock(id) {
+    var block = state.blocks.find(function (item) { return Number(item.id) === Number(id); });
+    confirmAction('删除面板', '确认永久删除 <strong>' + escapeHtml(block && block.title || '') + '</strong>？该面板内的 Issue、评论和附件也会被删除。', '删除面板', async function () {
+      var result = await request('/api/blocks/' + id, { method: 'DELETE' });
+      if (!result.ok) {
+        showToast(resultMessage(result, '面板删除失败'));
+        return;
+      }
+      state.selectedBlockId = null;
+      await loadBlocks();
+      if (state.selectedBlockId) await selectBlock(state.selectedBlockId, true);
+      else renderIssues();
+      showToast('面板已删除');
+    });
+  }
+
+  async function moveBlockUp(id) {
+    var index = state.blocks.findIndex(function (item) { return Number(item.id) === Number(id); });
+    if (index <= 0) return;
+    var current = state.blocks[index];
+    var previous = state.blocks[index - 1];
+    var currentOrder = current.sort_order;
+    var results = await Promise.all([
+      request('/api/blocks/' + current.id, { method: 'PUT', body: { sort_order: previous.sort_order } }),
+      request('/api/blocks/' + previous.id, { method: 'PUT', body: { sort_order: currentOrder } })
+    ]);
+    if (results.some(function (result) { return !result.ok; })) {
+      showToast('面板排序失败');
+      return;
+    }
+    await loadBlocks();
+  }
+
+  async function changeStatus(status) {
+    if (!state.selectedIssue) return;
+    var result = await request('/api/issues/' + state.selectedIssue.id + '/status', { method: 'PUT', body: { status: status } });
+    if (!result.ok) {
+      showToast(resultMessage(result, '状态更新失败'));
+      return;
+    }
+    await loadIssues();
+    await openIssue(state.selectedIssueId, false);
+    showToast('状态已更新');
+  }
+
+  async function submitComment(event) {
+    event.preventDefault();
+    var content = $('commentContent').value.trim();
+    if (!content) return;
+    var button = event.submitter;
+    setBusy(button, true, '发表中');
+    var result = await request('/api/issues/' + state.selectedIssueId + '/comments', { method: 'POST', body: { content: content } });
+    setBusy(button, false);
+    if (!result.ok) {
+      showToast(resultMessage(result, '评论发表失败'));
+      return;
+    }
+    await openIssue(state.selectedIssueId, false);
+    await loadIssues();
+    showToast('评论已发表');
+  }
+
+  async function uploadFiles(issueId, files) {
+    for (var index = 0; index < files.length; index += 1) {
+      if (!files[index].type || files[index].type.indexOf('image/') !== 0) {
+        showToast('只能上传图片文件');
+        continue;
+      }
+      var form = new FormData();
+      form.append('file', files[index]);
+      var result = await request('/api/issues/' + issueId + '/attachments', { method: 'POST', body: form });
+      if (!result.ok) showToast(resultMessage(result, '附件上传失败'));
+    }
+  }
+
+  async function uploadDetailAttachments(event) {
+    var files = Array.from(event.target.files || []);
+    if (!files.length || !state.selectedIssueId) return;
+    await uploadFiles(state.selectedIssueId, files);
+    await openIssue(state.selectedIssueId, false);
+    await loadIssues();
+    showToast('附件已上传');
+  }
+
+  async function deleteAttachment(id) {
+    confirmAction('删除附件', '确认永久删除这个附件？', '删除附件', async function () {
+      var result = await request('/api/attachments/' + id, { method: 'DELETE' });
+      if (!result.ok) {
+        showToast(resultMessage(result, '附件删除失败'));
+        return;
+      }
+      await openIssue(state.selectedIssueId, false);
+      await loadIssues();
+      showToast('附件已删除');
+    });
+  }
+
+  async function clearFilters() {
+    state.filters = { status: '', priority: '', assignee: '', sort: 'created_desc', q: '' };
+    $('issueSearch').value = '';
+    $('priorityFilter').value = '';
+    $('assigneeFilter').value = '';
+    $('sortFilter').value = 'created_desc';
+    document.querySelectorAll('[data-filter-status]').forEach(function (button) {
+      button.classList.toggle('active', !button.dataset.filterStatus);
+    });
+    await loadIssues();
+  }
+
+  function openSidebar() {
+    state.sidebarOpen = true;
+    $('sidebar').classList.add('open');
+    $('sidebarBackdrop').classList.add('show');
+  }
+
+  function closeSidebar() {
+    state.sidebarOpen = false;
+    $('sidebar').classList.remove('open');
+    $('sidebarBackdrop').classList.remove('show');
   }
 
   async function logout() {
-    if (!state.token) return;
-    await apiRequest("/api/auth/logout", { method: "POST" });
-    state.token = "";
-    state.currentUser = null;
-    sessionStorage.removeItem(storageKeys.token);
-    $("newPassword").value = "";
-    $("confirmPassword").value = "";
-    updateSessionUi();
-    showToast("本地会话已清除");
+    await request('/api/auth/logout', { method: 'POST' });
+    endSession('已退出登录');
   }
 
-  async function changePassword(event) {
-    event.preventDefault();
-    if (!state.token || !state.currentUser) {
-      showToast("请先登录");
+  async function applyRoute() {
+    var hash = window.location.hash || '#/';
+    var issueMatch = hash.match(/^#\/issues\/(\d+)$/);
+    var blockMatch = hash.match(/^#\/boards\/(\d+)$/);
+    if (issueMatch) {
+      await openIssue(Number(issueMatch[1]), false);
+      if (state.selectedIssue) await loadIssues();
       return;
     }
-    if (state.currentUser.username === "admin") {
-      showToast("admin 密码只能在桌面程序中修改");
-      return;
+    if (blockMatch) {
+      var blockId = Number(blockMatch[1]);
+      if (state.blocks.some(function (block) { return Number(block.id) === blockId; })) {
+        await selectBlock(blockId, false);
+        return;
+      }
     }
+    if (state.selectedBlockId) await selectBlock(state.selectedBlockId, false);
+    else renderIssues();
+  }
 
-    const newPassword = $("newPassword").value;
-    const confirmPassword = $("confirmPassword").value;
-    if (newPassword.length < 8 || newPassword.length > 256) {
-      showToast("新密码长度必须为 8 到 256 个字符");
-      return;
+  async function handleClick(event) {
+    var target = event.target.closest('[data-action]');
+    if (!target) return;
+    var action = target.dataset.action;
+    var id = Number(target.dataset.id);
+    if (action === 'select-block') await selectBlock(id, true);
+    else if (action === 'open-issue') await openIssue(id, true);
+    else if (action === 'edit-issue') openIssueForm(state.selectedIssue);
+    else if (action === 'delete-issue') await deleteIssue(id);
+    else if (action === 'change-status') await changeStatus(target.dataset.status);
+    else if (action === 'delete-attachment') await deleteAttachment(id);
+    else if (action === 'edit-block') {
+      var block = state.blocks.find(function (item) { return Number(item.id) === id; });
+      openBoardForm(block);
+    } else if (action === 'move-block-up') await moveBlockUp(id);
+    else if (action === 'password') {
+      $('profileMenu').classList.add('hidden');
+      openPasswordForm();
+    } else if (action === 'logout') await logout();
+    else if (action === 'close-form') closeFormDialog();
+    else if (action === 'close-confirm') closeConfirmDialog();
+    else if (action === 'all-issues') {
+      state.selectedBlockId = null;
+      closeDrawer(false);
+      history.pushState(null, '', '#/');
+      await loadIssues();
+      renderBlocks();
     }
-    if (newPassword !== confirmPassword) {
-      showToast("两次输入的密码不一致");
-      return;
-    }
-
-    const button = event.submitter;
-    setBusy(button, true);
-    const result = await apiRequest("/api/auth/password", {
-      method: "PUT",
-      body: { new_password: newPassword }
-    });
-    setBusy(button, false);
-    if (!result.ok) {
-      showToast(resultError(result, "密码修改失败"));
-      return;
-    }
-
-    const token = getTokenFrom(result.data);
-    if (!token) {
-      showToast("改密响应中未找到 Token");
-      return;
-    }
-    state.token = token;
-    state.currentUser = unwrap(result.data, "user") || state.currentUser;
-    sessionStorage.setItem(storageKeys.token, token);
-    $("newPassword").value = "";
-    $("confirmPassword").value = "";
-    updateSessionUi();
-    showToast("密码已修改，其他会话已失效");
-  }
-
-  function extractUsers(payload) {
-    const value = unwrap(payload, "users");
-    if (Array.isArray(value)) return value;
-    if (value && Array.isArray(value.items)) return value.items;
-    return [];
-  }
-
-  function fillUserForm(user = {}) {
-    $("userId").value = user.id ?? "";
-    $("userName").value = user.username ?? "";
-    $("displayName").value = user.display_name ?? "";
-    $("userRole").value = user.role || "guest";
-  }
-
-  function renderUsers(users) {
-    const body = $("userRows");
-    body.replaceChildren();
-    if (!users.length) {
-      const row = document.createElement("tr");
-      const cell = document.createElement("td");
-      cell.colSpan = 5;
-      cell.className = "empty-row";
-      cell.textContent = "响应中没有用户记录";
-      row.appendChild(cell);
-      body.appendChild(row);
-    } else {
-      users.forEach((user) => {
-        const row = document.createElement("tr");
-        const values = [user.id, user.username, user.display_name || "-", user.role, user.created_at || "-"];
-        values.forEach((value, index) => {
-          const cell = document.createElement("td");
-          if (index === 3) {
-            const chip = document.createElement("span");
-            chip.className = "role-chip";
-            chip.textContent = value ?? "-";
-            cell.appendChild(chip);
-          } else cell.textContent = value ?? "-";
-          row.appendChild(cell);
-        });
-        row.addEventListener("click", () => {
-          body.querySelectorAll("tr").forEach((item) => item.classList.remove("selected"));
-          row.classList.add("selected");
-          fillUserForm(user);
-        });
-        body.appendChild(row);
-      });
-    }
-    $("userCount").textContent = `${users.length} 个账户`;
-  }
-
-  async function listUsers() {
-    const button = $("listUsersButton");
-    setBusy(button, true);
-    const result = await apiRequest("/api/users");
-    setBusy(button, false);
-    if (result.ok) renderUsers(extractUsers(result.data));
-    else showToast(resultError(result, "用户列表加载失败"));
-    return result;
-  }
-
-  function userPayload() {
-    return {
-      username: $("userName").value.trim(),
-      display_name: $("displayName").value.trim(),
-      role: $("userRole").value
-    };
-  }
-
-  function requiredUserId() {
-    const id = $("userId").value.trim();
-    if (!id) showToast("请输入或选择用户 ID");
-    return id;
-  }
-
-  async function loadUser() {
-    const id = requiredUserId();
-    if (!id) return;
-    const result = await apiRequest(`/api/users/${encodeURIComponent(id)}`);
-    if (result.ok) fillUserForm(unwrap(result.data, "user") || {});
-    else showToast(resultError(result, "用户读取失败"));
-  }
-
-  async function updateUser() {
-    const id = requiredUserId();
-    if (!id) return;
-    const result = await apiRequest(`/api/users/${encodeURIComponent(id)}`, { method: "PUT", body: userPayload() });
-    if (result.ok) { showToast("用户已更新"); await listUsers(); }
-    else showToast(resultError(result, "用户更新失败"));
-  }
-
-  async function deleteUser() {
-    const id = requiredUserId();
-    if (!id || !window.confirm(`确认删除用户 ${id}？`)) return;
-    const result = await apiRequest(`/api/users/${encodeURIComponent(id)}`, { method: "DELETE" });
-    if (result.ok) { showToast("用户已删除"); fillUserForm(); await listUsers(); }
-    else showToast(resultError(result, "用户删除失败"));
-  }
-
-  async function sendCustomRequest(event) {
-    event.preventDefault();
-    const method = $("requestMethod").value;
-    let body = null;
-    try {
-      if (method !== "GET" && $("requestBody").value.trim()) body = safeJson($("requestBody").value);
-    } catch (error) { showToast(error.message); return; }
-    await apiRequest($("requestPath").value, { method, body, authMode: $("authMode").value });
-  }
-
-  async function copyResponse() {
-    if (!state.lastResponseText) { showToast("尚无响应内容"); return; }
-    try {
-      await navigator.clipboard.writeText(state.lastResponseText);
-      showToast("响应已复制");
-    } catch {
-      const helper = document.createElement("textarea");
-      helper.value = state.lastResponseText;
-      document.body.appendChild(helper);
-      helper.select();
-      document.execCommand("copy");
-      helper.remove();
-      showToast("响应已复制");
-    }
-  }
-
-  function saveBaseUrl() {
-    try {
-      state.baseUrl = normalizeBaseUrl($("baseUrl").value);
-      $("baseUrl").value = state.baseUrl;
-      localStorage.setItem(storageKeys.baseUrl, state.baseUrl);
-      showToast("API 地址已保存");
-    } catch (error) { showToast(error.message); }
   }
 
   function bindEvents() {
-    $("saveBaseButton").addEventListener("click", saveBaseUrl);
-    $("baseUrl").addEventListener("change", saveBaseUrl);
-    $("healthButton").addEventListener("click", checkHealth);
-    $("smokeButton").addEventListener("click", (event) => runSmokeTest(event.currentTarget));
-    $("smokeTopButton").addEventListener("click", (event) => runSmokeTest(event.currentTarget));
-    $("loginForm").addEventListener("submit", login);
-    $("passwordForm").addEventListener("submit", changePassword);
-    $("meButton").addEventListener("click", loadCurrentUser);
-    $("logoutButton").addEventListener("click", logout);
-    $("listUsersButton").addEventListener("click", listUsers);
-    $("clearUserButton").addEventListener("click", () => fillUserForm());
-    $("loadUserButton").addEventListener("click", loadUser);
-    $("updateUserButton").addEventListener("click", updateUser);
-    $("deleteUserButton").addEventListener("click", deleteUser);
-    $("requestForm").addEventListener("submit", sendCustomRequest);
-    $("resetRequestButton").addEventListener("click", () => {
-      $("requestMethod").value = "GET";
-      $("requestPath").value = "/api/health";
-      $("authMode").value = "bearer";
-      $("requestBody").value = "";
+    $('loginForm').addEventListener('submit', login);
+    $('dynamicForm').addEventListener('submit', submitDynamicForm);
+    $('confirmButton').addEventListener('click', runConfirmedAction);
+    $('createIssueButton').addEventListener('click', function () { if (canWrite()) openIssueForm(null); });
+    $('createPanelButton').addEventListener('click', function () { openBoardForm(null); });
+    $('closeDrawerButton').addEventListener('click', function () { closeDrawer(true); });
+    $('mobilePanelsButton').addEventListener('click', openSidebar);
+    $('sidebarBackdrop').addEventListener('click', closeSidebar);
+    $('profileButton').addEventListener('click', function (event) {
+      event.stopPropagation();
+      var menu = $('profileMenu');
+      menu.classList.toggle('hidden');
+      $('profileButton').setAttribute('aria-expanded', String(!menu.classList.contains('hidden')));
     });
-    $("copyResponseButton").addEventListener("click", copyResponse);
-    $("clearActivityButton").addEventListener("click", () => { state.activity = []; renderActivity(); });
+    document.addEventListener('click', function (event) {
+      handleClick(event);
+      if (!event.target.closest('.profile-wrap')) {
+        $('profileMenu').classList.add('hidden');
+        $('profileButton').setAttribute('aria-expanded', 'false');
+      }
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && !$('formDialog').open && !$('confirmDialog').open) {
+        if (state.sidebarOpen) closeSidebar();
+        else if (state.selectedIssueId) closeDrawer(true);
+      }
+    });
+    document.querySelectorAll('[data-filter-status]').forEach(function (button) {
+      button.addEventListener('click', async function () {
+        state.filters.status = button.dataset.filterStatus;
+        document.querySelectorAll('[data-filter-status]').forEach(function (item) { item.classList.toggle('active', item === button); });
+        await loadIssues();
+      });
+    });
+    $('priorityFilter').addEventListener('change', async function () { state.filters.priority = this.value; await loadIssues(); });
+    $('assigneeFilter').addEventListener('change', async function () { state.filters.assignee = this.value; await loadIssues(); });
+    $('sortFilter').addEventListener('change', async function () { state.filters.sort = this.value; await loadIssues(); });
+    $('clearFiltersButton').addEventListener('click', clearFilters);
+    $('issueSearch').addEventListener('input', function () {
+      clearTimeout(bindEvents.searchTimer);
+      state.filters.q = this.value.trim();
+      bindEvents.searchTimer = window.setTimeout(loadIssues, 280);
+    });
+    window.addEventListener('popstate', function () { if (state.currentUser) applyRoute(); });
+    window.addEventListener('hashchange', function () { if (state.currentUser) applyRoute(); });
+    document.querySelectorAll('[data-demo-user]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        $('loginUsername').value = button.dataset.demoUser;
+        $('loginPassword').value = 'demo1234';
+        $('loginButton').click();
+      });
+    });
   }
 
-  function init() {
+  async function init() {
     try { state.baseUrl = normalizeBaseUrl(state.baseUrl); }
-    catch { state.baseUrl = defaultBaseUrl; }
-    $("baseUrl").value = state.baseUrl;
-    updateSessionUi();
+    catch (error) { state.baseUrl = defaultBaseUrl; }
+    localStorage.setItem(storageKeys.baseUrl, state.baseUrl);
+    $('loginDemoBadge').classList.toggle('hidden', !state.demo);
+    $('appDemoBadge').classList.toggle('hidden', !state.demo);
+    $('demoRoles').classList.toggle('hidden', !state.demo);
     bindEvents();
-    window.setTimeout(checkHealth, 0);
-    if (state.token) window.setTimeout(loadCurrentUser, 0);
+    await checkHealth();
+    var autologin = state.demo ? params.get('autologin') : '';
+    if (autologin) {
+      var user = demo.users.find(function (item) { return item.role === autologin || item.username === autologin; });
+      if (user) {
+        state.demoRole = user.role;
+        state.token = 'demo-token-' + user.role;
+        state.currentUser = user;
+        sessionStorage.setItem(storageKeys.token, state.token);
+        await enterApp();
+        return;
+      }
+    }
+    await restoreSession();
   }
 
   init();
-})();
+}());
 </script>
 </body>
 </html>
