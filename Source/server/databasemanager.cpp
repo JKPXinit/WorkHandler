@@ -161,6 +161,7 @@ bool DatabaseManager::initialize(QString *errorMessage,
             break;
         }
     }
+    userColumnsQuery.finish();
     if (!hasTokenVersion
         && !execute(QStringLiteral(
             "ALTER TABLE users ADD COLUMN token_version "
@@ -178,7 +179,9 @@ bool DatabaseManager::initialize(QString *errorMessage,
         setError(errorMessage, legacyTableQuery.lastError().text());
         return false;
     }
-    if (legacyTableQuery.next()) {
+    const bool hasLegacyTable = legacyTableQuery.next();
+    legacyTableQuery.finish();
+    if (hasLegacyTable) {
         if (!execute(QStringLiteral(
             "INSERT OR IGNORE INTO security_state(key, value) "
             "SELECT key, value FROM system_config "
@@ -186,7 +189,6 @@ bool DatabaseManager::initialize(QString *errorMessage,
                      errorMessage)) {
             return false;
         }
-        legacyTableQuery.finish();
         if (!execute(QStringLiteral("DROP TABLE system_config"),
                      errorMessage)) {
             return false;
@@ -204,6 +206,7 @@ bool DatabaseManager::initialize(QString *errorMessage,
         setError(errorMessage, tokenSecretQuery.lastError().text());
         return false;
     }
+    tokenSecretQuery.finish();
 
     QSqlQuery countQuery(m_database);
     if (!countQuery.exec(QStringLiteral("SELECT COUNT(*) FROM users"))
@@ -211,7 +214,9 @@ bool DatabaseManager::initialize(QString *errorMessage,
         setError(errorMessage, countQuery.lastError().text());
         return false;
     }
-    if (countQuery.value(0).toInt() == 0) {
+    const bool createBootstrapAdmin = countQuery.value(0).toInt() == 0;
+    countQuery.finish();
+    if (createBootstrapAdmin) {
         const QString password = PasswordHasher::generatePassword();
         UserRecord admin;
         if (!createUser(QStringLiteral("admin"),
