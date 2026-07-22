@@ -31,7 +31,6 @@ public:
     bool onCloseEvent(QCloseEvent *);
 
 public:
-    QDialog *emptyViewDialog;
     QDialog *logVieweDialog;
     QDialog *httpServerManagerView;
 
@@ -88,7 +87,6 @@ private:
     QAction *m_aboutAction      {nullptr};
 
     // Dock 窗口指针（用于 retranslateUi）
-    ads::CDockWidget *m_emptyViewDock {nullptr};
     ads::CDockWidget *m_logViewDock   {nullptr};
     ads::CDockWidget *m_httpServerManagerDock {nullptr};
 

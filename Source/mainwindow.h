@@ -9,7 +9,6 @@ class uiManager;
 class SoftwareConfig;
 class ThemeManager;
 class LanguageManager;
-class emptyDialog;
 class ShortcutManager;
 class logViewerDialog;
 class aboutDialog;
@@ -33,7 +32,6 @@ public:
     ThemeManager *m_thememanager;
     LanguageManager *m_Languagemanager;
     uiManager *m_UI;
-    emptyDialog *m_emptyDialog;
     logViewerDialog *m_logViewerDialog;
     aboutDialog *m_aboutDialog;
     HttpServerManagerDialog *m_httpServerManagerDialog {nullptr};

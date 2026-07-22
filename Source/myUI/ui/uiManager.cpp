@@ -14,7 +14,6 @@
 #include "uiManager.h"
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
-#include "emptydialog.h"
 #include "myLogger.h"
 #include "logviewerdialog.h"
 #include "httpservermanagerdialog.h"
@@ -123,14 +122,6 @@ void uiManager::initDockWindows() {
     m_mainWindow->m_DockManager->addDockWidget(ads::LeftDockWidgetArea,
                                                 m_httpServerManagerDock);
     displayMenu->addAction(m_httpServerManagerDock->toggleViewAction());
-
-    m_emptyViewDock = new ads::CDockWidget(tr("Empty view") ,parent);
-    m_emptyViewDock->setObjectName("EmptyViewDock");
-    m_mainWindow->m_emptyDialog = new emptyDialog(m_mainWindow);
-    emptyViewDialog = m_mainWindow->m_emptyDialog->setupEmptyViewDialog();
-    m_emptyViewDock->setWidget(emptyViewDialog);
-    auto widgetArea = m_mainWindow->m_DockManager->addDockWidget(ads::RightDockWidgetArea, m_emptyViewDock);
-    displayMenu->addAction(m_emptyViewDock->toggleViewAction());
 
     m_logViewDock = new ads::CDockWidget(tr("Log viewer") ,parent);
     m_logViewDock->setObjectName("LogViewDock");
@@ -293,7 +284,6 @@ void uiManager::retranslateUi() {
     m_aboutAction->setText(tr("About"));
 
     // Dock 窗口标题
-    if (m_emptyViewDock) m_emptyViewDock->setWindowTitle(tr("Empty view"));
     if (m_logViewDock)   m_logViewDock->setWindowTitle(tr("Log viewer"));
     if (m_httpServerManagerDock) {
         m_httpServerManagerDock->setWindowTitle(tr("HTTP Server"));

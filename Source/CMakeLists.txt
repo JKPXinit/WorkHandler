@@ -49,8 +49,6 @@ set(PROJECT_SOURCES
     public.h
     mainwindow.ui
 
-    myUI/customDialog/emptydialog.cpp
-    myUI/customDialog/emptydialog.h
     myUI/customDialog/logviewerdialog.cpp
     myUI/customDialog/logviewerdialog.h
     myUI/customDialog/aboutdialog.cpp
