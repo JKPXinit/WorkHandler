@@ -2,9 +2,13 @@
 #include "passwordhasher.h"
 #include "tokenhelper.h"
 
+#include <QBuffer>
+#include <QDir>
 #include <QEventLoop>
 #include <QDateTime>
+#include <QFileInfo>
 #include <QHttpHeaders>
+#include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -12,6 +16,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QMessageAuthenticationCode>
+#include <QPair>
 #include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlQuery>
@@ -33,6 +38,7 @@ private:
         int status {0};
         QByteArray body;
         QByteArray allowOrigin;
+        QByteArray contentType;
         QNetworkReply::NetworkError error {QNetworkReply::NoError};
 
         QJsonObject json() const
@@ -50,6 +56,9 @@ private slots:
     void userOptionsAndBlockCrud();
     void issueCrudFilteringAndPermissions();
     void commentReadAndCreatePermissions();
+    void commentImagesAndCascadeCleanup();
+    void attachmentUploadReadAndDeletePermissions();
+    void legacyAttachmentTestRemoved();
     void userCrudAndLastAdminProtection();
     void userPasswordChangeAndTokenVersion();
     void accountSummaryAndAdminPasswordChange();
@@ -64,7 +73,18 @@ private:
     Reply requestRaw(const QByteArray &method,
                      const QString &path,
                      const QByteArray &payload,
-                     const QString &token = QString());
+                     const QString &token = QString(),
+                     const QByteArray &contentType = QByteArrayLiteral("application/json"));
+    Reply requestMultipart(const QString &path,
+                           const QString &filename,
+                           const QByteArray &contentType,
+                           const QByteArray &fileData,
+                           const QString &token = QString());
+    Reply requestCommentMultipart(
+        const QString &path,
+        const QString &content,
+        const QList<QPair<QString, QByteArray>> &files,
+        const QString &token = QString());
 
     QTemporaryDir m_temporaryDirectory;
     std::unique_ptr<HttpServer> m_server;
@@ -442,10 +462,12 @@ void HttpServerIntegrationTest::userOptionsAndBlockCrud()
         query.addBindValue(adminId);
         query.addBindValue(QStringLiteral("Cascade comment"));
         QVERIFY(query.exec());
+        const qint64 commentId = query.lastInsertId().toLongLong();
         query.prepare(QStringLiteral(
-            "INSERT INTO attachments(issue_id, uploader_id, filename, storage_path) "
-            "VALUES(?, ?, ?, ?)"));
+            "INSERT INTO attachments(issue_id, comment_id, uploader_id, filename, storage_path) "
+            "VALUES(?, ?, ?, ?, ?)"));
         query.addBindValue(issueId);
+        query.addBindValue(commentId);
         query.addBindValue(adminId);
         query.addBindValue(QStringLiteral("cascade.txt"));
         query.addBindValue(QStringLiteral("cascade/cascade.txt"));
@@ -818,10 +840,12 @@ void HttpServerIntegrationTest::issueCrudFilteringAndPermissions()
         query.addBindValue(reporter.id);
         query.addBindValue(QStringLiteral("Cascade comment"));
         QVERIFY(query.exec());
+        const qint64 commentId = query.lastInsertId().toLongLong();
         query.prepare(QStringLiteral(
-            "INSERT INTO attachments(issue_id, uploader_id, filename, storage_path) "
-            "VALUES(?, ?, ?, ?)"));
+            "INSERT INTO attachments(issue_id, comment_id, uploader_id, filename, storage_path) "
+            "VALUES(?, ?, ?, ?, ?)"));
         query.addBindValue(firstIssueId);
+        query.addBindValue(commentId);
         query.addBindValue(reporter.id);
         query.addBindValue(QStringLiteral("issue-cascade.png"));
         query.addBindValue(QStringLiteral("issue/issue-cascade.png"));
@@ -1086,6 +1110,444 @@ void HttpServerIntegrationTest::commentReadAndCreatePermissions()
                      {}, m_token).status,
              200);
     QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(member.id),
+                     {}, m_token).status,
+             200);
+    QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(guest.id),
+                     {}, m_token).status,
+             200);
+}
+
+void HttpServerIntegrationTest::attachmentUploadReadAndDeletePermissions()
+{
+    QSKIP("Legacy Issue-level attachment test is replaced by comment image coverage.");
+}
+
+void HttpServerIntegrationTest::commentImagesAndCascadeCleanup()
+{
+    QString errorMessage;
+    UserSummary member;
+    UserSummary guest;
+    QVERIFY2(m_server->createManagedUser(
+                 QStringLiteral("comment_image_member"), &member, &errorMessage),
+             qPrintable(errorMessage));
+    QVERIFY2(m_server->createManagedUser(
+                 QStringLiteral("comment_image_guest"), &guest, &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/users/%1").arg(guest.id),
+        {{QStringLiteral("username"), guest.username},
+         {QStringLiteral("role"), QStringLiteral("guest")}},
+        m_token).status,
+        200);
+    const Reply memberLogin = request(
+        "POST", QStringLiteral("/api/auth/login"),
+        {{QStringLiteral("username"), member.username},
+         {QStringLiteral("password"), QStringLiteral("123456")} });
+    const Reply guestLogin = request(
+        "POST", QStringLiteral("/api/auth/login"),
+        {{QStringLiteral("username"), guest.username},
+         {QStringLiteral("password"), QStringLiteral("123456")} });
+    const QString memberToken = memberLogin.json().value(QStringLiteral("data")).toObject()
+                                    .value(QStringLiteral("token")).toString();
+    const QString guestToken = guestLogin.json().value(QStringLiteral("data")).toObject()
+                                   .value(QStringLiteral("token")).toString();
+    const Reply block = request(
+        "POST", QStringLiteral("/api/blocks"),
+        {{QStringLiteral("title"), QStringLiteral("Comment Images")}}, m_token);
+    const qint64 blockId = block.json().value(QStringLiteral("data")).toObject()
+                               .value(QStringLiteral("block")).toObject()
+                               .value(QStringLiteral("id")).toInteger();
+    const Reply issue = request(
+        "POST", QStringLiteral("/api/issues"),
+        {{QStringLiteral("block_id"), blockId},
+         {QStringLiteral("title"), QStringLiteral("Inline images")}}, memberToken);
+    const qint64 issueId = issue.json().value(QStringLiteral("data")).toObject()
+                               .value(QStringLiteral("issue")).toObject()
+                               .value(QStringLiteral("id")).toInteger();
+    QByteArray firstImage;
+    QImage first(800, 500, QImage::Format_ARGB32);
+    first.fill(qRgb(42, 118, 201));
+    QBuffer firstBuffer(&firstImage);
+    QVERIFY(firstBuffer.open(QIODevice::WriteOnly));
+    QVERIFY(first.save(&firstBuffer, "PNG"));
+    QByteArray secondImage;
+    QImage second(640, 420, QImage::Format_ARGB32);
+    second.fill(qRgb(201, 118, 42));
+    QBuffer secondBuffer(&secondImage);
+    QVERIFY(secondBuffer.open(QIODevice::WriteOnly));
+    QVERIFY(second.save(&secondBuffer, "PNG"));
+    QByteArray largeImage;
+    QImage large(8000, 6000, QImage::Format_Mono);
+    large.setColorCount(2);
+    large.setColor(0, qRgb(0, 0, 0));
+    large.setColor(1, qRgb(255, 255, 255));
+    large.fill(1);
+    QBuffer largeBuffer(&largeImage);
+    QVERIFY(largeBuffer.open(QIODevice::WriteOnly));
+    QVERIFY(large.save(&largeBuffer, "PNG"));
+    QByteArray tallImage;
+    QImage tall(1000, 20000, QImage::Format_Mono);
+    tall.setColorCount(2);
+    tall.setColor(0, qRgb(0, 0, 0));
+    tall.setColor(1, qRgb(255, 255, 255));
+    tall.fill(0);
+    QBuffer tallBuffer(&tallImage);
+    QVERIFY(tallBuffer.open(QIODevice::WriteOnly));
+    QVERIFY(tall.save(&tallBuffer, "PNG"));
+
+    const QString commentsPath = QStringLiteral("/api/issues/%1/comments").arg(issueId);
+    QByteArray bitmapImage;
+    QBuffer bitmapBuffer(&bitmapImage);
+    QVERIFY(bitmapBuffer.open(QIODevice::WriteOnly));
+    QVERIFY(first.save(&bitmapBuffer, "BMP"));
+    const Reply unsupported = requestCommentMultipart(
+        commentsPath, QStringLiteral("![位图](upload:0)"),
+        {{QStringLiteral("unsupported.bmp"), bitmapImage}}, memberToken);
+    QCOMPARE(unsupported.status, 400);
+    QVERIFY(unsupported.json().value(QStringLiteral("error")).toObject()
+                .value(QStringLiteral("message")).toString()
+                .contains(QStringLiteral("PNG, JPEG, and WebP")));
+    const Reply corrupt = requestCommentMultipart(
+        commentsPath, QStringLiteral("![损坏图片](upload:0)"),
+        {{QStringLiteral("corrupt.png"),
+          QByteArray::fromHex("89504e470d0a1a0a") + QByteArrayLiteral("broken")}},
+        memberToken);
+    QCOMPARE(corrupt.status, 400);
+    QVERIFY(corrupt.json().value(QStringLiteral("error")).toObject()
+                .value(QStringLiteral("message")).toString()
+                .contains(QStringLiteral("could not be decoded")));
+    QCOMPARE(requestCommentMultipart(
+        commentsPath,
+        QStringLiteral("前置\n![第一张](upload:0)\n后置\n![第二张](upload:1)\n![大图](upload:2)\n![长图](upload:3)"),
+        {{QStringLiteral("first.png"), firstImage},
+         {QStringLiteral("second.png"), secondImage},
+         {QStringLiteral("large.png"), largeImage},
+         {QStringLiteral("tall.png"), tallImage}},
+        guestToken).status,
+        403);
+    const Reply created = requestCommentMultipart(
+        commentsPath,
+        QStringLiteral("前置\n![第一张](upload:0)\n后置\n![第二张](upload:1)\n![大图](upload:2)\n![长图](upload:3)"),
+        {{QStringLiteral("first.png"), firstImage},
+         {QStringLiteral("second.png"), secondImage},
+         {QStringLiteral("large.png"), largeImage},
+         {QStringLiteral("tall.png"), tallImage}},
+        memberToken);
+    QCOMPARE(created.status, 201);
+    const QJsonObject comment = created.json().value(QStringLiteral("data")).toObject()
+                                    .value(QStringLiteral("comment")).toObject();
+    const QJsonArray attachments = comment.value(
+        QStringLiteral("attachments")).toArray();
+    QCOMPARE(attachments.size(), 4);
+    const QString storedContent = comment.value(QStringLiteral("content")).toString();
+    QVERIFY(storedContent.contains(QStringLiteral("attachment:")));
+    QVERIFY(!storedContent.contains(QStringLiteral("upload:")));
+    const qint64 attachmentId = attachments.at(0).toObject()
+                                    .value(QStringLiteral("id")).toInteger();
+    QCOMPARE(request("GET", QStringLiteral("/api/attachments/%1").arg(attachmentId), {}, guestToken).status, 200);
+    QCOMPARE(request("DELETE", QStringLiteral("/api/attachments/%1").arg(attachmentId), {}, m_token).status, 405);
+    const qint64 largeAttachmentId = attachments.at(2).toObject()
+                                         .value(QStringLiteral("id")).toInteger();
+    const Reply scaledLarge = request(
+        "GET", QStringLiteral("/api/attachments/%1").arg(largeAttachmentId),
+        {}, guestToken);
+    QCOMPARE(scaledLarge.status, 200);
+    const QImage decodedLarge = QImage::fromData(scaledLarge.body, "WEBP");
+    QVERIFY(!decodedLarge.isNull());
+    QCOMPARE(decodedLarge.width(), 1600);
+    const qint64 tallAttachmentId = attachments.at(3).toObject()
+                                        .value(QStringLiteral("id")).toInteger();
+    const Reply scaledTall = request(
+        "GET", QStringLiteral("/api/attachments/%1").arg(tallAttachmentId),
+        {}, guestToken);
+    QCOMPARE(scaledTall.status, 200);
+    const QImage decodedTall = QImage::fromData(scaledTall.body, "WEBP");
+    QVERIFY(!decodedTall.isNull());
+    QVERIFY(decodedTall.width() <= 1600);
+    QVERIFY(decodedTall.height() <= 16383);
+    QVERIFY(decodedTall.height() > decodedTall.width());
+    const Reply comments = request("GET", commentsPath, {}, guestToken);
+    QCOMPARE(comments.status, 200);
+    QCOMPARE(comments.json().value(QStringLiteral("data")).toObject()
+                 .value(QStringLiteral("comments")).toArray().at(0).toObject()
+                 .value(QStringLiteral("attachments")).toArray().size(), 4);
+    QCOMPARE(request("DELETE", QStringLiteral("/api/issues/%1").arg(issueId), {}, m_token).status, 200);
+    QCOMPARE(request("DELETE", QStringLiteral("/api/blocks/%1").arg(blockId), {}, m_token).status, 200);
+    QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(member.id), {}, m_token).status, 200);
+    QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(guest.id), {}, m_token).status, 200);
+}
+
+void HttpServerIntegrationTest::legacyAttachmentTestRemoved()
+{
+    QSKIP("Legacy Issue-level attachment test is replaced by comment image coverage.");
+    QString errorMessage;
+    UserSummary uploader;
+    UserSummary other;
+    UserSummary guest;
+    QVERIFY2(m_server->createManagedUser(
+                 QStringLiteral("attachment_uploader"), &uploader, &errorMessage),
+             qPrintable(errorMessage));
+    QVERIFY2(m_server->createManagedUser(
+                 QStringLiteral("attachment_other"), &other, &errorMessage),
+             qPrintable(errorMessage));
+    QVERIFY2(m_server->createManagedUser(
+                 QStringLiteral("attachment_guest"), &guest, &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/users/%1").arg(guest.id),
+        {{QStringLiteral("username"), guest.username},
+         {QStringLiteral("role"), QStringLiteral("guest")},
+         {QStringLiteral("display_name"), QStringLiteral("Attachment Guest")}},
+        m_token).status,
+        200);
+
+    const auto login = [this](const QString &username) {
+        return request(
+            "POST", QStringLiteral("/api/auth/login"),
+            {{QStringLiteral("username"), username},
+             {QStringLiteral("password"), QStringLiteral("123456")}});
+    };
+    const Reply uploaderLogin = login(uploader.username);
+    const Reply otherLogin = login(other.username);
+    const Reply guestLogin = login(guest.username);
+    QCOMPARE(uploaderLogin.status, 200);
+    QCOMPARE(otherLogin.status, 200);
+    QCOMPARE(guestLogin.status, 200);
+    const QString uploaderToken = uploaderLogin.json()
+                                      .value(QStringLiteral("data")).toObject()
+                                      .value(QStringLiteral("token")).toString();
+    const QString otherToken = otherLogin.json()
+                                   .value(QStringLiteral("data")).toObject()
+                                   .value(QStringLiteral("token")).toString();
+    const QString guestToken = guestLogin.json()
+                                   .value(QStringLiteral("data")).toObject()
+                                   .value(QStringLiteral("token")).toString();
+    QVERIFY(!uploaderToken.isEmpty());
+    QVERIFY(!otherToken.isEmpty());
+    QVERIFY(!guestToken.isEmpty());
+
+    const Reply blockCreated = request(
+        "POST", QStringLiteral("/api/blocks"),
+        {{QStringLiteral("title"), QStringLiteral("Attachment Block")}},
+        m_token);
+    QCOMPARE(blockCreated.status, 201);
+    const qint64 blockId = blockCreated.json()
+                               .value(QStringLiteral("data")).toObject()
+                               .value(QStringLiteral("block")).toObject()
+                               .value(QStringLiteral("id")).toInteger();
+    QVERIFY(blockId > 0);
+
+    const auto createIssue = [this, blockId, &uploaderToken](const QString &title) {
+        return request(
+            "POST", QStringLiteral("/api/issues"),
+            {{QStringLiteral("block_id"), blockId},
+             {QStringLiteral("title"), title}},
+            uploaderToken);
+    };
+    const Reply firstIssueCreated = createIssue(QStringLiteral("Attachment Issue"));
+    const Reply secondIssueCreated = createIssue(
+        QStringLiteral("Block Attachment Issue"));
+    QCOMPARE(firstIssueCreated.status, 201);
+    QCOMPARE(secondIssueCreated.status, 201);
+    const qint64 firstIssueId = firstIssueCreated.json()
+                                    .value(QStringLiteral("data")).toObject()
+                                    .value(QStringLiteral("issue")).toObject()
+                                    .value(QStringLiteral("id")).toInteger();
+    const qint64 secondIssueId = secondIssueCreated.json()
+                                     .value(QStringLiteral("data")).toObject()
+                                     .value(QStringLiteral("issue")).toObject()
+                                     .value(QStringLiteral("id")).toInteger();
+    QVERIFY(firstIssueId > 0);
+    QVERIFY(secondIssueId > firstIssueId);
+
+    QImage sourceImage(2000, 1200, QImage::Format_ARGB32);
+    sourceImage.fill(qRgb(42, 118, 201));
+    QByteArray pngData;
+    QBuffer pngBuffer(&pngData);
+    QVERIFY(pngBuffer.open(QIODevice::WriteOnly));
+    QVERIFY(sourceImage.save(&pngBuffer, "PNG"));
+    QVERIFY(!pngData.isEmpty());
+
+    const auto upload = [this, &pngData, &uploaderToken](qint64 issueId,
+                                                         const QString &name) {
+        return requestMultipart(
+            QStringLiteral("/api/issues/%1/attachments").arg(issueId),
+            name, QByteArrayLiteral("image/png"), pngData, uploaderToken);
+    };
+
+    const QString firstListPath =
+        QStringLiteral("/api/issues/%1/attachments").arg(firstIssueId);
+    QCOMPARE(request("GET", firstListPath).status, 401);
+    QCOMPARE(requestMultipart(
+        firstListPath, QStringLiteral("guest.png"), QByteArrayLiteral("image/png"),
+        pngData, guestToken).status,
+        403);
+    QCOMPARE(requestMultipart(
+        firstListPath, QStringLiteral("invalid.txt"), QByteArrayLiteral("text/plain"),
+        QByteArrayLiteral("not an image"), uploaderToken).status,
+        400);
+    QCOMPARE(requestMultipart(
+        QStringLiteral("/api/issues/999999/attachments"),
+        QStringLiteral("missing.png"), QByteArrayLiteral("image/png"), pngData,
+        uploaderToken).status,
+        404);
+    QCOMPARE(requestRaw(
+        "POST", firstListPath, QByteArrayLiteral("invalid multipart"),
+        uploaderToken,
+        QByteArrayLiteral("multipart/form-data; boundary=bad-boundary")).status,
+        400);
+
+    const Reply firstUpload = upload(firstIssueId, QStringLiteral("photo.png"));
+    QCOMPARE(firstUpload.status, 201);
+    const QJsonObject firstAttachment = firstUpload.json()
+                                              .value(QStringLiteral("data")).toObject()
+                                              .value(QStringLiteral("attachment")).toObject();
+    const qint64 firstAttachmentId =
+        firstAttachment.value(QStringLiteral("id")).toInteger();
+    QVERIFY(firstAttachmentId > 0);
+    QCOMPARE(firstAttachment.value(QStringLiteral("issue_id")).toInteger(),
+             firstIssueId);
+    QCOMPARE(firstAttachment.value(QStringLiteral("uploader_id")).toInteger(),
+             uploader.id);
+    QCOMPARE(firstAttachment.value(QStringLiteral("filename")).toString(),
+             QStringLiteral("photo.png"));
+    QVERIFY(firstAttachment.value(QStringLiteral("file_size")).toInteger() > 0);
+    QVERIFY(!firstAttachment.contains(QStringLiteral("storage_path")));
+
+    const Reply list = request("GET", firstListPath, {}, guestToken);
+    QCOMPARE(list.status, 200);
+    QCOMPARE(list.json().value(QStringLiteral("data")).toObject()
+                 .value(QStringLiteral("attachments")).toArray().size(),
+             1);
+    const Reply issueWithAttachment = request(
+        "GET", QStringLiteral("/api/issues/%1").arg(firstIssueId), {},
+        guestToken);
+    QCOMPARE(issueWithAttachment.status, 200);
+    QCOMPARE(issueWithAttachment.json().value(QStringLiteral("data")).toObject()
+                 .value(QStringLiteral("issue")).toObject()
+                 .value(QStringLiteral("attachment_count")).toInteger(),
+             qint64(1));
+    QCOMPARE(request("GET", QStringLiteral("/api/issues/999999/attachments"), {},
+                     guestToken).status,
+             404);
+
+    const QString firstImagePath =
+        QStringLiteral("/api/attachments/%1").arg(firstAttachmentId);
+    QCOMPARE(request("GET", firstImagePath).status, 401);
+    QCOMPARE(request("GET", firstImagePath + QStringLiteral("?size=large"), {},
+                     guestToken).status,
+             400);
+    const Reply fullImage = request("GET", firstImagePath, {}, guestToken);
+    const Reply thumbnail = request(
+        "GET", firstImagePath + QStringLiteral("?size=thumb"), {}, guestToken);
+    QCOMPARE(fullImage.status, 200);
+    QCOMPARE(thumbnail.status, 200);
+    QVERIFY(fullImage.contentType.startsWith(QByteArrayLiteral("image/webp")));
+    QVERIFY(thumbnail.contentType.startsWith(QByteArrayLiteral("image/webp")));
+    const QImage decodedFull = QImage::fromData(fullImage.body, "WEBP");
+    const QImage decodedThumbnail = QImage::fromData(thumbnail.body, "WEBP");
+    QVERIFY(!decodedFull.isNull());
+    QVERIFY(!decodedThumbnail.isNull());
+    QCOMPARE(decodedFull.width(), 1600);
+    QCOMPARE(decodedThumbnail.width(), 480);
+
+    const QString databasePath =
+        m_temporaryDirectory.filePath(QStringLiteral("issue_panel.db"));
+    const QDir uploadRoot(m_temporaryDirectory.filePath(QStringLiteral("uploads")));
+    const auto storedFiles = [databasePath, uploadRoot](qint64 id) {
+        QStringList files;
+        const QString connectionName = QStringLiteral("attachment_paths_%1").arg(id);
+        {
+            QSqlDatabase database = QSqlDatabase::addDatabase(
+                QStringLiteral("QSQLITE"), connectionName);
+            database.setDatabaseName(databasePath);
+            if (database.open()) {
+                QSqlQuery query(database);
+                query.prepare(QStringLiteral(
+                    "SELECT storage_path, thumb_path FROM attachments WHERE id = ?"));
+                query.addBindValue(id);
+                if (query.exec() && query.next()) {
+                    files.append(uploadRoot.filePath(query.value(0).toString()));
+                    files.append(uploadRoot.filePath(query.value(1).toString()));
+                }
+                database.close();
+            }
+        }
+        QSqlDatabase::removeDatabase(connectionName);
+        return files;
+    };
+    const QStringList firstFiles = storedFiles(firstAttachmentId);
+    QCOMPARE(firstFiles.size(), 2);
+    for (const QString &path : firstFiles) {
+        QVERIFY(QFileInfo::exists(path));
+    }
+    QCOMPARE(request("DELETE", firstImagePath, {}, otherToken).status, 403);
+    QCOMPARE(request("DELETE", firstImagePath, {}, guestToken).status, 403);
+    QCOMPARE(request("DELETE", firstImagePath, {}, uploaderToken).status, 200);
+    for (const QString &path : firstFiles) {
+        QVERIFY(!QFileInfo::exists(path));
+    }
+    QCOMPARE(request("GET", firstImagePath, {}, uploaderToken).status, 404);
+
+    const Reply adminDeleteUpload = upload(
+        firstIssueId, QStringLiteral("admin-delete.png"));
+    QCOMPARE(adminDeleteUpload.status, 201);
+    const qint64 adminDeleteAttachmentId = adminDeleteUpload.json()
+                                               .value(QStringLiteral("data")).toObject()
+                                               .value(QStringLiteral("attachment")).toObject()
+                                               .value(QStringLiteral("id")).toInteger();
+    QCOMPARE(request(
+        "DELETE",
+        QStringLiteral("/api/attachments/%1").arg(adminDeleteAttachmentId),
+        {}, m_token).status,
+        200);
+
+    const Reply issueDeleteUpload = upload(
+        firstIssueId, QStringLiteral("issue-delete.png"));
+    const Reply blockDeleteUpload = upload(
+        secondIssueId, QStringLiteral("block-delete.png"));
+    QCOMPARE(issueDeleteUpload.status, 201);
+    QCOMPARE(blockDeleteUpload.status, 201);
+    const qint64 issueDeleteAttachmentId = issueDeleteUpload.json()
+                                               .value(QStringLiteral("data")).toObject()
+                                               .value(QStringLiteral("attachment")).toObject()
+                                               .value(QStringLiteral("id")).toInteger();
+    const qint64 blockDeleteAttachmentId = blockDeleteUpload.json()
+                                               .value(QStringLiteral("data")).toObject()
+                                               .value(QStringLiteral("attachment")).toObject()
+                                               .value(QStringLiteral("id")).toInteger();
+    const QStringList issueFiles = storedFiles(issueDeleteAttachmentId);
+    const QStringList blockFiles = storedFiles(blockDeleteAttachmentId);
+    QCOMPARE(issueFiles.size(), 2);
+    QCOMPARE(blockFiles.size(), 2);
+    for (const QString &path : issueFiles + blockFiles) {
+        QVERIFY(QFileInfo::exists(path));
+    }
+
+    QCOMPARE(request("DELETE", QStringLiteral("/api/issues/%1").arg(firstIssueId),
+                     {}, m_token).status,
+             200);
+    for (const QString &path : issueFiles) {
+        QVERIFY(!QFileInfo::exists(path));
+    }
+    for (const QString &path : blockFiles) {
+        QVERIFY(QFileInfo::exists(path));
+    }
+
+    QCOMPARE(request("DELETE", QStringLiteral("/api/blocks/%1").arg(blockId),
+                     {}, m_token).status,
+             200);
+    for (const QString &path : blockFiles) {
+        QVERIFY(!QFileInfo::exists(path));
+    }
+    QCOMPARE(request("GET", QStringLiteral("/api/issues/%1").arg(secondIssueId),
+                     {}, m_token).status,
+             404);
+
+    QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(uploader.id),
+                     {}, m_token).status,
+             200);
+    QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(other.id),
                      {}, m_token).status,
              200);
     QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(guest.id),
@@ -1373,7 +1835,8 @@ HttpServerIntegrationTest::Reply HttpServerIntegrationTest::requestRaw(
     const QByteArray &method,
     const QString &path,
     const QByteArray &payload,
-    const QString &token)
+    const QString &token,
+    const QByteArray &contentType)
 {
     QNetworkRequest request(QUrl(QStringLiteral("http://127.0.0.1:%1%2")
                                      .arg(m_port).arg(path)));
@@ -1385,7 +1848,7 @@ HttpServerIntegrationTest::Reply HttpServerIntegrationTest::requestRaw(
     QNetworkReply *networkReply = nullptr;
     if (!payload.isEmpty()) {
         request.setHeader(QNetworkRequest::ContentTypeHeader,
-                          QStringLiteral("application/json"));
+                          QString::fromLatin1(contentType));
     }
     if (method == "GET") {
         networkReply = m_networkManager.get(request);
@@ -1411,9 +1874,60 @@ HttpServerIntegrationTest::Reply HttpServerIntegrationTest::requestRaw(
     reply.status = networkReply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
     reply.body = networkReply->readAll();
     reply.allowOrigin = networkReply->rawHeader("Access-Control-Allow-Origin");
+    reply.contentType = networkReply->rawHeader("Content-Type");
     reply.error = networkReply->error();
     networkReply->deleteLater();
     return reply;
+}
+
+HttpServerIntegrationTest::Reply HttpServerIntegrationTest::requestMultipart(
+    const QString &path,
+    const QString &filename,
+    const QByteArray &contentType,
+    const QByteArray &fileData,
+    const QString &token)
+{
+    const QByteArray boundary = QByteArrayLiteral(
+        "WorkHandlerTestBoundary7MA4YWxkTrZu0gW");
+    QByteArray payload;
+    payload += "--" + boundary + "\r\n";
+    payload += "Content-Disposition: form-data; name=\"file\"; filename=\""
+        + filename.toUtf8() + "\"\r\n";
+    payload += "Content-Type: " + contentType + "\r\n\r\n";
+    payload += fileData;
+    payload += "\r\n--" + boundary + "--\r\n";
+    return requestRaw(
+        QByteArrayLiteral("POST"), path, payload, token,
+        QByteArrayLiteral("multipart/form-data; boundary=") + boundary);
+}
+
+HttpServerIntegrationTest::Reply
+HttpServerIntegrationTest::requestCommentMultipart(
+    const QString &path,
+    const QString &content,
+    const QList<QPair<QString, QByteArray>> &files,
+    const QString &token)
+{
+    const QByteArray boundary = QByteArrayLiteral(
+        "WorkHandlerCommentBoundary7MA4YWxkTrZu0gW");
+    QByteArray payload;
+    payload += "--" + boundary + "\r\n";
+    payload += "Content-Disposition: form-data; name=\"content\"\r\n";
+    payload += "Content-Type: text/plain; charset=utf-8\r\n\r\n";
+    payload += content.toUtf8();
+    payload += "\r\n";
+    for (const auto &file : files) {
+        payload += "--" + boundary + "\r\n";
+        payload += "Content-Disposition: form-data; name=\"images\"; filename=\""
+            + file.first.toUtf8() + "\"\r\n";
+        payload += "Content-Type: image/png\r\n\r\n";
+        payload += file.second;
+        payload += "\r\n";
+    }
+    payload += "--" + boundary + "--\r\n";
+    return requestRaw(
+        QByteArrayLiteral("POST"), path, payload, token,
+        QByteArrayLiteral("multipart/form-data; boundary=") + boundary);
 }
 
 QTEST_GUILESS_MAIN(HttpServerIntegrationTest)
