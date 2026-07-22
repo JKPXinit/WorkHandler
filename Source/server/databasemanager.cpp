@@ -4,10 +4,15 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QHash>
 #include <QRandomGenerator>
+#include <QSet>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QVariant>
+#include <QStringList>
+
+#include <utility>
 
 namespace {
 QByteArray randomSecret(int length)
@@ -136,9 +141,13 @@ bool DatabaseManager::initialize(QString *errorMessage,
             "CREATE TABLE IF NOT EXISTS attachments ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT,"
             "issue_id INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,"
+            "comment_id INTEGER NOT NULL REFERENCES comments(id) ON DELETE CASCADE,"
             "uploader_id INTEGER NOT NULL, filename TEXT NOT NULL,"
             "storage_path TEXT NOT NULL, thumb_path TEXT, file_size INTEGER,"
             "created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"),
+        QStringLiteral(
+            "CREATE INDEX IF NOT EXISTS idx_attachments_issue_id "
+            "ON attachments(issue_id)"),
         QStringLiteral(
             "CREATE TABLE IF NOT EXISTS notifications ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -158,6 +167,13 @@ bool DatabaseManager::initialize(QString *errorMessage,
         if (!execute(statement, errorMessage)) {
             return false;
         }
+    }
+
+    if (!migrateAttachmentsToComments(errorMessage)
+        || !execute(QStringLiteral(
+                "CREATE INDEX IF NOT EXISTS idx_attachments_comment_id "
+                "ON attachments(comment_id)"), errorMessage)) {
+        return false;
     }
 
     bool hasTokenVersion = false;
@@ -247,6 +263,204 @@ bool DatabaseManager::initialize(QString *errorMessage,
     return true;
 }
 
+bool DatabaseManager::migrateAttachmentsToComments(QString *errorMessage)
+{
+    bool hasCommentId = false;
+    QSqlQuery columnsQuery(m_database);
+    if (!columnsQuery.exec(QStringLiteral("PRAGMA table_info(attachments)"))) {
+        setError(errorMessage, columnsQuery.lastError().text());
+        return false;
+    }
+    while (columnsQuery.next()) {
+        if (columnsQuery.value(1).toString() == QStringLiteral("comment_id")) {
+            hasCommentId = true;
+            break;
+        }
+    }
+    columnsQuery.finish();
+    if (hasCommentId) {
+        return true;
+    }
+
+    struct LegacyAttachment {
+        qint64 id {0};
+        qint64 issueId {0};
+        qint64 uploaderId {0};
+        QString filename;
+        QString storagePath;
+        QString thumbnailPath;
+        QVariant fileSize;
+        QString createdAt;
+        QString groupKey;
+    };
+    struct CommentGroup {
+        QString key;
+        qint64 issueId {0};
+        qint64 userId {0};
+        QString createdAt;
+    };
+
+    QSet<qint64> validUserIds;
+    qint64 fallbackAdminId = 0;
+    QSqlQuery usersQuery(m_database);
+    if (!usersQuery.exec(QStringLiteral("SELECT id, username FROM users"))) {
+        setError(errorMessage, usersQuery.lastError().text());
+        return false;
+    }
+    while (usersQuery.next()) {
+        const qint64 userId = usersQuery.value(0).toLongLong();
+        validUserIds.insert(userId);
+        if (usersQuery.value(1).toString() == QStringLiteral("admin")) {
+            fallbackAdminId = userId;
+        }
+    }
+    usersQuery.finish();
+
+    QList<LegacyAttachment> attachments;
+    QList<CommentGroup> groups;
+    QSet<QString> knownGroups;
+    QSqlQuery attachmentQuery(m_database);
+    if (!attachmentQuery.exec(QStringLiteral(
+            "SELECT id, issue_id, uploader_id, filename, storage_path, "
+            "COALESCE(thumb_path, ''), file_size, created_at "
+            "FROM attachments ORDER BY created_at ASC, id ASC"))) {
+        setError(errorMessage, attachmentQuery.lastError().text());
+        return false;
+    }
+    while (attachmentQuery.next()) {
+        LegacyAttachment attachment;
+        attachment.id = attachmentQuery.value(0).toLongLong();
+        attachment.issueId = attachmentQuery.value(1).toLongLong();
+        attachment.uploaderId = attachmentQuery.value(2).toLongLong();
+        attachment.filename = attachmentQuery.value(3).toString();
+        attachment.storagePath = attachmentQuery.value(4).toString();
+        attachment.thumbnailPath = attachmentQuery.value(5).toString();
+        attachment.fileSize = attachmentQuery.value(6);
+        attachment.createdAt = attachmentQuery.value(7).toString();
+        const qint64 commentUserId = validUserIds.contains(attachment.uploaderId)
+            ? attachment.uploaderId : fallbackAdminId;
+        if (commentUserId <= 0) {
+            setError(errorMessage,
+                     QStringLiteral("Legacy attachments require the fixed admin account."));
+            return false;
+        }
+        attachment.groupKey = QStringLiteral("%1:%2")
+                                  .arg(attachment.issueId)
+                                  .arg(commentUserId);
+        if (!knownGroups.contains(attachment.groupKey)) {
+            knownGroups.insert(attachment.groupKey);
+            groups.append({attachment.groupKey, attachment.issueId,
+                           commentUserId, attachment.createdAt});
+        }
+        attachments.append(attachment);
+    }
+    attachmentQuery.finish();
+
+    if (!m_database.transaction()) {
+        setError(errorMessage, m_database.lastError().text());
+        return false;
+    }
+    const auto rollback = [this, errorMessage](const QString &message) {
+        m_database.rollback();
+        setError(errorMessage, message);
+        return false;
+    };
+    QSqlQuery schemaQuery(m_database);
+    if (!schemaQuery.exec(QStringLiteral("DROP INDEX IF EXISTS idx_attachments_issue_id"))
+        || !schemaQuery.exec(QStringLiteral("ALTER TABLE attachments RENAME TO attachments_legacy"))
+        || !schemaQuery.exec(QStringLiteral(
+            "CREATE TABLE attachments ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "issue_id INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,"
+            "comment_id INTEGER NOT NULL REFERENCES comments(id) ON DELETE CASCADE,"
+            "uploader_id INTEGER NOT NULL,"
+            "filename TEXT NOT NULL, storage_path TEXT NOT NULL,"
+            "thumb_path TEXT, file_size INTEGER,"
+            "created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"))) {
+        return rollback(schemaQuery.lastError().text());
+    }
+
+    QHash<QString, qint64> commentIds;
+    QHash<QString, QStringList> commentLines;
+    QSqlQuery commentInsert(m_database);
+    commentInsert.prepare(QStringLiteral(
+        "INSERT INTO comments(issue_id, user_id, content, created_at) "
+        "VALUES(?, ?, '', ?)"));
+    for (const CommentGroup &group : std::as_const(groups)) {
+        commentInsert.clear();
+        commentInsert.prepare(QStringLiteral(
+            "INSERT INTO comments(issue_id, user_id, content, created_at) "
+            "VALUES(?, ?, '', ?)"));
+        commentInsert.addBindValue(group.issueId);
+        commentInsert.addBindValue(group.userId);
+        commentInsert.addBindValue(group.createdAt);
+        if (!commentInsert.exec()) {
+            return rollback(commentInsert.lastError().text());
+        }
+        commentIds.insert(group.key, commentInsert.lastInsertId().toLongLong());
+        commentInsert.finish();
+    }
+
+    QSqlQuery attachmentInsert(m_database);
+    attachmentInsert.prepare(QStringLiteral(
+        "INSERT INTO attachments(id, issue_id, comment_id, uploader_id, filename, "
+        "storage_path, thumb_path, file_size, created_at) "
+        "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)"));
+    for (const LegacyAttachment &attachment : std::as_const(attachments)) {
+        attachmentInsert.clear();
+        attachmentInsert.prepare(QStringLiteral(
+            "INSERT INTO attachments(id, issue_id, comment_id, uploader_id, filename, "
+            "storage_path, thumb_path, file_size, created_at) "
+            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)"));
+        attachmentInsert.addBindValue(attachment.id);
+        attachmentInsert.addBindValue(attachment.issueId);
+        attachmentInsert.addBindValue(commentIds.value(attachment.groupKey));
+        attachmentInsert.addBindValue(validUserIds.contains(attachment.uploaderId)
+                                          ? attachment.uploaderId
+                                          : fallbackAdminId);
+        attachmentInsert.addBindValue(attachment.filename);
+        attachmentInsert.addBindValue(attachment.storagePath);
+        attachmentInsert.addBindValue(attachment.thumbnailPath);
+        attachmentInsert.addBindValue(attachment.fileSize);
+        attachmentInsert.addBindValue(attachment.createdAt);
+        if (!attachmentInsert.exec()) {
+            return rollback(attachmentInsert.lastError().text());
+        }
+        commentLines[attachment.groupKey].append(
+            QStringLiteral("![Image](attachment:%1)").arg(attachment.id));
+        attachmentInsert.finish();
+    }
+    QSqlQuery commentUpdate(m_database);
+    commentUpdate.prepare(QStringLiteral(
+        "UPDATE comments SET content = ? WHERE id = ?"));
+    for (auto iterator = commentLines.cbegin(); iterator != commentLines.cend();
+         ++iterator) {
+        commentUpdate.clear();
+        commentUpdate.prepare(QStringLiteral(
+            "UPDATE comments SET content = ? WHERE id = ?"));
+        commentUpdate.addBindValue(iterator.value().join(QLatin1Char('\n')));
+        commentUpdate.addBindValue(commentIds.value(iterator.key()));
+        if (!commentUpdate.exec()) {
+            return rollback(commentUpdate.lastError().text());
+        }
+        commentUpdate.finish();
+    }
+    if (!schemaQuery.exec(QStringLiteral("DROP TABLE attachments_legacy"))
+        || !schemaQuery.exec(QStringLiteral(
+            "CREATE INDEX idx_attachments_issue_id ON attachments(issue_id)"))
+        || !schemaQuery.exec(QStringLiteral(
+            "CREATE INDEX idx_attachments_comment_id ON attachments(comment_id)"))) {
+        return rollback(schemaQuery.lastError().text());
+    }
+    if (!m_database.commit()) {
+        const QString detail = m_database.lastError().text();
+        m_database.rollback();
+        setError(errorMessage, detail);
+        return false;
+    }
+    return true;
+}
+
 bool DatabaseManager::isOpen() const
 {
     return m_database.isOpen();
@@ -255,6 +469,11 @@ bool DatabaseManager::isOpen() const
 QSqlDatabase DatabaseManager::connection() const
 {
     return m_database;
+}
+
+QString DatabaseManager::databasePath() const
+{
+    return m_databasePath;
 }
 
 bool DatabaseManager::wasCreated() const
