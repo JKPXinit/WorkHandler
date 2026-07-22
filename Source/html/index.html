@@ -241,6 +241,7 @@ textarea { min-height: 130px; resize: vertical; font-family: Consolas, "SFMono-R
   border-radius: var(--radius);
   background: #1d1d1f;
 }
+.auth-stack { display: grid; gap: 16px; }
 .session-line { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--dark-line); }
 .session-line code { color: var(--blue-dark); }
 
@@ -431,28 +432,46 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
           <button class="btn btn-secondary" id="logoutButton" type="button">退出登录</button>
         </div>
       </div>
-      <form class="auth-surface" id="loginForm">
-        <div class="form-grid">
-          <div class="field">
-            <label for="loginUsername">用户名</label>
-            <input id="loginUsername" name="username" autocomplete="username" required>
+      <div class="auth-stack">
+        <form class="auth-surface" id="loginForm">
+          <div class="form-grid">
+            <div class="field">
+              <label for="loginUsername">用户名</label>
+              <input id="loginUsername" name="username" autocomplete="username" required>
+            </div>
+            <div class="field">
+              <label for="loginPassword">密码</label>
+              <input id="loginPassword" name="password" type="password" autocomplete="current-password" required>
+            </div>
           </div>
-          <div class="field">
-            <label for="loginPassword">密码</label>
-            <input id="loginPassword" name="password" type="password" autocomplete="current-password" required>
+          <div class="actions">
+            <button class="btn" type="submit">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>
+              登录
+            </button>
           </div>
-        </div>
-        <div class="actions">
-          <button class="btn" type="submit">
-            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>
-            登录
-          </button>
-        </div>
-        <div class="session-line">
-          <span class="field-hint">Authorization</span><br>
-          <code id="tokenPreview">Bearer -</code>
-        </div>
-      </form>
+          <div class="session-line">
+            <span class="field-hint">Authorization</span><br>
+            <code id="tokenPreview">Bearer -</code>
+          </div>
+        </form>
+        <form class="auth-surface" id="passwordForm">
+          <h3>修改我的密码</h3>
+          <div class="form-grid">
+            <div class="field">
+              <label for="newPassword">新密码</label>
+              <input id="newPassword" type="password" minlength="8" maxlength="256" autocomplete="new-password" required>
+            </div>
+            <div class="field">
+              <label for="confirmPassword">确认密码</label>
+              <input id="confirmPassword" type="password" minlength="8" maxlength="256" autocomplete="new-password" required>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn" id="changePasswordButton" type="submit">修改密码</button>
+          </div>
+        </form>
+      </div>
     </div>
   </section>
 
@@ -480,14 +499,12 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
         <form class="utility-card" id="userForm">
           <div class="card-head"><h3>账户编辑</h3><button class="btn btn-secondary btn-compact" id="clearUserButton" type="button">清空</button></div>
           <div class="form-grid">
-            <div class="field"><label for="userId">用户 ID</label><input id="userId" inputmode="numeric" placeholder="新建时留空"></div>
+            <div class="field"><label for="userId">用户 ID</label><input id="userId" inputmode="numeric"></div>
             <div class="field"><label for="userRole">角色</label><select id="userRole"><option value="guest">guest</option><option value="user">user</option><option value="admin">admin</option></select></div>
             <div class="field field-wide"><label for="userName">用户名</label><input id="userName" autocomplete="off" required></div>
             <div class="field field-wide"><label for="displayName">显示名</label><input id="displayName" autocomplete="off"></div>
-            <div class="field field-wide"><label for="userPassword">密码</label><input id="userPassword" type="password" autocomplete="new-password"></div>
           </div>
           <div class="actions">
-            <button class="btn" id="createUserButton" type="button">创建</button>
             <button class="btn btn-secondary" id="loadUserButton" type="button">读取</button>
             <button class="btn btn-secondary" id="updateUserButton" type="button">更新</button>
             <button class="btn btn-secondary" id="deleteUserButton" type="button">删除</button>
@@ -501,21 +518,8 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
     <div class="tile-inner">
       <div class="section-head">
         <div><p class="eyebrow">Admin · Server</p><h2>服务与请求。</h2></div>
-        <div class="actions"><button class="btn" id="loadConfigButton" type="button">读取配置</button><button class="btn btn-secondary" id="restartButton" type="button">重启服务</button></div>
       </div>
       <div class="dark-grid">
-        <form class="dark-panel" id="serverForm">
-          <h3>服务配置</h3>
-          <div class="form-grid">
-            <div class="field"><label for="serverInterface">监听地址</label><input id="serverInterface" value="0.0.0.0"></div>
-            <div class="field"><label for="serverPort">端口</label><input id="serverPort" type="number" min="1" max="65535" value="8080"></div>
-            <label class="check-row"><input id="autoStart" type="checkbox">自动启动</label>
-            <label class="check-row"><input id="keepOriginal" type="checkbox">保留原图</label>
-            <div class="field field-wide"><label for="maxImageWidth">最大图片宽度</label><input id="maxImageWidth" type="number" min="320" value="1920"></div>
-          </div>
-          <div class="actions"><button class="btn" id="saveConfigButton" type="submit">保存配置</button></div>
-        </form>
-
         <form class="dark-panel" id="requestForm">
           <h3>自定义请求</h3>
           <div class="form-grid three">
@@ -553,9 +557,9 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
   <div class="footer-inner">
     <div class="footer-grid">
       <div><h3>Health</h3><code>GET /api/health</code></div>
-      <div><h3>Authentication</h3><code>POST /api/auth/login</code><code>POST /api/auth/logout</code><code>GET /api/auth/me</code></div>
-      <div><h3>Users</h3><code>GET /api/users</code><code>POST /api/users</code><code>GET · PUT · DELETE /api/users/:id</code></div>
-      <div><h3>Server</h3><code>GET · PUT /api/server/config</code><code>POST /api/server/restart</code></div>
+      <div><h3>Authentication</h3><code>POST /api/auth/login</code><code>POST /api/auth/logout</code><code>GET /api/auth/me</code><code>PUT /api/auth/password</code></div>
+      <div><h3>Users</h3><code>GET /api/users</code><code>GET · PUT · DELETE /api/users/:id</code></div>
+      <div><h3>Server</h3><code>GET /api/server/config</code></div>
     </div>
     <div class="footer-bottom">WorkHandler · Phase 1 API Workbench</div>
   </div>
@@ -797,6 +801,11 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
       : token ? "Token 已保存，用户信息未读取" : "尚未建立认证会话";
     $("logoutButton").disabled = !token;
     $("meButton").disabled = !token;
+    const canChangePassword = Boolean(
+      token && user && user.username !== "admin");
+    $("newPassword").disabled = !canChangePassword;
+    $("confirmPassword").disabled = !canChangePassword;
+    $("changePasswordButton").disabled = !canChangePassword;
   }
 
   async function checkHealth() {
@@ -897,8 +906,58 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
     state.token = "";
     state.currentUser = null;
     sessionStorage.removeItem(storageKeys.token);
+    $("newPassword").value = "";
+    $("confirmPassword").value = "";
     updateSessionUi();
     showToast("本地会话已清除");
+  }
+
+  async function changePassword(event) {
+    event.preventDefault();
+    if (!state.token || !state.currentUser) {
+      showToast("请先登录");
+      return;
+    }
+    if (state.currentUser.username === "admin") {
+      showToast("admin 密码只能在桌面程序中修改");
+      return;
+    }
+
+    const newPassword = $("newPassword").value;
+    const confirmPassword = $("confirmPassword").value;
+    if (newPassword.length < 8 || newPassword.length > 256) {
+      showToast("新密码长度必须为 8 到 256 个字符");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      showToast("两次输入的密码不一致");
+      return;
+    }
+
+    const button = event.submitter;
+    setBusy(button, true);
+    const result = await apiRequest("/api/auth/password", {
+      method: "PUT",
+      body: { new_password: newPassword }
+    });
+    setBusy(button, false);
+    if (!result.ok) {
+      showToast(resultError(result, "密码修改失败"));
+      return;
+    }
+
+    const token = getTokenFrom(result.data);
+    if (!token) {
+      showToast("改密响应中未找到 Token");
+      return;
+    }
+    state.token = token;
+    state.currentUser = unwrap(result.data, "user") || state.currentUser;
+    sessionStorage.setItem(storageKeys.token, token);
+    $("newPassword").value = "";
+    $("confirmPassword").value = "";
+    updateSessionUi();
+    showToast("密码已修改，其他会话已失效");
   }
 
   function extractUsers(payload) {
@@ -913,7 +972,6 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
     $("userName").value = user.username ?? "";
     $("displayName").value = user.display_name ?? "";
     $("userRole").value = user.role || "guest";
-    $("userPassword").value = "";
   }
 
   function renderUsers(users) {
@@ -962,22 +1020,12 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
     return result;
   }
 
-  function userPayload(includePassword) {
-    const payload = {
+  function userPayload() {
+    return {
       username: $("userName").value.trim(),
       display_name: $("displayName").value.trim(),
       role: $("userRole").value
     };
-    if (includePassword || $("userPassword").value) payload.password = $("userPassword").value;
-    return payload;
-  }
-
-  async function createUser() {
-    const payload = userPayload(true);
-    if (!payload.username || !payload.password) { showToast("创建用户需要用户名和密码"); return; }
-    const result = await apiRequest("/api/users", { method: "POST", body: payload });
-    if (result.ok) { showToast("用户已创建"); fillUserForm(); await listUsers(); }
-    else showToast(resultError(result, "用户创建失败"));
   }
 
   function requiredUserId() {
@@ -997,7 +1045,7 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
   async function updateUser() {
     const id = requiredUserId();
     if (!id) return;
-    const result = await apiRequest(`/api/users/${encodeURIComponent(id)}`, { method: "PUT", body: userPayload(false) });
+    const result = await apiRequest(`/api/users/${encodeURIComponent(id)}`, { method: "PUT", body: userPayload() });
     if (result.ok) { showToast("用户已更新"); await listUsers(); }
     else showToast(resultError(result, "用户更新失败"));
   }
@@ -1008,62 +1056,6 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
     const result = await apiRequest(`/api/users/${encodeURIComponent(id)}`, { method: "DELETE" });
     if (result.ok) { showToast("用户已删除"); fillUserForm(); await listUsers(); }
     else showToast(resultError(result, "用户删除失败"));
-  }
-
-  function asBool(value) { return value === true || value === 1 || value === "1" || value === "true"; }
-
-  function fillServerConfig(config = {}) {
-    $("serverInterface").value = config.server_interface ?? config.interface ?? "0.0.0.0";
-    $("serverPort").value = config.server_port ?? config.port ?? 8080;
-    $("autoStart").checked = asBool(config.auto_start);
-    $("keepOriginal").checked = asBool(config.keep_original);
-    $("maxImageWidth").value = config.max_image_width ?? 1920;
-  }
-
-  async function loadServerConfig() {
-    const result = await apiRequest("/api/server/config");
-    if (result.ok) fillServerConfig(unwrap(result.data, "config") || {});
-    else showToast(resultError(result, "服务配置读取失败"));
-  }
-
-  function serverPayload() {
-    return {
-      server_interface: $("serverInterface").value.trim(),
-      server_port: Number($("serverPort").value),
-      auto_start: $("autoStart").checked,
-      keep_original: $("keepOriginal").checked,
-      max_image_width: Number($("maxImageWidth").value)
-    };
-  }
-
-  async function saveServerConfig(event) {
-    event.preventDefault();
-    const payload = serverPayload();
-    if (!payload.server_interface || payload.server_port < 1 || payload.server_port > 65535) {
-      showToast("监听地址或端口无效");
-      return;
-    }
-    const result = await apiRequest("/api/server/config", { method: "PUT", body: payload });
-    if (result.ok) showToast("服务配置已保存");
-    else showToast(resultError(result, "服务配置保存失败"));
-  }
-
-  async function restartServer() {
-    const result = await apiRequest("/api/server/restart", { method: "POST" });
-    if (!result.ok) {
-      showToast(resultError(result, "重启请求失败"));
-      return;
-    }
-    const data = unwrap(result.data) || {};
-    if (data.restart_url) {
-      try {
-        state.baseUrl = normalizeBaseUrl(data.restart_url);
-        $("baseUrl").value = state.baseUrl;
-        localStorage.setItem(storageKeys.baseUrl, state.baseUrl);
-      } catch {}
-    }
-    showToast("重启请求已提交");
-    window.setTimeout(checkHealth, 800);
   }
 
   async function sendCustomRequest(event) {
@@ -1108,17 +1100,14 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
     $("smokeButton").addEventListener("click", (event) => runSmokeTest(event.currentTarget));
     $("smokeTopButton").addEventListener("click", (event) => runSmokeTest(event.currentTarget));
     $("loginForm").addEventListener("submit", login);
+    $("passwordForm").addEventListener("submit", changePassword);
     $("meButton").addEventListener("click", loadCurrentUser);
     $("logoutButton").addEventListener("click", logout);
     $("listUsersButton").addEventListener("click", listUsers);
     $("clearUserButton").addEventListener("click", () => fillUserForm());
-    $("createUserButton").addEventListener("click", createUser);
     $("loadUserButton").addEventListener("click", loadUser);
     $("updateUserButton").addEventListener("click", updateUser);
     $("deleteUserButton").addEventListener("click", deleteUser);
-    $("loadConfigButton").addEventListener("click", loadServerConfig);
-    $("serverForm").addEventListener("submit", saveServerConfig);
-    $("restartButton").addEventListener("click", restartServer);
     $("requestForm").addEventListener("submit", sendCustomRequest);
     $("resetRequestButton").addEventListener("click", () => {
       $("requestMethod").value = "GET";
@@ -1137,6 +1126,7 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
     updateSessionUi();
     bindEvents();
     window.setTimeout(checkHealth, 0);
+    if (state.token) window.setTimeout(loadCurrentUser, 0);
   }
 
   init();

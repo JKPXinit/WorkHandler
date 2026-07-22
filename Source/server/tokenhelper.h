@@ -11,6 +11,7 @@ public:
         bool valid {false};
         qint64 userId {0};
         QString role;
+        int tokenVersion {0};
         qint64 expiresAt {0};
         QString error;
     };
@@ -18,7 +19,10 @@ public:
     explicit TokenHelper(const QByteArray &secret = QByteArray());
 
     void setSecret(const QByteArray &secret);
-    QString issue(qint64 userId, const QString &role, qint64 lifetimeSeconds = 8 * 60 * 60) const;
+    QString issue(qint64 userId,
+                  const QString &role,
+                  int tokenVersion,
+                  qint64 lifetimeSeconds = 8 * 60 * 60) const;
     Claims validate(const QString &token) const;
 
 private:

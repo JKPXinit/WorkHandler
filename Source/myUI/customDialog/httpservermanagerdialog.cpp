@@ -1,26 +1,18 @@
 #include "httpservermanagerdialog.h"
 
 #include "mainwindow.h"
+#include "httpserver.h"
 #include "myLogger.h"
 #include "softwareconfig.h"
 
-#include <QAbstractSocket>
-#include <QCheckBox>
-#include <QComboBox>
 #include <QDesktopServices>
 #include <QDialog>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
-#include <QHostAddress>
 #include <QLabel>
 #include <QLineEdit>
-#include <QList>
-#include <QNetworkAddressEntry>
-#include <QNetworkInterface>
 #include <QPushButton>
-#include <QSignalBlocker>
-#include <QSpinBox>
 #include <QStyle>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -42,7 +34,7 @@ QDialog *HttpServerManagerDialog::setupHttpServerManagerDialog()
     m_dialog->setMinimumSize(430, 520);
 
     setupUi();
-    refreshNetworkInterfaces();
+    refreshConfiguration();
     setServerState(ServerState::Stopped);
     setReachabilityState(ReachabilityState::Unknown);
 
@@ -53,53 +45,23 @@ void HttpServerManagerDialog::setupUi()
 {
     auto *mainLayout = new QVBoxLayout(m_dialog);
 
-    auto *networkGroup = new QGroupBox(tr("Network Configuration"), m_dialog);
-    auto *networkLayout = new QFormLayout(networkGroup);
-
-    auto *interfaceRow = new QWidget(networkGroup);
-    auto *interfaceLayout = new QHBoxLayout(interfaceRow);
-    interfaceLayout->setContentsMargins(0, 0, 0, 0);
-    m_interfaceCombo = new QComboBox(interfaceRow);
-    m_interfaceCombo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
-    m_refreshButton = new QToolButton(interfaceRow);
-    m_refreshButton->setIcon(m_dialog->style()->standardIcon(QStyle::SP_BrowserReload));
-    m_refreshButton->setToolTip(tr("Refresh network interfaces"));
-    interfaceLayout->addWidget(m_interfaceCombo, 1);
-    interfaceLayout->addWidget(m_refreshButton);
-
-    m_addressCombo = new QComboBox(networkGroup);
-    m_portSpinBox = new QSpinBox(networkGroup);
-    m_portSpinBox->setRange(1, 65535);
-    m_portSpinBox->setValue(m_mainWindow->m_softwareconfig->httpServerPort());
-    m_bindAllCheckBox = new QCheckBox(tr("Bind all interfaces (0.0.0.0)"), networkGroup);
-    m_bindAllCheckBox->setChecked(
-        m_mainWindow->m_softwareconfig->httpServerBindAllInterfaces());
-
-    networkLayout->addRow(tr("NIC:"), interfaceRow);
-    networkLayout->addRow(tr("IP Address:"), m_addressCombo);
-    networkLayout->addRow(tr("Port:"), m_portSpinBox);
-    networkLayout->addRow(QString(), m_bindAllCheckBox);
-    mainLayout->addWidget(networkGroup);
-
-    auto *runtimeGroup = new QGroupBox(tr("Runtime Configuration"), m_dialog);
-    auto *runtimeLayout = new QFormLayout(runtimeGroup);
-    m_autoStartCheckBox = new QCheckBox(tr("Start with the application"), runtimeGroup);
-    m_autoStartCheckBox->setChecked(
-        m_mainWindow->m_softwareconfig->httpServerAutoStart());
-    m_keepOriginalCheckBox = new QCheckBox(tr("Keep original uploaded images"), runtimeGroup);
-    m_keepOriginalCheckBox->setChecked(
-        m_mainWindow->m_softwareconfig->httpServerKeepOriginal());
-    m_maxImageWidthSpinBox = new QSpinBox(runtimeGroup);
-    m_maxImageWidthSpinBox->setRange(320, 16384);
-    m_maxImageWidthSpinBox->setValue(
-        m_mainWindow->m_softwareconfig->httpServerMaxImageWidth());
-    runtimeLayout->addRow(QString(), m_autoStartCheckBox);
-    runtimeLayout->addRow(QString(), m_keepOriginalCheckBox);
-    runtimeLayout->addRow(tr("Maximum image width:"), m_maxImageWidthSpinBox);
-    mainLayout->addWidget(runtimeGroup);
-
     auto *endpointGroup = new QGroupBox(tr("Service Endpoints"), m_dialog);
     auto *endpointLayout = new QFormLayout(endpointGroup);
+    auto *refreshRow = new QWidget(endpointGroup);
+    auto *refreshLayout = new QHBoxLayout(refreshRow);
+    refreshLayout->setContentsMargins(0, 0, 0, 0);
+    m_localUrlEdit = new QLineEdit(refreshRow);
+    m_localUrlEdit->setReadOnly(true);
+    m_openLocalButton = new QToolButton(refreshRow);
+    m_openLocalButton->setIcon(
+        m_dialog->style()->standardIcon(QStyle::SP_DialogOpenButton));
+    m_openLocalButton->setToolTip(tr("Open local URL"));
+    m_refreshButton = new QToolButton(refreshRow);
+    m_refreshButton->setIcon(m_dialog->style()->standardIcon(QStyle::SP_BrowserReload));
+    m_refreshButton->setToolTip(tr("Refresh service endpoints"));
+    refreshLayout->addWidget(m_localUrlEdit, 1);
+    refreshLayout->addWidget(m_openLocalButton);
+    refreshLayout->addWidget(m_refreshButton);
 
     auto createUrlRow = [this, endpointGroup](QLineEdit **urlEdit,
                                                QToolButton **openButton,
@@ -118,11 +80,9 @@ void HttpServerManagerDialog::setupUi()
         return row;
     };
 
-    endpointLayout->addRow(
-        tr("Local:"), createUrlRow(&m_localUrlEdit, &m_openLocalButton, tr("Open local URL")));
+    endpointLayout->addRow(tr("Local:"), refreshRow);
     endpointLayout->addRow(
         tr("LAN:"), createUrlRow(&m_lanUrlEdit, &m_openLanButton, tr("Open LAN URL")));
-
     auto *testRow = new QWidget(endpointGroup);
     auto *testLayout = new QHBoxLayout(testRow);
     testLayout->setContentsMargins(0, 0, 0, 0);
@@ -163,26 +123,10 @@ void HttpServerManagerDialog::setupUi()
     m_feedbackLabel->hide();
     mainLayout->addWidget(m_feedbackLabel);
 
-    auto *saveLayout = new QHBoxLayout();
-    saveLayout->addStretch();
-    auto *saveButton = new QPushButton(tr("Save Config"), m_dialog);
-    saveButton->setIcon(m_dialog->style()->standardIcon(QStyle::SP_DialogSaveButton));
-    saveLayout->addWidget(saveButton);
-    mainLayout->addLayout(saveLayout);
     mainLayout->addStretch();
 
     connect(m_refreshButton, &QToolButton::clicked,
-            this, &HttpServerManagerDialog::refreshNetworkInterfaces);
-    connect(m_interfaceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &HttpServerManagerDialog::onInterfaceChanged);
-    connect(m_addressCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &HttpServerManagerDialog::updateUrls);
-    connect(m_portSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
-            this, &HttpServerManagerDialog::updateUrls);
-    connect(m_bindAllCheckBox, &QCheckBox::toggled,
-            this, &HttpServerManagerDialog::updateUrls);
-    connect(saveButton, &QPushButton::clicked,
-            this, &HttpServerManagerDialog::saveConfiguration);
+            this, &HttpServerManagerDialog::refreshConfiguration);
     connect(m_startButton, &QPushButton::clicked,
             this, &HttpServerManagerDialog::requestStart);
     connect(m_stopButton, &QPushButton::clicked,
@@ -197,116 +141,12 @@ void HttpServerManagerDialog::setupUi()
             this, &HttpServerManagerDialog::openLanUrl);
 }
 
-void HttpServerManagerDialog::refreshNetworkInterfaces()
+void HttpServerManagerDialog::refreshConfiguration()
 {
-    const bool firstLoad = m_interfaceCombo->count() == 0;
-    const QString preferredInterface = firstLoad
-        ? m_mainWindow->m_softwareconfig->httpServerInterfaceName()
-        : m_interfaceCombo->currentData().toString();
-    const QString preferredAddress = firstLoad
-        ? m_mainWindow->m_softwareconfig->httpServerSelectedAddress()
-        : selectedAddress();
-
-    const QSignalBlocker blocker(m_interfaceCombo);
-    m_interfaceCombo->clear();
-
-    QList<QNetworkInterface> loopbackInterfaces;
-    const QList<QNetworkInterface> interfaces = QNetworkInterface::allInterfaces();
-    for (const QNetworkInterface &networkInterface : interfaces) {
-        const auto flags = networkInterface.flags();
-        if (!(flags & QNetworkInterface::IsUp) || !(flags & QNetworkInterface::IsRunning)) {
-            continue;
-        }
-
-        bool hasIpv4Address = false;
-        for (const QNetworkAddressEntry &entry : networkInterface.addressEntries()) {
-            if (entry.ip().protocol() == QAbstractSocket::IPv4Protocol && !entry.ip().isNull()) {
-                hasIpv4Address = true;
-                break;
-            }
-        }
-        if (!hasIpv4Address) {
-            continue;
-        }
-
-        if (flags & QNetworkInterface::IsLoopBack) {
-            loopbackInterfaces.append(networkInterface);
-            continue;
-        }
-
-        const QString displayName = networkInterface.humanReadableName().isEmpty()
-            ? networkInterface.name()
-            : networkInterface.humanReadableName();
-        m_interfaceCombo->addItem(
-            QStringLiteral("%1 (%2)").arg(displayName, networkInterface.name()),
-            networkInterface.name());
-    }
-
-    for (const QNetworkInterface &networkInterface : loopbackInterfaces) {
-        const QString displayName = networkInterface.humanReadableName().isEmpty()
-            ? tr("Loopback")
-            : networkInterface.humanReadableName();
-        m_interfaceCombo->addItem(
-            QStringLiteral("%1 (%2)").arg(displayName, networkInterface.name()),
-            networkInterface.name());
-    }
-
-    if (m_interfaceCombo->count() == 0) {
-        m_interfaceCombo->addItem(tr("Loopback (local only)"), QStringLiteral("__loopback__"));
-    }
-
-    int interfaceIndex = m_interfaceCombo->findData(preferredInterface);
-    if (interfaceIndex < 0 && m_interfaceCombo->count() > 0) {
-        interfaceIndex = 0;
-    }
-    m_interfaceCombo->setCurrentIndex(interfaceIndex);
-    populateAddresses(preferredAddress);
-
-    const bool hasInterface = m_interfaceCombo->count() > 0;
-    m_interfaceCombo->setEnabled(hasInterface);
-    m_addressCombo->setEnabled(hasInterface);
+    const ServerConfig config = currentConfiguration();
+    m_localUrlEdit->setText(
+        QStringLiteral("http://127.0.0.1:%1").arg(config.serverPort));
     updateUrls();
-
-    if (!hasInterface) {
-        showFeedback(tr("No active IPv4 network interface was found."), true);
-    }
-}
-
-void HttpServerManagerDialog::onInterfaceChanged()
-{
-    populateAddresses();
-    updateUrls();
-}
-
-void HttpServerManagerDialog::populateAddresses(const QString &preferredAddress)
-{
-    const QSignalBlocker blocker(m_addressCombo);
-    m_addressCombo->clear();
-
-    const QString interfaceName = m_interfaceCombo->currentData().toString();
-    if (interfaceName == QStringLiteral("__loopback__")) {
-        m_addressCombo->addItem(QHostAddress(QHostAddress::LocalHost).toString());
-        m_addressCombo->setCurrentIndex(0);
-        return;
-    }
-
-    const QNetworkInterface networkInterface = QNetworkInterface::interfaceFromName(interfaceName);
-    for (const QNetworkAddressEntry &entry : networkInterface.addressEntries()) {
-        const QHostAddress address = entry.ip();
-        if (address.protocol() != QAbstractSocket::IPv4Protocol || address.isNull()) {
-            continue;
-        }
-        const QString addressText = address.toString();
-        if (m_addressCombo->findText(addressText) < 0) {
-            m_addressCombo->addItem(addressText);
-        }
-    }
-
-    int addressIndex = m_addressCombo->findText(preferredAddress);
-    if (addressIndex < 0 && m_addressCombo->count() > 0) {
-        addressIndex = 0;
-    }
-    m_addressCombo->setCurrentIndex(addressIndex);
 }
 
 void HttpServerManagerDialog::updateUrls()
@@ -323,44 +163,11 @@ void HttpServerManagerDialog::updateUrls()
                              && (hasLanUrl || hasLocalUrl));
 }
 
-void HttpServerManagerDialog::saveConfiguration()
-{
-    if (!validateConfiguration()) {
-        return;
-    }
-
-    SoftwareConfig *config = m_mainWindow->m_softwareconfig;
-    config->setHttpServerInterfaceName(m_interfaceCombo->currentData().toString());
-    config->setHttpServerSelectedAddress(selectedAddress());
-    config->setHttpServerPort(static_cast<quint16>(m_portSpinBox->value()));
-    config->setHttpServerBindAllInterfaces(m_bindAllCheckBox->isChecked());
-    config->setHttpServerAutoStart(m_autoStartCheckBox->isChecked());
-    config->setHttpServerKeepOriginal(m_keepOriginalCheckBox->isChecked());
-    config->setHttpServerMaxImageWidth(m_maxImageWidthSpinBox->value());
-    config->Write_config();
-
-    emit configurationSaveRequested(
-        effectiveBindAddress(),
-        static_cast<quint16>(m_portSpinBox->value()),
-        m_autoStartCheckBox->isChecked(),
-        m_keepOriginalCheckBox->isChecked(),
-        m_maxImageWidthSpinBox->value());
-
-    showFeedback(tr("HTTP server configuration saved."));
-    LOG_INFO(QString("HTTP server configuration saved: %1:%2")
-                 .arg(effectiveBindAddress())
-                 .arg(m_portSpinBox->value()));
-}
-
 void HttpServerManagerDialog::requestStart()
 {
-    if (!validateConfiguration()) {
-        return;
-    }
-    saveConfiguration();
     showFeedback(tr("Start request sent. Waiting for the server response."));
-    emit startServerRequested(effectiveBindAddress(),
-                              static_cast<quint16>(m_portSpinBox->value()));
+    const ServerConfig config = currentConfiguration();
+    emit startServerRequested(config.serverInterface, config.serverPort);
 }
 
 void HttpServerManagerDialog::requestStop()
@@ -371,13 +178,9 @@ void HttpServerManagerDialog::requestStop()
 
 void HttpServerManagerDialog::requestRestart()
 {
-    if (!validateConfiguration()) {
-        return;
-    }
-    saveConfiguration();
     showFeedback(tr("Restart request sent. Waiting for the server response."));
-    emit restartServerRequested(effectiveBindAddress(),
-                                static_cast<quint16>(m_portSpinBox->value()));
+    const ServerConfig config = currentConfiguration();
+    emit restartServerRequested(config.serverInterface, config.serverPort);
 }
 
 void HttpServerManagerDialog::requestReachabilityTest()
@@ -462,45 +265,6 @@ void HttpServerManagerDialog::setReachabilityState(ReachabilityState state,
     m_testButton->setEnabled(state != ReachabilityState::Testing);
 }
 
-void HttpServerManagerDialog::applyServerConfiguration(const QString &serverInterface,
-                                                       quint16 serverPort,
-                                                       bool autoStart,
-                                                       bool keepOriginal,
-                                                       int maxImageWidth)
-{
-    if (!m_dialog) {
-        return;
-    }
-
-    m_portSpinBox->setValue(serverPort);
-    m_autoStartCheckBox->setChecked(autoStart);
-    m_keepOriginalCheckBox->setChecked(keepOriginal);
-    m_maxImageWidthSpinBox->setValue(maxImageWidth);
-
-    const bool bindAll = serverInterface == QHostAddress(QHostAddress::AnyIPv4).toString();
-    m_bindAllCheckBox->setChecked(bindAll);
-    if (!bindAll) {
-        for (int index = 0; index < m_interfaceCombo->count(); ++index) {
-            const QString interfaceName = m_interfaceCombo->itemData(index).toString();
-            const QNetworkInterface networkInterface =
-                QNetworkInterface::interfaceFromName(interfaceName);
-            bool addressFound = false;
-            for (const QNetworkAddressEntry &entry : networkInterface.addressEntries()) {
-                if (entry.ip().toString() == serverInterface) {
-                    addressFound = true;
-                    break;
-                }
-            }
-            if (addressFound) {
-                m_interfaceCombo->setCurrentIndex(index);
-                populateAddresses(serverInterface);
-                break;
-            }
-        }
-    }
-    updateUrls();
-}
-
 void HttpServerManagerDialog::showBootstrapCredentials(const QString &username,
                                                        const QString &password)
 {
@@ -544,37 +308,39 @@ void HttpServerManagerDialog::showFeedback(const QString &message, bool isError)
     m_feedbackLabel->style()->polish(m_feedbackLabel);
 }
 
-QString HttpServerManagerDialog::selectedAddress() const
+ServerConfig HttpServerManagerDialog::currentConfiguration() const
 {
-    return m_addressCombo->currentText().trimmed();
-}
-
-QString HttpServerManagerDialog::effectiveBindAddress() const
-{
-    return m_bindAllCheckBox->isChecked()
-        ? QHostAddress(QHostAddress::AnyIPv4).toString()
-        : selectedAddress();
+    ServerConfig config;
+    const SoftwareConfig *settings = m_mainWindow->m_softwareconfig;
+    config.serverInterface = settings->httpServerBindAllInterfaces()
+        ? QStringLiteral("0.0.0.0")
+        : settings->httpServerSelectedAddress();
+    if (config.serverInterface.isEmpty()) {
+        config.serverInterface = QStringLiteral("127.0.0.1");
+    }
+    config.serverPort = settings->httpServerPort();
+    config.autoStart = settings->httpServerAutoStart();
+    config.keepOriginal = settings->httpServerKeepOriginal();
+    config.maxImageWidth = settings->httpServerMaxImageWidth();
+    return config;
 }
 
 QUrl HttpServerManagerDialog::localUrl() const
 {
-    return QUrl(QStringLiteral("http://127.0.0.1:%1").arg(m_portSpinBox->value()));
+    return QUrl(QStringLiteral("http://127.0.0.1:%1")
+                   .arg(currentConfiguration().serverPort));
 }
 
 QUrl HttpServerManagerDialog::lanUrl() const
 {
-    const QString address = selectedAddress();
+    const QString address = m_mainWindow->m_softwareconfig
+        ->httpServerSelectedAddress().trimmed();
+    if (address == QStringLiteral("0.0.0.0") || address == QStringLiteral("127.0.0.1")) {
+        return QUrl();
+    }
     if (address.isEmpty()) {
         return QUrl();
     }
-    return QUrl(QStringLiteral("http://%1:%2").arg(address).arg(m_portSpinBox->value()));
-}
-
-bool HttpServerManagerDialog::validateConfiguration()
-{
-    if (!m_bindAllCheckBox->isChecked() && selectedAddress().isEmpty()) {
-        showFeedback(tr("Select a valid IPv4 address before starting the server."), true);
-        return false;
-    }
-    return true;
+    return QUrl(QStringLiteral("http://%1:%2")
+                   .arg(address).arg(currentConfiguration().serverPort));
 }

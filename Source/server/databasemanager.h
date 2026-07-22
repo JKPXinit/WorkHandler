@@ -8,6 +8,16 @@
 
 #include <optional>
 
+struct UserSummary
+{
+    qint64 id {0};
+    QString username;
+    QString role;
+    QString displayName;
+    QString createdAt;
+    bool usesDefaultPassword {false};
+};
+
 struct UserRecord
 {
     qint64 id {0};
@@ -16,19 +26,10 @@ struct UserRecord
     QString role;
     QString displayName;
     QString createdAt;
+    int tokenVersion {0};
 
     QJsonObject toJson() const;
-};
-
-struct ServerConfig
-{
-    QString serverInterface {QStringLiteral("0.0.0.0")};
-    quint16 serverPort {8080};
-    bool autoStart {true};
-    bool keepOriginal {false};
-    int maxImageWidth {1920};
-
-    QJsonObject toJson() const;
+    UserSummary toSummary() const;
 };
 
 class DatabaseManager
@@ -62,19 +63,26 @@ public:
                     QString *errorMessage = nullptr);
     bool deleteUser(qint64 id, QString *errorMessage = nullptr);
     int adminCount(QString *errorMessage = nullptr) const;
+    bool updatePasswordAndTokenSecret(qint64 userId,
+                                      const QString &passwordHash,
+                                      QByteArray *newTokenSecret,
+                                      QString *errorMessage = nullptr);
+    bool updatePasswordAndIncrementTokenVersion(
+        qint64 userId,
+        const QString &passwordHash,
+        int *newTokenVersion,
+        QString *errorMessage = nullptr);
 
-    ServerConfig serverConfig(QString *errorMessage = nullptr) const;
-    bool setServerConfig(const ServerConfig &config, QString *errorMessage = nullptr);
     QByteArray tokenSecret(QString *errorMessage = nullptr) const;
 
 private:
     bool execute(const QString &sql, QString *errorMessage = nullptr) const;
-    bool setConfigValue(const QString &key,
-                        const QString &value,
-                        QString *errorMessage = nullptr);
-    QString configValue(const QString &key,
-                        const QString &fallback = QString(),
-                        QString *errorMessage = nullptr) const;
+    bool setSecurityState(const QString &key,
+                          const QString &value,
+                          QString *errorMessage = nullptr);
+    QString securityState(const QString &key,
+                          const QString &fallback = QString(),
+                          QString *errorMessage = nullptr) const;
     static UserRecord readUser(const class QSqlQuery &query);
     static void setError(QString *target, const QString &message);
 

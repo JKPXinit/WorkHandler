@@ -18,6 +18,8 @@
 #include <QTcpServer>
 #include <QTimer>
 
+#include <utility>
+
 namespace {
 using StatusCode = QHttpServerResponse::StatusCode;
 
@@ -25,6 +27,17 @@ QString databaseErrorMessage(const QString &detail)
 {
     return detail.isEmpty() ? QStringLiteral("Database operation failed.") : detail;
 }
+}
+
+QJsonObject ServerConfig::toJson() const
+{
+    return {
+        {QStringLiteral("server_interface"), serverInterface},
+        {QStringLiteral("server_port"), int(serverPort)},
+        {QStringLiteral("auto_start"), autoStart},
+        {QStringLiteral("keep_original"), keepOriginal},
+        {QStringLiteral("max_image_width"), maxImageWidth}
+    };
 }
 
 HttpServer::HttpServer(const QString &databasePath, QObject *parent)
@@ -86,7 +99,154 @@ bool HttpServer::isRunning() const
 
 ServerConfig HttpServer::configuration(QString *errorMessage) const
 {
-    return m_database.serverConfig(errorMessage);
+    if (errorMessage) {
+        errorMessage->clear();
+    }
+    return m_configurationProvider ? m_configurationProvider(errorMessage)
+                                   : ServerConfig();
+}
+
+void HttpServer::setConfigurationProvider(
+    std::function<ServerConfig(QString *)> provider)
+{
+    m_configurationProvider = std::move(provider);
+}
+
+QList<UserSummary> HttpServer::accountSummaries(QString *errorMessage) const
+{
+    QList<UserSummary> summaries;
+    if (errorMessage) {
+        errorMessage->clear();
+    }
+    if (!m_initialized) {
+        if (errorMessage) {
+            *errorMessage = tr("Account database is not initialized.");
+        }
+        return summaries;
+    }
+
+    const QList<UserRecord> records = m_database.users(errorMessage);
+    summaries.reserve(records.size());
+    for (const UserRecord &record : records) {
+        summaries.append(record.toSummary());
+    }
+    return summaries;
+}
+
+bool HttpServer::createManagedUser(const QString &username,
+                                   UserSummary *createdUser,
+                                   QString *errorMessage)
+{
+    if (errorMessage) {
+        errorMessage->clear();
+    }
+    if (!m_initialized) {
+        if (errorMessage) {
+            *errorMessage = tr("Account database is not initialized.");
+        }
+        return false;
+    }
+
+    const QString normalizedUsername = username.trimmed();
+    if (!validUsername(normalizedUsername)) {
+        if (errorMessage) {
+            *errorMessage = tr("Provide a username of at most 64 characters without spaces.");
+        }
+        return false;
+    }
+    if (normalizedUsername.compare(QStringLiteral("admin"),
+                                   Qt::CaseInsensitive) == 0) {
+        if (errorMessage) {
+            *errorMessage = tr("The admin username is reserved.");
+        }
+        return false;
+    }
+    if (m_database.usernameExists(normalizedUsername)) {
+        if (errorMessage) {
+            *errorMessage = tr("The username already exists.");
+        }
+        return false;
+    }
+
+    UserRecord user;
+    QString databaseError;
+    if (!m_database.createUser(
+            normalizedUsername,
+            PasswordHasher::hashPassword(QStringLiteral("123456")),
+            QStringLiteral("user"),
+            QString(),
+            &user,
+            &databaseError)) {
+        if (errorMessage) {
+            *errorMessage = databaseErrorMessage(databaseError);
+        }
+        return false;
+    }
+
+    if (createdUser) {
+        *createdUser = user.toSummary();
+    }
+    emit accountsChanged();
+    return true;
+}
+
+bool HttpServer::changeAdminPassword(const QString &currentPassword,
+                                     const QString &newPassword,
+                                     QString *errorMessage)
+{
+    if (errorMessage) {
+        errorMessage->clear();
+    }
+    if (!m_initialized) {
+        if (errorMessage) {
+            *errorMessage = tr("Account database is not initialized.");
+        }
+        return false;
+    }
+    if (newPassword.size() < 8 || newPassword.size() > 256) {
+        if (errorMessage) {
+            *errorMessage = tr("The new password must contain 8 to 256 characters.");
+        }
+        return false;
+    }
+
+    QString databaseError;
+    const auto admin = m_database.userByUsername(
+        QStringLiteral("admin"), &databaseError);
+    if (!databaseError.isEmpty()) {
+        if (errorMessage) {
+            *errorMessage = databaseErrorMessage(databaseError);
+        }
+        return false;
+    }
+    if (!admin) {
+        if (errorMessage) {
+            *errorMessage = tr("The admin account was not found.");
+        }
+        return false;
+    }
+    if (!PasswordHasher::verifyPassword(currentPassword, admin->passwordHash)) {
+        if (errorMessage) {
+            *errorMessage = tr("The current password is incorrect.");
+        }
+        return false;
+    }
+
+    QByteArray newTokenSecret;
+    if (!m_database.updatePasswordAndTokenSecret(
+            admin->id,
+            PasswordHasher::hashPassword(newPassword),
+            &newTokenSecret,
+            &databaseError)) {
+        if (errorMessage) {
+            *errorMessage = databaseErrorMessage(databaseError);
+        }
+        return false;
+    }
+
+    m_tokenHelper.setSecret(newTokenSecret);
+    emit accountsChanged();
+    return true;
 }
 
 bool HttpServer::startServer(const QString &bindAddress, quint16 port)
@@ -111,7 +271,7 @@ bool HttpServer::startServer(const QString &bindAddress, quint16 port)
         return false;
     }
 
-    ServerConfig config = m_database.serverConfig();
+    ServerConfig config = configuration();
     config.serverInterface = bindAddress;
     config.serverPort = port;
     QString configError;
@@ -191,9 +351,6 @@ bool HttpServer::updateConfiguration(const ServerConfig &config, QString *errorM
         return false;
     }
 
-    if (!m_database.setServerConfig(config, errorMessage)) {
-        return false;
-    }
     emit configurationChanged(config.serverInterface,
                               config.serverPort,
                               config.autoStart,
@@ -277,7 +434,8 @@ void HttpServer::registerRoutes()
             }
 
             return successResponse({
-                {QStringLiteral("token"), m_tokenHelper.issue(user->id, user->role)},
+                {QStringLiteral("token"),
+                 m_tokenHelper.issue(user->id, user->role, user->tokenVersion)},
                 {QStringLiteral("user"), user->toJson()}
             });
         });
@@ -307,6 +465,56 @@ void HttpServer::registerRoutes()
         });
 
     m_httpServer.route(
+        QStringLiteral("/api/auth/password"), Method::Put,
+        [this](const QHttpServerRequest &request) {
+            const AuthorizationResult authorization = authorize(request, false);
+            if (!authorization.authorized) {
+                return authorizationError(authorization);
+            }
+            if (authorization.user.username == QStringLiteral("admin")) {
+                return errorResponse(StatusCode::Forbidden,
+                                     QStringLiteral("admin_password_desktop_only"),
+                                     tr("The admin password can only be changed in the desktop application."));
+            }
+
+            QJsonObject body;
+            QString parseError;
+            if (!parseJsonObject(request, &body, &parseError)) {
+                return errorResponse(StatusCode::BadRequest,
+                                     QStringLiteral("invalid_json"), parseError);
+            }
+            const QString newPassword =
+                body.value(QStringLiteral("new_password")).toString();
+            if (newPassword.size() < 8 || newPassword.size() > 256) {
+                return errorResponse(
+                    StatusCode::BadRequest,
+                    QStringLiteral("invalid_password"),
+                    tr("The new password must contain 8 to 256 characters."));
+            }
+
+            int newTokenVersion = -1;
+            QString databaseError;
+            if (!m_database.updatePasswordAndIncrementTokenVersion(
+                    authorization.user.id,
+                    PasswordHasher::hashPassword(newPassword),
+                    &newTokenVersion,
+                    &databaseError)) {
+                return errorResponse(StatusCode::InternalServerError,
+                                     QStringLiteral("database_error"),
+                                     databaseErrorMessage(databaseError));
+            }
+
+            emit accountsChanged();
+            return successResponse({
+                {QStringLiteral("token"),
+                 m_tokenHelper.issue(authorization.user.id,
+                                     authorization.user.role,
+                                     newTokenVersion)},
+                {QStringLiteral("user"), authorization.user.toJson()}
+            });
+        });
+
+    m_httpServer.route(
         QStringLiteral("/api/users"), Method::Get,
         [this](const QHttpServerRequest &request) {
             const AuthorizationResult authorization = authorize(request, true);
@@ -329,50 +537,11 @@ void HttpServer::registerRoutes()
 
     m_httpServer.route(
         QStringLiteral("/api/users"), Method::Post,
-        [this](const QHttpServerRequest &request) {
-            const AuthorizationResult authorization = authorize(request, true);
-            if (!authorization.authorized) {
-                return authorizationError(authorization);
-            }
-            QJsonObject body;
-            QString parseError;
-            if (!parseJsonObject(request, &body, &parseError)) {
-                return errorResponse(StatusCode::BadRequest,
-                                     QStringLiteral("invalid_json"), parseError);
-            }
-            const QString username = body.value(QStringLiteral("username"))
-                                         .toString().trimmed();
-            const QString password = body.value(QStringLiteral("password")).toString();
-            const QString role = body.value(QStringLiteral("role")).toString();
-            const QString displayName = body.value(QStringLiteral("display_name"))
-                                            .toString().trimmed();
-            if (!validUsername(username) || password.size() < 8
-                || password.size() > 256 || !validRole(role)
-                || displayName.size() > 128) {
-                return errorResponse(StatusCode::BadRequest,
-                                     QStringLiteral("invalid_user"),
-                                     tr("Provide a valid username, role and password of at least 8 characters."));
-            }
-            if (m_database.usernameExists(username)) {
-                return errorResponse(StatusCode::Conflict,
-                                     QStringLiteral("username_exists"),
-                                     tr("The username already exists."));
-            }
-
-            UserRecord user;
-            QString databaseError;
-            if (!m_database.createUser(username,
-                                       PasswordHasher::hashPassword(password),
-                                       role,
-                                       displayName,
-                                       &user,
-                                       &databaseError)) {
-                return errorResponse(StatusCode::InternalServerError,
-                                     QStringLiteral("database_error"),
-                                     databaseErrorMessage(databaseError));
-            }
-            return successResponse({{QStringLiteral("user"), user.toJson()}},
-                                   StatusCode::Created);
+        [this](const QHttpServerRequest &) {
+            return errorResponse(
+                StatusCode::MethodNotAllowed,
+                QStringLiteral("registration_managed_by_application"),
+                tr("User registration is managed by the desktop application."));
         });
 
     m_httpServer.route(
@@ -423,6 +592,12 @@ void HttpServer::registerRoutes()
                 return errorResponse(StatusCode::BadRequest,
                                      QStringLiteral("invalid_json"), parseError);
             }
+            if (body.contains(QStringLiteral("password"))) {
+                return errorResponse(
+                    StatusCode::BadRequest,
+                    QStringLiteral("password_change_not_allowed"),
+                    tr("Use the current-user password endpoint to change a password."));
+            }
             const QString username = body.contains(QStringLiteral("username"))
                 ? body.value(QStringLiteral("username")).toString().trimmed()
                 : existing->username;
@@ -432,13 +607,26 @@ void HttpServer::registerRoutes()
             const QString displayName = body.contains(QStringLiteral("display_name"))
                 ? body.value(QStringLiteral("display_name")).toString().trimmed()
                 : existing->displayName;
-            const QString password = body.value(QStringLiteral("password")).toString();
             if (!validUsername(username) || !validRole(role)
-                || displayName.size() > 128
-                || (!password.isEmpty() && (password.size() < 8 || password.size() > 256))) {
+                || displayName.size() > 128) {
                 return errorResponse(StatusCode::BadRequest,
                                      QStringLiteral("invalid_user"),
                                      tr("The user fields are invalid."));
+            }
+            if (existing->username == QStringLiteral("admin")
+                && (username != QStringLiteral("admin")
+                    || role != QStringLiteral("admin"))) {
+                return errorResponse(
+                    StatusCode::Conflict,
+                    QStringLiteral("protected_admin"),
+                    tr("The fixed admin account cannot be renamed or demoted."));
+            }
+            if (existing->username != QStringLiteral("admin")
+                && username.compare(QStringLiteral("admin"),
+                                    Qt::CaseInsensitive) == 0) {
+                return errorResponse(StatusCode::Conflict,
+                                     QStringLiteral("reserved_username"),
+                                     tr("The admin username is reserved."));
             }
             if (m_database.usernameExists(username, id)) {
                 return errorResponse(StatusCode::Conflict,
@@ -461,15 +649,13 @@ void HttpServer::registerRoutes()
             }
 
             UserRecord updated;
-            const QString passwordHash = password.isEmpty()
-                ? QString()
-                : PasswordHasher::hashPassword(password);
             if (!m_database.updateUser(id, username, role, displayName,
-                                       passwordHash, &updated, &databaseError)) {
+                                       QString(), &updated, &databaseError)) {
                 return errorResponse(StatusCode::InternalServerError,
                                      QStringLiteral("database_error"),
                                      databaseErrorMessage(databaseError));
             }
+            emit accountsChanged();
             return successResponse({{QStringLiteral("user"), updated.toJson()}});
         });
 
@@ -492,6 +678,11 @@ void HttpServer::registerRoutes()
                                      QStringLiteral("user_not_found"),
                                      tr("User was not found."));
             }
+            if (existing->username == QStringLiteral("admin")) {
+                return errorResponse(StatusCode::Conflict,
+                                     QStringLiteral("protected_admin"),
+                                     tr("The fixed admin account cannot be deleted."));
+            }
             if (existing->role == QStringLiteral("admin")) {
                 const int administrators = m_database.adminCount(&databaseError);
                 if (!databaseError.isEmpty()) {
@@ -510,6 +701,7 @@ void HttpServer::registerRoutes()
                                      QStringLiteral("delete_failed"),
                                      databaseErrorMessage(databaseError));
             }
+            emit accountsChanged();
             return successResponse({{QStringLiteral("deleted_id"), id}});
         });
 
@@ -520,93 +712,14 @@ void HttpServer::registerRoutes()
             if (!authorization.authorized) {
                 return authorizationError(authorization);
             }
-            QString databaseError;
-            const ServerConfig config = m_database.serverConfig(&databaseError);
-            if (!databaseError.isEmpty()) {
+            QString configurationError;
+            const ServerConfig config = configuration(&configurationError);
+            if (!configurationError.isEmpty()) {
                 return errorResponse(StatusCode::InternalServerError,
-                                     QStringLiteral("database_error"),
-                                     databaseErrorMessage(databaseError));
+                                     QStringLiteral("configuration_error"),
+                                     configurationError);
             }
             return successResponse({{QStringLiteral("config"), config.toJson()}});
-        });
-
-    m_httpServer.route(
-        QStringLiteral("/api/server/config"), Method::Put,
-        [this](const QHttpServerRequest &request) {
-            const AuthorizationResult authorization = authorize(request, true);
-            if (!authorization.authorized) {
-                return authorizationError(authorization);
-            }
-            QJsonObject body;
-            QString parseError;
-            if (!parseJsonObject(request, &body, &parseError)) {
-                return errorResponse(StatusCode::BadRequest,
-                                     QStringLiteral("invalid_json"), parseError);
-            }
-            ServerConfig config = m_database.serverConfig();
-            if (body.contains(QStringLiteral("server_interface"))) {
-                config.serverInterface = body.value(
-                    QStringLiteral("server_interface")).toString().trimmed();
-            }
-            if (body.contains(QStringLiteral("server_port"))) {
-                const QJsonValue portValue = body.value(QStringLiteral("server_port"));
-                const int port = portValue.isDouble() ? portValue.toInt(-1) : -1;
-                if (port < 1 || port > 65535) {
-                    return errorResponse(StatusCode::BadRequest,
-                                         QStringLiteral("invalid_config"),
-                                         tr("server_port must be between 1 and 65535."));
-                }
-                config.serverPort = static_cast<quint16>(port);
-            }
-            if (body.contains(QStringLiteral("auto_start"))) {
-                if (!body.value(QStringLiteral("auto_start")).isBool()) {
-                    return errorResponse(StatusCode::BadRequest,
-                                         QStringLiteral("invalid_config"),
-                                         tr("auto_start must be a boolean."));
-                }
-                config.autoStart = body.value(QStringLiteral("auto_start")).toBool();
-            }
-            if (body.contains(QStringLiteral("keep_original"))) {
-                if (!body.value(QStringLiteral("keep_original")).isBool()) {
-                    return errorResponse(StatusCode::BadRequest,
-                                         QStringLiteral("invalid_config"),
-                                         tr("keep_original must be a boolean."));
-                }
-                config.keepOriginal = body.value(QStringLiteral("keep_original")).toBool();
-            }
-            if (body.contains(QStringLiteral("max_image_width"))) {
-                const QJsonValue widthValue = body.value(
-                    QStringLiteral("max_image_width"));
-                if (!widthValue.isDouble()) {
-                    return errorResponse(StatusCode::BadRequest,
-                                         QStringLiteral("invalid_config"),
-                                         tr("max_image_width must be a number."));
-                }
-                config.maxImageWidth = widthValue.toInt(-1);
-            }
-
-            QString configError;
-            if (!updateConfiguration(config, &configError)) {
-                return errorResponse(StatusCode::BadRequest,
-                                     QStringLiteral("invalid_config"), configError);
-            }
-            return successResponse({{QStringLiteral("config"), config.toJson()}});
-        });
-
-    m_httpServer.route(
-        QStringLiteral("/api/server/restart"), Method::Post,
-        [this](const QHttpServerRequest &request) {
-            const AuthorizationResult authorization = authorize(request, true);
-            if (!authorization.authorized) {
-                return authorizationError(authorization);
-            }
-            const ServerConfig config = m_database.serverConfig();
-            const QString url = restartUrl(request, config);
-            QTimer::singleShot(200, this, [this, config]() {
-                restartServer(config.serverInterface, config.serverPort);
-            });
-            return successResponse({{QStringLiteral("restart_url"), url}},
-                                   StatusCode::Accepted);
         });
 
     m_httpServer.setMissingHandler(
@@ -659,6 +772,11 @@ HttpServer::AuthorizationResult HttpServer::authorize(
             : databaseErrorMessage(databaseError);
         return result;
     }
+    if (claims.tokenVersion != user->tokenVersion) {
+        result.code = QStringLiteral("unauthorized");
+        result.message = tr("The token is no longer valid.");
+        return result;
+    }
     if (adminRequired && user->role != QStringLiteral("admin")) {
         result.code = QStringLiteral("forbidden");
         result.message = tr("Administrator permission is required.");
@@ -686,7 +804,7 @@ QHttpServerResponse HttpServer::staticFrontendResponse() const
 
 QHttpServerResponse HttpServer::healthResponse() const
 {
-    const ServerConfig config = m_database.serverConfig();
+    const ServerConfig config = configuration();
     const QString address = isRunning()
         ? QStringLiteral("%1:%2").arg(m_bindAddress).arg(m_port)
         : QStringLiteral("%1:%2").arg(config.serverInterface).arg(config.serverPort);
@@ -787,17 +905,4 @@ bool HttpServer::validUsername(const QString &username)
         }
     }
     return true;
-}
-
-QString HttpServer::restartUrl(const QHttpServerRequest &request,
-                               const ServerConfig &config)
-{
-    QString host = config.serverInterface;
-    if (host.isEmpty() || host == QStringLiteral("0.0.0.0")) {
-        host = request.localAddress().toString();
-    }
-    if (host.isEmpty() || host == QStringLiteral("0.0.0.0")) {
-        host = QStringLiteral("127.0.0.1");
-    }
-    return QStringLiteral("http://%1:%2").arg(host).arg(config.serverPort);
 }

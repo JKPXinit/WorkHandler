@@ -5,13 +5,29 @@
 #include "tokenhelper.h"
 
 #include <QHttpServer>
+#include <QJsonObject>
 #include <QObject>
+#include <QString>
 #include <QUrl>
+#include <QtGlobal>
+
+#include <functional>
 
 class QNetworkAccessManager;
 class QTcpServer;
 class QHttpServerRequest;
 class QHttpServerResponse;
+
+struct ServerConfig
+{
+    QString serverInterface {QStringLiteral("0.0.0.0")};
+    quint16 serverPort {8080};
+    bool autoStart {true};
+    bool keepOriginal {false};
+    int maxImageWidth {1920};
+
+    QJsonObject toJson() const;
+};
 
 class HttpServer : public QObject
 {
@@ -34,6 +50,14 @@ public:
     bool databaseWasCreated() const;
     bool isRunning() const;
     ServerConfig configuration(QString *errorMessage = nullptr) const;
+    void setConfigurationProvider(std::function<ServerConfig(QString *)> provider);
+    QList<UserSummary> accountSummaries(QString *errorMessage = nullptr) const;
+    bool createManagedUser(const QString &username,
+                           UserSummary *createdUser = nullptr,
+                           QString *errorMessage = nullptr);
+    bool changeAdminPassword(const QString &currentPassword,
+                             const QString &newPassword,
+                             QString *errorMessage = nullptr);
 
 public slots:
     bool startServer(const QString &bindAddress, quint16 port);
@@ -46,6 +70,7 @@ signals:
     void stateChanged(HttpServer::State state, const QString &detail);
     void reachabilityTested(bool reachable, const QString &detail);
     void bootstrapAdminCreated(const QString &username, const QString &password);
+    void accountsChanged();
     void configurationChanged(const QString &serverInterface,
                               quint16 serverPort,
                               bool autoStart,
@@ -82,9 +107,6 @@ private:
     static void addCorsHeaders(QHttpServerResponse *response);
     static bool validRole(const QString &role);
     static bool validUsername(const QString &username);
-    static QString restartUrl(const QHttpServerRequest &request,
-                              const ServerConfig &config);
-
     DatabaseManager m_database;
     TokenHelper m_tokenHelper;
     QHttpServer m_httpServer;
@@ -94,6 +116,7 @@ private:
     QString m_bindAddress;
     quint16 m_port {0};
     bool m_initialized {false};
+    std::function<ServerConfig(QString *)> m_configurationProvider;
 };
 
 #endif // HTTPSERVER_H
