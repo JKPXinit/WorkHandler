@@ -49,7 +49,7 @@ private slots:
     void userCrudAndLastAdminProtection();
     void userPasswordChangeAndTokenVersion();
     void accountSummaryAndAdminPasswordChange();
-    void configurationAndRestart();
+    void configurationReadOnly();
     void cleanupTestCase();
 
 private:
@@ -89,6 +89,16 @@ void HttpServerIntegrationTest::initTestCase()
     QVERIFY(portProbe.listen(QHostAddress::LocalHost, 0));
     m_port = portProbe.serverPort();
     portProbe.close();
+    m_server->setConfigurationProvider([this](QString *errorMessage) {
+        if (errorMessage) {
+            errorMessage->clear();
+        }
+        ServerConfig config;
+        config.serverInterface = QStringLiteral("127.0.0.1");
+        config.serverPort = m_port;
+        config.maxImageWidth = 1600;
+        return config;
+    });
     QVERIFY(m_server->startServer(QStringLiteral("127.0.0.1"), m_port));
 }
 
@@ -144,6 +154,19 @@ void HttpServerIntegrationTest::legacyDatabaseMigration()
             "role TEXT NOT NULL,"
             "display_name TEXT,"
             "created_at DATETIME DEFAULT CURRENT_TIMESTAMP)")));
+        QVERIFY(query.exec(QStringLiteral(
+            "CREATE TABLE system_config ("
+            "key TEXT PRIMARY KEY, value TEXT NOT NULL)")));
+        query.prepare(QStringLiteral(
+            "INSERT INTO system_config(key, value) VALUES(?, ?)"));
+        query.addBindValue(QStringLiteral("server_port"));
+        query.addBindValue(QStringLiteral("9999"));
+        QVERIFY(query.exec());
+        query.prepare(QStringLiteral(
+            "INSERT INTO system_config(key, value) VALUES(?, ?)"));
+        query.addBindValue(QStringLiteral("token_secret"));
+        query.addBindValue(QStringLiteral("legacy-secret"));
+        QVERIFY(query.exec());
         query.prepare(QStringLiteral(
             "INSERT INTO users(username, password, role, display_name) "
             "VALUES(?, ?, ?, ?)"));
@@ -165,6 +188,23 @@ void HttpServerIntegrationTest::legacyDatabaseMigration()
     QCOMPARE(accounts.size(), 1);
     QCOMPARE(accounts.first().username, QStringLiteral("legacy"));
     QVERIFY(accounts.first().usesDefaultPassword);
+
+    legacyServer.stopServer();
+    QSqlDatabase migratedDatabase = QSqlDatabase::addDatabase(
+        QStringLiteral("QSQLITE"), QStringLiteral("legacy_migration_check"));
+    migratedDatabase.setDatabaseName(databasePath);
+    QVERIFY(migratedDatabase.open());
+    QSqlQuery migratedQuery(migratedDatabase);
+    QVERIFY(migratedQuery.exec(QStringLiteral(
+        "SELECT name FROM sqlite_master WHERE type = 'table' "
+        "AND name = 'system_config'")));
+    QVERIFY(!migratedQuery.next());
+    QVERIFY(migratedQuery.exec(QStringLiteral(
+        "SELECT value FROM security_state WHERE key = 'token_secret'")));
+    QVERIFY(migratedQuery.next());
+    QCOMPARE(migratedQuery.value(0).toString(), QStringLiteral("legacy-secret"));
+    migratedDatabase.close();
+    QSqlDatabase::removeDatabase(QStringLiteral("legacy_migration_check"));
 }
 
 void HttpServerIntegrationTest::healthAndCors()
@@ -443,7 +483,7 @@ void HttpServerIntegrationTest::accountSummaryAndAdminPasswordChange()
              200);
 }
 
-void HttpServerIntegrationTest::configurationAndRestart()
+void HttpServerIntegrationTest::configurationReadOnly()
 {
     const QJsonObject config = {
         {QStringLiteral("server_interface"), QStringLiteral("127.0.0.1")},
@@ -452,9 +492,9 @@ void HttpServerIntegrationTest::configurationAndRestart()
         {QStringLiteral("keep_original"), false},
         {QStringLiteral("max_image_width"), 1600}
     };
-    QCOMPARE(request("PUT", QStringLiteral("/api/server/config"),
-                     config, m_token).status,
-             200);
+    const Reply removedUpdate = request("PUT", QStringLiteral("/api/server/config"),
+                                        config, m_token);
+    QCOMPARE(removedUpdate.status, 404);
 
     const Reply read = request("GET", QStringLiteral("/api/server/config"), {}, m_token);
     QCOMPARE(read.status, 200);
@@ -463,13 +503,9 @@ void HttpServerIntegrationTest::configurationAndRestart()
                  .value(QStringLiteral("max_image_width")).toInt(),
              1600);
 
-    QSignalSpy runningSpy(m_server.get(), &HttpServer::stateChanged);
     QCOMPARE(request("POST", QStringLiteral("/api/server/restart"), {}, m_token).status,
-             202);
-    QTRY_VERIFY_WITH_TIMEOUT(runningSpy.count() >= 3, 3000);
-    QTRY_VERIFY_WITH_TIMEOUT(m_server->isRunning(), 3000);
-    QTRY_COMPARE_WITH_TIMEOUT(request("GET", QStringLiteral("/api/health")).status,
-                              200, 3000);
+             404);
+    QVERIFY(m_server->isRunning());
 }
 
 void HttpServerIntegrationTest::cleanupTestCase()

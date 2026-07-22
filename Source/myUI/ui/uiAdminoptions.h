@@ -5,6 +5,8 @@
 #include <QDialog>
 #include <QTreeWidget>
 
+#include <functional>
+
 class MainWindow;
 
 class ui_AdminOptions : public QObject
@@ -24,6 +26,7 @@ private:
     QWidget * createBasicPage();
     QWidget * createLanguagePage();
     QWidget * createThemePage();
+    QWidget * createHttpPage(std::function<bool()> *applyConfiguration);
     QWidget * createAccountPage();
     QWidget * createSystemPage();
     QWidget * createShortcutsPage();

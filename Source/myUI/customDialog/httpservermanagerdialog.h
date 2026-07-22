@@ -7,13 +7,11 @@
 #include <QtGlobal>
 
 class MainWindow;
-class QCheckBox;
-class QComboBox;
+struct ServerConfig;
 class QDialog;
 class QLabel;
 class QLineEdit;
 class QPushButton;
-class QSpinBox;
 class QToolButton;
 
 class HttpServerManagerDialog : public QObject
@@ -45,11 +43,7 @@ public:
 public slots:
     void setServerState(ServerState state, const QString &detail = QString());
     void setReachabilityState(ReachabilityState state, const QString &detail = QString());
-    void applyServerConfiguration(const QString &serverInterface,
-                                  quint16 serverPort,
-                                  bool autoStart,
-                                  bool keepOriginal,
-                                  int maxImageWidth);
+    void refreshConfiguration();
     void showBootstrapCredentials(const QString &username, const QString &password);
 
 signals:
@@ -57,17 +51,9 @@ signals:
     void stopServerRequested();
     void restartServerRequested(const QString &bindAddress, quint16 port);
     void reachabilityTestRequested(const QUrl &url);
-    void configurationSaveRequested(const QString &serverInterface,
-                                    quint16 serverPort,
-                                    bool autoStart,
-                                    bool keepOriginal,
-                                    int maxImageWidth);
 
 private slots:
-    void refreshNetworkInterfaces();
-    void onInterfaceChanged();
     void updateUrls();
-    void saveConfiguration();
     void requestStart();
     void requestStop();
     void requestRestart();
@@ -77,24 +63,14 @@ private slots:
 
 private:
     void setupUi();
-    void populateAddresses(const QString &preferredAddress = QString());
     void updateControlState();
     void showFeedback(const QString &message, bool isError = false);
-    QString selectedAddress() const;
-    QString effectiveBindAddress() const;
+    ServerConfig currentConfiguration() const;
     QUrl localUrl() const;
     QUrl lanUrl() const;
-    bool validateConfiguration();
 
     MainWindow *m_mainWindow {nullptr};
     QDialog *m_dialog {nullptr};
-    QComboBox *m_interfaceCombo {nullptr};
-    QComboBox *m_addressCombo {nullptr};
-    QSpinBox *m_portSpinBox {nullptr};
-    QCheckBox *m_bindAllCheckBox {nullptr};
-    QCheckBox *m_autoStartCheckBox {nullptr};
-    QCheckBox *m_keepOriginalCheckBox {nullptr};
-    QSpinBox *m_maxImageWidthSpinBox {nullptr};
     QLineEdit *m_localUrlEdit {nullptr};
     QLineEdit *m_lanUrlEdit {nullptr};
     QLabel *m_serverStateLabel {nullptr};

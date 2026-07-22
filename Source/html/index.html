@@ -518,21 +518,8 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
     <div class="tile-inner">
       <div class="section-head">
         <div><p class="eyebrow">Admin · Server</p><h2>服务与请求。</h2></div>
-        <div class="actions"><button class="btn" id="loadConfigButton" type="button">读取配置</button><button class="btn btn-secondary" id="restartButton" type="button">重启服务</button></div>
       </div>
       <div class="dark-grid">
-        <form class="dark-panel" id="serverForm">
-          <h3>服务配置</h3>
-          <div class="form-grid">
-            <div class="field"><label for="serverInterface">监听地址</label><input id="serverInterface" value="0.0.0.0"></div>
-            <div class="field"><label for="serverPort">端口</label><input id="serverPort" type="number" min="1" max="65535" value="8080"></div>
-            <label class="check-row"><input id="autoStart" type="checkbox">自动启动</label>
-            <label class="check-row"><input id="keepOriginal" type="checkbox">保留原图</label>
-            <div class="field field-wide"><label for="maxImageWidth">最大图片宽度</label><input id="maxImageWidth" type="number" min="320" value="1920"></div>
-          </div>
-          <div class="actions"><button class="btn" id="saveConfigButton" type="submit">保存配置</button></div>
-        </form>
-
         <form class="dark-panel" id="requestForm">
           <h3>自定义请求</h3>
           <div class="form-grid three">
@@ -572,7 +559,7 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
       <div><h3>Health</h3><code>GET /api/health</code></div>
       <div><h3>Authentication</h3><code>POST /api/auth/login</code><code>POST /api/auth/logout</code><code>GET /api/auth/me</code><code>PUT /api/auth/password</code></div>
       <div><h3>Users</h3><code>GET /api/users</code><code>GET · PUT · DELETE /api/users/:id</code></div>
-      <div><h3>Server</h3><code>GET · PUT /api/server/config</code><code>POST /api/server/restart</code></div>
+      <div><h3>Server</h3><code>GET /api/server/config</code></div>
     </div>
     <div class="footer-bottom">WorkHandler · Phase 1 API Workbench</div>
   </div>
@@ -1071,62 +1058,6 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
     else showToast(resultError(result, "用户删除失败"));
   }
 
-  function asBool(value) { return value === true || value === 1 || value === "1" || value === "true"; }
-
-  function fillServerConfig(config = {}) {
-    $("serverInterface").value = config.server_interface ?? config.interface ?? "0.0.0.0";
-    $("serverPort").value = config.server_port ?? config.port ?? 8080;
-    $("autoStart").checked = asBool(config.auto_start);
-    $("keepOriginal").checked = asBool(config.keep_original);
-    $("maxImageWidth").value = config.max_image_width ?? 1920;
-  }
-
-  async function loadServerConfig() {
-    const result = await apiRequest("/api/server/config");
-    if (result.ok) fillServerConfig(unwrap(result.data, "config") || {});
-    else showToast(resultError(result, "服务配置读取失败"));
-  }
-
-  function serverPayload() {
-    return {
-      server_interface: $("serverInterface").value.trim(),
-      server_port: Number($("serverPort").value),
-      auto_start: $("autoStart").checked,
-      keep_original: $("keepOriginal").checked,
-      max_image_width: Number($("maxImageWidth").value)
-    };
-  }
-
-  async function saveServerConfig(event) {
-    event.preventDefault();
-    const payload = serverPayload();
-    if (!payload.server_interface || payload.server_port < 1 || payload.server_port > 65535) {
-      showToast("监听地址或端口无效");
-      return;
-    }
-    const result = await apiRequest("/api/server/config", { method: "PUT", body: payload });
-    if (result.ok) showToast("服务配置已保存");
-    else showToast(resultError(result, "服务配置保存失败"));
-  }
-
-  async function restartServer() {
-    const result = await apiRequest("/api/server/restart", { method: "POST" });
-    if (!result.ok) {
-      showToast(resultError(result, "重启请求失败"));
-      return;
-    }
-    const data = unwrap(result.data) || {};
-    if (data.restart_url) {
-      try {
-        state.baseUrl = normalizeBaseUrl(data.restart_url);
-        $("baseUrl").value = state.baseUrl;
-        localStorage.setItem(storageKeys.baseUrl, state.baseUrl);
-      } catch {}
-    }
-    showToast("重启请求已提交");
-    window.setTimeout(checkHealth, 800);
-  }
-
   async function sendCustomRequest(event) {
     event.preventDefault();
     const method = $("requestMethod").value;
@@ -1177,9 +1108,6 @@ tbody tr:hover, tbody tr.selected { background: var(--parchment); }
     $("loadUserButton").addEventListener("click", loadUser);
     $("updateUserButton").addEventListener("click", updateUser);
     $("deleteUserButton").addEventListener("click", deleteUser);
-    $("loadConfigButton").addEventListener("click", loadServerConfig);
-    $("serverForm").addEventListener("submit", saveServerConfig);
-    $("restartButton").addEventListener("click", restartServer);
     $("requestForm").addEventListener("submit", sendCustomRequest);
     $("resetRequestButton").addEventListener("click", () => {
       $("requestMethod").value = "GET";

@@ -32,17 +32,6 @@ struct UserRecord
     UserSummary toSummary() const;
 };
 
-struct ServerConfig
-{
-    QString serverInterface {QStringLiteral("0.0.0.0")};
-    quint16 serverPort {8080};
-    bool autoStart {true};
-    bool keepOriginal {false};
-    int maxImageWidth {1920};
-
-    QJsonObject toJson() const;
-};
-
 class DatabaseManager
 {
 public:
@@ -84,18 +73,16 @@ public:
         int *newTokenVersion,
         QString *errorMessage = nullptr);
 
-    ServerConfig serverConfig(QString *errorMessage = nullptr) const;
-    bool setServerConfig(const ServerConfig &config, QString *errorMessage = nullptr);
     QByteArray tokenSecret(QString *errorMessage = nullptr) const;
 
 private:
     bool execute(const QString &sql, QString *errorMessage = nullptr) const;
-    bool setConfigValue(const QString &key,
-                        const QString &value,
-                        QString *errorMessage = nullptr);
-    QString configValue(const QString &key,
-                        const QString &fallback = QString(),
-                        QString *errorMessage = nullptr) const;
+    bool setSecurityState(const QString &key,
+                          const QString &value,
+                          QString *errorMessage = nullptr);
+    QString securityState(const QString &key,
+                          const QString &fallback = QString(),
+                          QString *errorMessage = nullptr) const;
     static UserRecord readUser(const class QSqlQuery &query);
     static void setError(QString *target, const QString &message);
 

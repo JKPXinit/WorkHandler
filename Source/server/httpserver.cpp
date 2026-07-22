@@ -18,6 +18,8 @@
 #include <QTcpServer>
 #include <QTimer>
 
+#include <utility>
+
 namespace {
 using StatusCode = QHttpServerResponse::StatusCode;
 
@@ -25,6 +27,17 @@ QString databaseErrorMessage(const QString &detail)
 {
     return detail.isEmpty() ? QStringLiteral("Database operation failed.") : detail;
 }
+}
+
+QJsonObject ServerConfig::toJson() const
+{
+    return {
+        {QStringLiteral("server_interface"), serverInterface},
+        {QStringLiteral("server_port"), int(serverPort)},
+        {QStringLiteral("auto_start"), autoStart},
+        {QStringLiteral("keep_original"), keepOriginal},
+        {QStringLiteral("max_image_width"), maxImageWidth}
+    };
 }
 
 HttpServer::HttpServer(const QString &databasePath, QObject *parent)
@@ -86,7 +99,17 @@ bool HttpServer::isRunning() const
 
 ServerConfig HttpServer::configuration(QString *errorMessage) const
 {
-    return m_database.serverConfig(errorMessage);
+    if (errorMessage) {
+        errorMessage->clear();
+    }
+    return m_configurationProvider ? m_configurationProvider(errorMessage)
+                                   : ServerConfig();
+}
+
+void HttpServer::setConfigurationProvider(
+    std::function<ServerConfig(QString *)> provider)
+{
+    m_configurationProvider = std::move(provider);
 }
 
 QList<UserSummary> HttpServer::accountSummaries(QString *errorMessage) const
@@ -248,7 +271,7 @@ bool HttpServer::startServer(const QString &bindAddress, quint16 port)
         return false;
     }
 
-    ServerConfig config = m_database.serverConfig();
+    ServerConfig config = configuration();
     config.serverInterface = bindAddress;
     config.serverPort = port;
     QString configError;
@@ -328,9 +351,6 @@ bool HttpServer::updateConfiguration(const ServerConfig &config, QString *errorM
         return false;
     }
 
-    if (!m_database.setServerConfig(config, errorMessage)) {
-        return false;
-    }
     emit configurationChanged(config.serverInterface,
                               config.serverPort,
                               config.autoStart,
@@ -692,93 +712,14 @@ void HttpServer::registerRoutes()
             if (!authorization.authorized) {
                 return authorizationError(authorization);
             }
-            QString databaseError;
-            const ServerConfig config = m_database.serverConfig(&databaseError);
-            if (!databaseError.isEmpty()) {
+            QString configurationError;
+            const ServerConfig config = configuration(&configurationError);
+            if (!configurationError.isEmpty()) {
                 return errorResponse(StatusCode::InternalServerError,
-                                     QStringLiteral("database_error"),
-                                     databaseErrorMessage(databaseError));
+                                     QStringLiteral("configuration_error"),
+                                     configurationError);
             }
             return successResponse({{QStringLiteral("config"), config.toJson()}});
-        });
-
-    m_httpServer.route(
-        QStringLiteral("/api/server/config"), Method::Put,
-        [this](const QHttpServerRequest &request) {
-            const AuthorizationResult authorization = authorize(request, true);
-            if (!authorization.authorized) {
-                return authorizationError(authorization);
-            }
-            QJsonObject body;
-            QString parseError;
-            if (!parseJsonObject(request, &body, &parseError)) {
-                return errorResponse(StatusCode::BadRequest,
-                                     QStringLiteral("invalid_json"), parseError);
-            }
-            ServerConfig config = m_database.serverConfig();
-            if (body.contains(QStringLiteral("server_interface"))) {
-                config.serverInterface = body.value(
-                    QStringLiteral("server_interface")).toString().trimmed();
-            }
-            if (body.contains(QStringLiteral("server_port"))) {
-                const QJsonValue portValue = body.value(QStringLiteral("server_port"));
-                const int port = portValue.isDouble() ? portValue.toInt(-1) : -1;
-                if (port < 1 || port > 65535) {
-                    return errorResponse(StatusCode::BadRequest,
-                                         QStringLiteral("invalid_config"),
-                                         tr("server_port must be between 1 and 65535."));
-                }
-                config.serverPort = static_cast<quint16>(port);
-            }
-            if (body.contains(QStringLiteral("auto_start"))) {
-                if (!body.value(QStringLiteral("auto_start")).isBool()) {
-                    return errorResponse(StatusCode::BadRequest,
-                                         QStringLiteral("invalid_config"),
-                                         tr("auto_start must be a boolean."));
-                }
-                config.autoStart = body.value(QStringLiteral("auto_start")).toBool();
-            }
-            if (body.contains(QStringLiteral("keep_original"))) {
-                if (!body.value(QStringLiteral("keep_original")).isBool()) {
-                    return errorResponse(StatusCode::BadRequest,
-                                         QStringLiteral("invalid_config"),
-                                         tr("keep_original must be a boolean."));
-                }
-                config.keepOriginal = body.value(QStringLiteral("keep_original")).toBool();
-            }
-            if (body.contains(QStringLiteral("max_image_width"))) {
-                const QJsonValue widthValue = body.value(
-                    QStringLiteral("max_image_width"));
-                if (!widthValue.isDouble()) {
-                    return errorResponse(StatusCode::BadRequest,
-                                         QStringLiteral("invalid_config"),
-                                         tr("max_image_width must be a number."));
-                }
-                config.maxImageWidth = widthValue.toInt(-1);
-            }
-
-            QString configError;
-            if (!updateConfiguration(config, &configError)) {
-                return errorResponse(StatusCode::BadRequest,
-                                     QStringLiteral("invalid_config"), configError);
-            }
-            return successResponse({{QStringLiteral("config"), config.toJson()}});
-        });
-
-    m_httpServer.route(
-        QStringLiteral("/api/server/restart"), Method::Post,
-        [this](const QHttpServerRequest &request) {
-            const AuthorizationResult authorization = authorize(request, true);
-            if (!authorization.authorized) {
-                return authorizationError(authorization);
-            }
-            const ServerConfig config = m_database.serverConfig();
-            const QString url = restartUrl(request, config);
-            QTimer::singleShot(200, this, [this, config]() {
-                restartServer(config.serverInterface, config.serverPort);
-            });
-            return successResponse({{QStringLiteral("restart_url"), url}},
-                                   StatusCode::Accepted);
         });
 
     m_httpServer.setMissingHandler(
@@ -863,7 +804,7 @@ QHttpServerResponse HttpServer::staticFrontendResponse() const
 
 QHttpServerResponse HttpServer::healthResponse() const
 {
-    const ServerConfig config = m_database.serverConfig();
+    const ServerConfig config = configuration();
     const QString address = isRunning()
         ? QStringLiteral("%1:%2").arg(m_bindAddress).arg(m_port)
         : QStringLiteral("%1:%2").arg(config.serverInterface).arg(config.serverPort);
@@ -964,17 +905,4 @@ bool HttpServer::validUsername(const QString &username)
         }
     }
     return true;
-}
-
-QString HttpServer::restartUrl(const QHttpServerRequest &request,
-                               const ServerConfig &config)
-{
-    QString host = config.serverInterface;
-    if (host.isEmpty() || host == QStringLiteral("0.0.0.0")) {
-        host = request.localAddress().toString();
-    }
-    if (host.isEmpty() || host == QStringLiteral("0.0.0.0")) {
-        host = QStringLiteral("127.0.0.1");
-    }
-    return QStringLiteral("http://%1:%2").arg(host).arg(config.serverPort);
 }

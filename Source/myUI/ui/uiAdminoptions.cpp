@@ -2,12 +2,14 @@
 #include "mainwindow.h"
 
 #include <QAbstractItemView>
+#include <QAbstractSocket>
 #include <QRadioButton>
 #include <QApplication>
 #include <QCheckBox>
 #include <QFileDialog>
 #include <QFormLayout>
 #include <QGroupBox>
+#include <QHostAddress>
 #include <QStackedWidget>
 #include <QDesktopServices>
 #include <QComboBox>
@@ -18,6 +20,9 @@
 #include <QPainter>
 #include <QPushButton>
 #include <QMessageBox>
+#include <QNetworkAddressEntry>
+#include <QNetworkInterface>
+#include <QSignalBlocker>
 #include <QStyledItemDelegate>
 #include <QStyle>
 #include <QTableWidget>
@@ -386,6 +391,214 @@ QWidget *ui_AdminOptions::createAccountPage()
     return accountPage;
 }
 
+QWidget *ui_AdminOptions::createHttpPage(
+    std::function<bool()> *applyConfiguration)
+{
+    QWidget *httpPage = new QWidget();
+    QVBoxLayout *layout = new QVBoxLayout(httpPage);
+
+    QGroupBox *networkGroup = new QGroupBox(tr("Network configuration"), httpPage);
+    QFormLayout *networkForm = new QFormLayout(networkGroup);
+    QComboBox *interfaceCombo = new QComboBox(networkGroup);
+    interfaceCombo->setObjectName(QStringLiteral("httpInterfaceCombo"));
+    QComboBox *addressCombo = new QComboBox(networkGroup);
+    addressCombo->setObjectName(QStringLiteral("httpAddressCombo"));
+    QSpinBox *portSpin = new QSpinBox(networkGroup);
+    portSpin->setRange(1, 65535);
+    QCheckBox *bindAllCheck = new QCheckBox(
+        tr("Bind all interfaces (0.0.0.0)"), networkGroup);
+    networkForm->addRow(tr("NIC:"), interfaceCombo);
+    networkForm->addRow(tr("IP address:"), addressCombo);
+    networkForm->addRow(tr("Port:"), portSpin);
+    networkForm->addRow(QString(), bindAllCheck);
+    layout->addWidget(networkGroup);
+
+    QGroupBox *runtimeGroup = new QGroupBox(tr("Runtime configuration"), httpPage);
+    QFormLayout *runtimeForm = new QFormLayout(runtimeGroup);
+    QCheckBox *autoStartCheck = new QCheckBox(
+        tr("Start with the application"), runtimeGroup);
+    QCheckBox *keepOriginalCheck = new QCheckBox(
+        tr("Keep original uploaded images"), runtimeGroup);
+    QSpinBox *maxWidthSpin = new QSpinBox(runtimeGroup);
+    maxWidthSpin->setRange(320, 16384);
+    runtimeForm->addRow(QString(), autoStartCheck);
+    runtimeForm->addRow(QString(), keepOriginalCheck);
+    runtimeForm->addRow(tr("Maximum image width:"), maxWidthSpin);
+    layout->addWidget(runtimeGroup);
+
+    QLabel *statusLabel = new QLabel(httpPage);
+    statusLabel->setWordWrap(true);
+    statusLabel->hide();
+    layout->addWidget(statusLabel);
+
+    layout->addStretch();
+
+    const auto populateAddresses = [interfaceCombo, addressCombo](
+        const QString &preferredAddress) {
+        QSignalBlocker blocker(addressCombo);
+        addressCombo->clear();
+        const QString interfaceName = interfaceCombo->currentData().toString();
+        const QNetworkInterface networkInterface =
+            QNetworkInterface::interfaceFromName(interfaceName);
+        for (const QNetworkAddressEntry &entry : networkInterface.addressEntries()) {
+            if (entry.ip().protocol() == QAbstractSocket::IPv4Protocol
+                && !entry.ip().isNull()) {
+                addressCombo->addItem(entry.ip().toString());
+            }
+        }
+        const int preferredIndex = addressCombo->findText(preferredAddress);
+        if (preferredIndex >= 0) {
+            addressCombo->setCurrentIndex(preferredIndex);
+        } else if (addressCombo->count() > 0) {
+            addressCombo->setCurrentIndex(0);
+        }
+    };
+
+    const auto reloadInterfaces = [this, interfaceCombo, addressCombo,
+                                   portSpin, bindAllCheck, autoStartCheck,
+                                   keepOriginalCheck, maxWidthSpin,
+                                   populateAddresses]() {
+        const SoftwareConfig *settings = m_mainWindow->m_softwareconfig;
+        const QString preferredInterface = settings->httpServerInterfaceName();
+        const QString preferredAddress = settings->httpServerSelectedAddress();
+        interfaceCombo->clear();
+        for (const QNetworkInterface &networkInterface :
+             QNetworkInterface::allInterfaces()) {
+            const auto flags = networkInterface.flags();
+            if (!(flags & QNetworkInterface::IsUp)
+                || !(flags & QNetworkInterface::IsRunning)) {
+                continue;
+            }
+            bool hasIpv4 = false;
+            for (const QNetworkAddressEntry &entry : networkInterface.addressEntries()) {
+                if (entry.ip().protocol() == QAbstractSocket::IPv4Protocol
+                    && !entry.ip().isNull()) {
+                    hasIpv4 = true;
+                    break;
+                }
+            }
+            if (!hasIpv4) {
+                continue;
+            }
+            const QString name = networkInterface.humanReadableName().isEmpty()
+                ? networkInterface.name()
+                : networkInterface.humanReadableName();
+            interfaceCombo->addItem(
+                QStringLiteral("%1 (%2)").arg(name, networkInterface.name()),
+                networkInterface.name());
+        }
+        int interfaceIndex = interfaceCombo->findData(preferredInterface);
+        if (interfaceIndex < 0 && interfaceCombo->count() > 0) {
+            interfaceIndex = 0;
+        }
+        interfaceCombo->setCurrentIndex(interfaceIndex);
+        populateAddresses(preferredAddress);
+        portSpin->setValue(settings->httpServerPort());
+        bindAllCheck->setChecked(settings->httpServerBindAllInterfaces());
+        autoStartCheck->setChecked(settings->httpServerAutoStart());
+        keepOriginalCheck->setChecked(settings->httpServerKeepOriginal());
+        maxWidthSpin->setValue(settings->httpServerMaxImageWidth());
+    };
+
+    connect(interfaceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            httpPage, [populateAddresses](int) { populateAddresses(QString()); });
+    connect(bindAllCheck, &QCheckBox::toggled, httpPage,
+            [addressCombo](bool enabled) { addressCombo->setEnabled(!enabled); });
+
+    if (applyConfiguration) {
+        *applyConfiguration =
+            [this, interfaceCombo, addressCombo, portSpin, bindAllCheck,
+             autoStartCheck, keepOriginalCheck, maxWidthSpin,
+             statusLabel]() -> bool {
+                const QString serverInterface = bindAllCheck->isChecked()
+                    ? QStringLiteral("0.0.0.0")
+                    : addressCombo->currentText().trimmed();
+                QHostAddress address;
+                if (!address.setAddress(serverInterface)
+                    || address.protocol() != QAbstractSocket::IPv4Protocol) {
+                    statusLabel->setText(tr("Select a valid IPv4 address."));
+                    statusLabel->show();
+                    return false;
+                }
+
+                SoftwareConfig *settings = m_mainWindow->m_softwareconfig;
+                const QString interfaceName =
+                    interfaceCombo->currentData().toString();
+                const QString selectedAddress =
+                    addressCombo->currentText().trimmed();
+                const quint16 port = static_cast<quint16>(portSpin->value());
+                const bool bindAll = bindAllCheck->isChecked();
+                const bool autoStart = autoStartCheck->isChecked();
+                const bool keepOriginal = keepOriginalCheck->isChecked();
+                const int maxImageWidth = maxWidthSpin->value();
+
+                const bool changed =
+                    interfaceName != settings->httpServerInterfaceName()
+                    || selectedAddress != settings->httpServerSelectedAddress()
+                    || port != settings->httpServerPort()
+                    || bindAll != settings->httpServerBindAllInterfaces()
+                    || autoStart != settings->httpServerAutoStart()
+                    || keepOriginal != settings->httpServerKeepOriginal()
+                    || maxImageWidth != settings->httpServerMaxImageWidth();
+                if (!changed) {
+                    return true;
+                }
+                if (!m_mainWindow->m_httpServer) {
+                    statusLabel->setText(tr("HTTP server is unavailable."));
+                    statusLabel->show();
+                    return false;
+                }
+
+                const QString oldInterfaceName =
+                    settings->httpServerInterfaceName();
+                const QString oldSelectedAddress =
+                    settings->httpServerSelectedAddress();
+                const quint16 oldPort = settings->httpServerPort();
+                const bool oldBindAll = settings->httpServerBindAllInterfaces();
+                const bool oldAutoStart = settings->httpServerAutoStart();
+                const bool oldKeepOriginal = settings->httpServerKeepOriginal();
+                const int oldMaxImageWidth = settings->httpServerMaxImageWidth();
+
+                settings->setHttpServerInterfaceName(interfaceName);
+                settings->setHttpServerSelectedAddress(selectedAddress);
+                settings->setHttpServerPort(port);
+                settings->setHttpServerBindAllInterfaces(bindAll);
+                settings->setHttpServerAutoStart(autoStart);
+                settings->setHttpServerKeepOriginal(keepOriginal);
+                settings->setHttpServerMaxImageWidth(maxImageWidth);
+
+                const ServerConfig config = {
+                    serverInterface,
+                    port,
+                    autoStart,
+                    keepOriginal,
+                    maxImageWidth
+                };
+                QString errorMessage;
+                if (!m_mainWindow->m_httpServer->updateConfiguration(
+                        config, &errorMessage)) {
+                    settings->setHttpServerInterfaceName(oldInterfaceName);
+                    settings->setHttpServerSelectedAddress(oldSelectedAddress);
+                    settings->setHttpServerPort(oldPort);
+                    settings->setHttpServerBindAllInterfaces(oldBindAll);
+                    settings->setHttpServerAutoStart(oldAutoStart);
+                    settings->setHttpServerKeepOriginal(oldKeepOriginal);
+                    settings->setHttpServerMaxImageWidth(oldMaxImageWidth);
+                    statusLabel->setText(errorMessage);
+                    statusLabel->show();
+                    return false;
+                }
+                m_mainWindow->m_httpServer->restartServer(
+                    config.serverInterface, config.serverPort);
+                return true;
+            };
+    }
+
+    reloadInterfaces();
+    addressCombo->setEnabled(!bindAllCheck->isChecked());
+    return httpPage;
+}
+
 QDialog *ui_AdminOptions::setupOptionsDialog() {
     QDialog *optionsDialog = new QDialog(m_mainWindow);
     optionsDialog->setWindowTitle(tr("Preferences"));
@@ -440,6 +653,9 @@ QDialog *ui_AdminOptions::setupOptionsDialog() {
     shortcutsItem->setText(0, tr("Shortcuts"));
     shortcutsItem->setIcon(0, m_mainWindow->m_UI->ShortcutIcon);
 
+    QTreeWidgetItem *httpItem = new QTreeWidgetItem(treeWidget);
+    httpItem->setText(0, tr("Http"));
+
     QTreeWidgetItem *accountItem = new QTreeWidgetItem(treeWidget);
     accountItem->setText(0, tr("Account"));
     accountItem->setIcon(0, m_mainWindow->m_UI->AccountIcon);
@@ -472,6 +688,8 @@ QDialog *ui_AdminOptions::setupOptionsDialog() {
     QWidget *systemPage    = createSystemPage();       // System 页面
     QWidget *shortcutsPage = createShortcutsPage();    // Shortcuts 页面
     QWidget *accountPage = createAccountPage();        // Account 页面
+    std::function<bool()> applyHttpConfiguration;
+    QWidget *httpPage = createHttpPage(&applyHttpConfiguration); // Http 页面
 
 
     // 将页面添加到堆叠窗口
@@ -489,6 +707,8 @@ QDialog *ui_AdminOptions::setupOptionsDialog() {
                            stackedWidget->addWidget(shortcutsPage));
     accountItem->setData(0, Qt::UserRole,
                          stackedWidget->addWidget(accountPage));
+    httpItem->setData(0, Qt::UserRole,
+                      stackedWidget->addWidget(httpPage));
 
 
     // 连接树形结构的信号到堆叠窗口的槽
@@ -516,12 +736,18 @@ QDialog *ui_AdminOptions::setupOptionsDialog() {
     QPushButton *okButton = new QPushButton(tr("Ok"));
     QPushButton *cannelButton = new QPushButton(tr("Cannel"));
 
-    connect(okButton, &QPushButton::clicked, optionsDialog, [optionsDialog] {
-        optionsDialog->close();
+    connect(okButton, &QPushButton::clicked, optionsDialog,
+            [optionsDialog, treeWidget, httpItem,
+             applyHttpConfiguration]() {
+        if (applyHttpConfiguration && !applyHttpConfiguration()) {
+            treeWidget->setCurrentItem(httpItem);
+            return;
+        }
+        optionsDialog->accept();
     });
 
     connect(cannelButton, &QPushButton::clicked, optionsDialog, [optionsDialog] {
-        optionsDialog->close();
+        optionsDialog->reject();
     });
 
     // 添加弹性空间，将按钮推到右侧

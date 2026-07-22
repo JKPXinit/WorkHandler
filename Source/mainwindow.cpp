@@ -31,6 +31,27 @@ MainWindow::MainWindow(QWidget *parent)
 
     initConfigUI();     // 初始化软件配置文件（含日志系统），必须在 uiManager 之前
 
+    m_httpServer = new HttpServer(
+        Practical_Function::ResourcePath(QStringLiteral("/data/issue_panel.db")), this);
+
+    m_httpServer->setConfigurationProvider([this](QString *errorMessage) {
+        ServerConfig config;
+        config.serverInterface = m_softwareconfig->httpServerBindAllInterfaces()
+            ? QStringLiteral("0.0.0.0")
+            : m_softwareconfig->httpServerSelectedAddress();
+        if (config.serverInterface.isEmpty()) {
+            config.serverInterface = QStringLiteral("127.0.0.1");
+        }
+        config.serverPort = m_softwareconfig->httpServerPort();
+        config.autoStart = m_softwareconfig->httpServerAutoStart();
+        config.keepOriginal = m_softwareconfig->httpServerKeepOriginal();
+        config.maxImageWidth = m_softwareconfig->httpServerMaxImageWidth();
+        if (errorMessage) {
+            errorMessage->clear();
+        }
+        return config;
+    });
+
     m_UI = new uiManager(this);
 
     m_UI->setupUI();    // 显示 UI 界面
@@ -39,29 +60,6 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_shortcutManager, &ShortcutManager::shortcutConfigSaved,
             m_softwareconfig, &SoftwareConfig::Write_config);
 
-    m_httpServer = new HttpServer(
-        Practical_Function::ResourcePath(QStringLiteral("/data/issue_panel.db")), this);
-
-    connect(m_httpServerManagerDialog,
-            &HttpServerManagerDialog::configurationSaveRequested,
-            this,
-            [this](const QString &serverInterface,
-                   quint16 serverPort,
-                   bool autoStart,
-                   bool keepOriginal,
-                   int maxImageWidth) {
-                ServerConfig config;
-                config.serverInterface = serverInterface;
-                config.serverPort = serverPort;
-                config.autoStart = autoStart;
-                config.keepOriginal = keepOriginal;
-                config.maxImageWidth = maxImageWidth;
-                QString error;
-                if (!m_httpServer->updateConfiguration(config, &error)) {
-                    m_httpServerManagerDialog->setServerState(
-                        HttpServerManagerDialog::ServerState::Error, error);
-                }
-            });
     connect(m_httpServerManagerDialog,
             &HttpServerManagerDialog::startServerRequested,
             m_httpServer,
@@ -145,25 +143,12 @@ MainWindow::MainWindow(QWidget *parent)
                 m_softwareconfig->setHttpServerKeepOriginal(keepOriginal);
                 m_softwareconfig->setHttpServerMaxImageWidth(maxImageWidth);
                 m_softwareconfig->Write_config();
-                m_httpServerManagerDialog->applyServerConfiguration(
-                    serverInterface, serverPort, autoStart,
-                    keepOriginal, maxImageWidth);
+                m_httpServerManagerDialog->refreshConfiguration();
             });
 
     QString httpServerError;
     if (m_httpServer->initialize(&httpServerError)) {
         ServerConfig config = m_httpServer->configuration(&httpServerError);
-        if (m_httpServer->databaseWasCreated()) {
-            const QString selectedAddress =
-                m_softwareconfig->httpServerSelectedAddress().trimmed();
-            config.serverInterface = m_softwareconfig->httpServerBindAllInterfaces()
-                ? QHostAddress(QHostAddress::AnyIPv4).toString()
-                : (selectedAddress.isEmpty() ? config.serverInterface : selectedAddress);
-            config.serverPort = m_softwareconfig->httpServerPort();
-            config.autoStart = m_softwareconfig->httpServerAutoStart();
-            config.keepOriginal = m_softwareconfig->httpServerKeepOriginal();
-            config.maxImageWidth = m_softwareconfig->httpServerMaxImageWidth();
-        }
         m_httpServer->updateConfiguration(config, &httpServerError);
 
         if (httpServerError.isEmpty() && config.autoStart) {

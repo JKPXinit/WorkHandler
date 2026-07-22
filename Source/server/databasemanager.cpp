@@ -4,7 +4,6 @@
 
 #include <QDir>
 #include <QFileInfo>
-#include <QMap>
 #include <QRandomGenerator>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -48,17 +47,6 @@ UserSummary UserRecord::toSummary() const
     summary.usesDefaultPassword = PasswordHasher::verifyPassword(
         QStringLiteral("123456"), passwordHash);
     return summary;
-}
-
-QJsonObject ServerConfig::toJson() const
-{
-    return {
-        {QStringLiteral("server_interface"), serverInterface},
-        {QStringLiteral("server_port"), int(serverPort)},
-        {QStringLiteral("auto_start"), autoStart},
-        {QStringLiteral("keep_original"), keepOriginal},
-        {QStringLiteral("max_image_width"), maxImageWidth}
-    };
 }
 
 DatabaseManager::DatabaseManager(const QString &databasePath)
@@ -150,7 +138,7 @@ bool DatabaseManager::initialize(QString *errorMessage,
             "CREATE INDEX IF NOT EXISTS idx_notifications_unread "
             "ON notifications(recipient_id, is_read)"),
         QStringLiteral(
-            "CREATE TABLE IF NOT EXISTS system_config ("
+            "CREATE TABLE IF NOT EXISTS security_state ("
             "key TEXT PRIMARY KEY, value TEXT NOT NULL)")
     };
 
@@ -180,25 +168,41 @@ bool DatabaseManager::initialize(QString *errorMessage,
         return false;
     }
 
-    const QMap<QString, QString> defaults = {
-        {QStringLiteral("server_interface"), QStringLiteral("0.0.0.0")},
-        {QStringLiteral("server_port"), QStringLiteral("8080")},
-        {QStringLiteral("auto_start"), QStringLiteral("true")},
-        {QStringLiteral("keep_original"), QStringLiteral("false")},
-        {QStringLiteral("max_image_width"), QStringLiteral("1920")},
-        {QStringLiteral("token_secret"),
-         QString::fromLatin1(randomSecret(32).toBase64(QByteArray::OmitTrailingEquals))}
-    };
-    for (auto it = defaults.cbegin(); it != defaults.cend(); ++it) {
-        QSqlQuery query(m_database);
-        query.prepare(QStringLiteral(
-            "INSERT OR IGNORE INTO system_config(key, value) VALUES(?, ?)"));
-        query.addBindValue(it.key());
-        query.addBindValue(it.value());
-        if (!query.exec()) {
-            setError(errorMessage, query.lastError().text());
+    // Migrate the old configuration table once. It may contain HTTP settings
+    // that are no longer database-owned; only the persistent token secret is
+    // security state worth retaining.
+    QSqlQuery legacyTableQuery(m_database);
+    if (!legacyTableQuery.exec(QStringLiteral(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+            "AND name = 'system_config'"))) {
+        setError(errorMessage, legacyTableQuery.lastError().text());
+        return false;
+    }
+    if (legacyTableQuery.next()) {
+        if (!execute(QStringLiteral(
+            "INSERT OR IGNORE INTO security_state(key, value) "
+            "SELECT key, value FROM system_config "
+            "WHERE key = 'token_secret' AND value <> ''"),
+                     errorMessage)) {
             return false;
         }
+        legacyTableQuery.finish();
+        if (!execute(QStringLiteral("DROP TABLE system_config"),
+                     errorMessage)) {
+            return false;
+        }
+    }
+
+    const QString tokenSecret = QString::fromLatin1(
+        randomSecret(32).toBase64(QByteArray::OmitTrailingEquals));
+    QSqlQuery tokenSecretQuery(m_database);
+    tokenSecretQuery.prepare(QStringLiteral(
+        "INSERT OR IGNORE INTO security_state(key, value) VALUES(?, ?)"));
+    tokenSecretQuery.addBindValue(QStringLiteral("token_secret"));
+    tokenSecretQuery.addBindValue(tokenSecret);
+    if (!tokenSecretQuery.exec()) {
+        setError(errorMessage, tokenSecretQuery.lastError().text());
+        return false;
     }
 
     QSqlQuery countQuery(m_database);
@@ -438,9 +442,9 @@ bool DatabaseManager::updatePasswordAndTokenSecret(
     const QByteArray secret = randomSecret(32);
     const QString encodedSecret = QString::fromLatin1(
         secret.toBase64(QByteArray::OmitTrailingEquals));
-    if (!setConfigValue(QStringLiteral("token_secret"),
-                        encodedSecret,
-                        errorMessage)) {
+    if (!setSecurityState(QStringLiteral("token_secret"),
+                          encodedSecret,
+                          errorMessage)) {
         m_database.rollback();
         return false;
     }
@@ -512,69 +516,10 @@ bool DatabaseManager::updatePasswordAndIncrementTokenVersion(
     return true;
 }
 
-ServerConfig DatabaseManager::serverConfig(QString *errorMessage) const
-{
-    ServerConfig config;
-    config.serverInterface = configValue(
-        QStringLiteral("server_interface"), config.serverInterface, errorMessage);
-
-    bool portOk = false;
-    const int port = configValue(QStringLiteral("server_port"),
-                                 QString::number(config.serverPort),
-                                 errorMessage).toInt(&portOk);
-    if (portOk && port >= 1 && port <= 65535) {
-        config.serverPort = static_cast<quint16>(port);
-    }
-    config.autoStart = configValue(QStringLiteral("auto_start"),
-                                   QStringLiteral("true"), errorMessage)
-                           == QStringLiteral("true");
-    config.keepOriginal = configValue(QStringLiteral("keep_original"),
-                                      QStringLiteral("false"), errorMessage)
-                              == QStringLiteral("true");
-    bool widthOk = false;
-    const int width = configValue(QStringLiteral("max_image_width"),
-                                  QString::number(config.maxImageWidth),
-                                  errorMessage).toInt(&widthOk);
-    if (widthOk && width >= 320) {
-        config.maxImageWidth = width;
-    }
-    return config;
-}
-
-bool DatabaseManager::setServerConfig(const ServerConfig &config,
-                                      QString *errorMessage)
-{
-    if (!m_database.transaction()) {
-        setError(errorMessage, m_database.lastError().text());
-        return false;
-    }
-
-    const QMap<QString, QString> values = {
-        {QStringLiteral("server_interface"), config.serverInterface},
-        {QStringLiteral("server_port"), QString::number(config.serverPort)},
-        {QStringLiteral("auto_start"), config.autoStart ? QStringLiteral("true")
-                                                        : QStringLiteral("false")},
-        {QStringLiteral("keep_original"), config.keepOriginal ? QStringLiteral("true")
-                                                               : QStringLiteral("false")},
-        {QStringLiteral("max_image_width"), QString::number(config.maxImageWidth)}
-    };
-    for (auto it = values.cbegin(); it != values.cend(); ++it) {
-        if (!setConfigValue(it.key(), it.value(), errorMessage)) {
-            m_database.rollback();
-            return false;
-        }
-    }
-    if (!m_database.commit()) {
-        setError(errorMessage, m_database.lastError().text());
-        return false;
-    }
-    return true;
-}
-
 QByteArray DatabaseManager::tokenSecret(QString *errorMessage) const
 {
     return QByteArray::fromBase64(
-        configValue(QStringLiteral("token_secret"), QString(), errorMessage).toLatin1());
+        securityState(QStringLiteral("token_secret"), QString(), errorMessage).toLatin1());
 }
 
 bool DatabaseManager::execute(const QString &sql, QString *errorMessage) const
@@ -587,13 +532,13 @@ bool DatabaseManager::execute(const QString &sql, QString *errorMessage) const
     return true;
 }
 
-bool DatabaseManager::setConfigValue(const QString &key,
-                                     const QString &value,
-                                     QString *errorMessage)
+bool DatabaseManager::setSecurityState(const QString &key,
+                                       const QString &value,
+                                       QString *errorMessage)
 {
     QSqlQuery query(m_database);
     query.prepare(QStringLiteral(
-        "INSERT INTO system_config(key, value) VALUES(?, ?) "
+        "INSERT INTO security_state(key, value) VALUES(?, ?) "
         "ON CONFLICT(key) DO UPDATE SET value = excluded.value"));
     query.addBindValue(key);
     query.addBindValue(value);
@@ -604,12 +549,12 @@ bool DatabaseManager::setConfigValue(const QString &key,
     return true;
 }
 
-QString DatabaseManager::configValue(const QString &key,
-                                     const QString &fallback,
-                                     QString *errorMessage) const
+QString DatabaseManager::securityState(const QString &key,
+                                       const QString &fallback,
+                                       QString *errorMessage) const
 {
     QSqlQuery query(m_database);
-    query.prepare(QStringLiteral("SELECT value FROM system_config WHERE key = ?"));
+    query.prepare(QStringLiteral("SELECT value FROM security_state WHERE key = ?"));
     query.addBindValue(key);
     if (!query.exec()) {
         setError(errorMessage, query.lastError().text());
