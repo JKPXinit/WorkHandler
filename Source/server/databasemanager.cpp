@@ -130,6 +130,9 @@ bool DatabaseManager::initialize(QString *errorMessage,
             "user_id INTEGER NOT NULL REFERENCES users(id),"
             "content TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"),
         QStringLiteral(
+            "CREATE INDEX IF NOT EXISTS idx_comments_issue_id "
+            "ON comments(issue_id)"),
+        QStringLiteral(
             "CREATE TABLE IF NOT EXISTS attachments ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT,"
             "issue_id INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,"

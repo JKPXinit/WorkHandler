@@ -18,6 +18,9 @@
 class BlockController;
 class BlockDao;
 class BlockService;
+class CommentController;
+class CommentDao;
+class CommentService;
 class IssueController;
 class IssueDao;
 class IssueService;
@@ -120,6 +123,9 @@ private:
     std::unique_ptr<BlockDao> m_blockDao;
     std::unique_ptr<BlockService> m_blockService;
     std::unique_ptr<BlockController> m_blockController;
+    std::unique_ptr<CommentDao> m_commentDao;
+    std::unique_ptr<CommentService> m_commentService;
+    std::unique_ptr<CommentController> m_commentController;
     std::unique_ptr<IssueDao> m_issueDao;
     std::unique_ptr<IssueService> m_issueService;
     std::unique_ptr<IssueController> m_issueController;

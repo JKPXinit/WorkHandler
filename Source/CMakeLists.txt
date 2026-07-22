@@ -91,6 +91,12 @@ set(BACKEND_SOURCES
     server/blocks/blockdao.h
     server/blocks/blockservice.cpp
     server/blocks/blockservice.h
+    server/comments/commentcontroller.cpp
+    server/comments/commentcontroller.h
+    server/comments/commentdao.cpp
+    server/comments/commentdao.h
+    server/comments/commentservice.cpp
+    server/comments/commentservice.h
     server/issues/issuecontroller.cpp
     server/issues/issuecontroller.h
     server/issues/issuedao.cpp

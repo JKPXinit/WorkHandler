@@ -3,6 +3,9 @@
 #include "blocks/blockcontroller.h"
 #include "blocks/blockdao.h"
 #include "blocks/blockservice.h"
+#include "comments/commentcontroller.h"
+#include "comments/commentdao.h"
+#include "comments/commentservice.h"
 #include "issues/issuecontroller.h"
 #include "issues/issuedao.h"
 #include "issues/issueservice.h"
@@ -92,6 +95,10 @@ bool HttpServer::initialize(QString *errorMessage)
     m_blockService = std::make_unique<BlockService>(*m_blockDao);
     m_blockController = std::make_unique<BlockController>(
         *m_apiContext, *m_blockService);
+    m_commentDao = std::make_unique<CommentDao>(m_database);
+    m_commentService = std::make_unique<CommentService>(*m_commentDao);
+    m_commentController = std::make_unique<CommentController>(
+        *m_apiContext, *m_commentService);
     m_issueDao = std::make_unique<IssueDao>(m_database);
     m_issueService = std::make_unique<IssueService>(*m_issueDao);
     m_issueController = std::make_unique<IssueController>(
@@ -423,6 +430,7 @@ void HttpServer::registerRoutes()
     m_userOptionsController->registerRoutes(m_httpServer);
     m_blockController->registerRoutes(m_httpServer);
     m_issueController->registerRoutes(m_httpServer);
+    m_commentController->registerRoutes(m_httpServer);
 
     m_httpServer.route(
         QStringLiteral("/api/auth/login"), Method::Post,

@@ -49,6 +49,7 @@ private slots:
     void authentication();
     void userOptionsAndBlockCrud();
     void issueCrudFilteringAndPermissions();
+    void commentReadAndCreatePermissions();
     void userCrudAndLastAdminProtection();
     void userPasswordChangeAndTokenVersion();
     void accountSummaryAndAdminPasswordChange();
@@ -887,6 +888,204 @@ void HttpServerIntegrationTest::issueCrudFilteringAndPermissions()
                      {}, m_token).status,
              200);
     QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(other.id),
+                     {}, m_token).status,
+             200);
+    QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(guest.id),
+                     {}, m_token).status,
+             200);
+}
+
+void HttpServerIntegrationTest::commentReadAndCreatePermissions()
+{
+    QString errorMessage;
+    UserSummary member;
+    UserSummary guest;
+    QVERIFY2(m_server->createManagedUser(
+                 QStringLiteral("comment_member"), &member, &errorMessage),
+             qPrintable(errorMessage));
+    QVERIFY2(m_server->createManagedUser(
+                 QStringLiteral("comment_guest"), &guest, &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/users/%1").arg(member.id),
+        {{QStringLiteral("username"), member.username},
+         {QStringLiteral("role"), QStringLiteral("user")},
+         {QStringLiteral("display_name"), QStringLiteral("Comment Member")}},
+        m_token).status,
+        200);
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/users/%1").arg(guest.id),
+        {{QStringLiteral("username"), guest.username},
+         {QStringLiteral("role"), QStringLiteral("guest")},
+         {QStringLiteral("display_name"), QStringLiteral("Comment Guest")}},
+        m_token).status,
+        200);
+
+    const auto login = [this](const QString &username) {
+        return request(
+            "POST", QStringLiteral("/api/auth/login"),
+            {{QStringLiteral("username"), username},
+             {QStringLiteral("password"), QStringLiteral("123456")}});
+    };
+    const Reply memberLogin = login(member.username);
+    const Reply guestLogin = login(guest.username);
+    QCOMPARE(memberLogin.status, 200);
+    QCOMPARE(guestLogin.status, 200);
+    const QString memberToken =
+        memberLogin.json().value(QStringLiteral("data")).toObject()
+            .value(QStringLiteral("token")).toString();
+    const QString guestToken =
+        guestLogin.json().value(QStringLiteral("data")).toObject()
+            .value(QStringLiteral("token")).toString();
+    QVERIFY(!memberToken.isEmpty());
+    QVERIFY(!guestToken.isEmpty());
+
+    const Reply blockCreated = request(
+        "POST", QStringLiteral("/api/blocks"),
+        {{QStringLiteral("title"), QStringLiteral("Comment Block")}},
+        m_token);
+    QCOMPARE(blockCreated.status, 201);
+    const qint64 blockId = blockCreated.json()
+                               .value(QStringLiteral("data")).toObject()
+                               .value(QStringLiteral("block")).toObject()
+                               .value(QStringLiteral("id")).toInteger();
+    QVERIFY(blockId > 0);
+
+    const Reply issueCreated = request(
+        "POST", QStringLiteral("/api/issues"),
+        {{QStringLiteral("block_id"), blockId},
+         {QStringLiteral("title"), QStringLiteral("Comment Issue")}},
+        memberToken);
+    QCOMPARE(issueCreated.status, 201);
+    const qint64 issueId = issueCreated.json()
+                               .value(QStringLiteral("data")).toObject()
+                               .value(QStringLiteral("issue")).toObject()
+                               .value(QStringLiteral("id")).toInteger();
+    QVERIFY(issueId > 0);
+
+    const QString commentsPath =
+        QStringLiteral("/api/issues/%1/comments").arg(issueId);
+    QCOMPARE(request("GET", commentsPath).status, 401);
+    QCOMPARE(request(
+        "POST", commentsPath,
+        {{QStringLiteral("content"), QStringLiteral("Unauthorized comment")}}).status,
+        401);
+    QCOMPARE(request("GET", commentsPath, {}, memberToken).status, 200);
+    QCOMPARE(request("GET", commentsPath, {}, guestToken).status, 200);
+    QCOMPARE(request("GET", QStringLiteral("/api/issues/999999/comments"), {},
+                     guestToken).status,
+             404);
+
+    QCOMPARE(request(
+        "POST", commentsPath,
+        {{QStringLiteral("content"), QStringLiteral("Guest comment")}},
+        guestToken).status,
+        403);
+    QCOMPARE(request("POST", commentsPath, {}, memberToken).status, 400);
+    QCOMPARE(request(
+        "POST", commentsPath,
+        {{QStringLiteral("content"), QStringLiteral("   ")}},
+        memberToken).status,
+        400);
+    QCOMPARE(request(
+        "POST", commentsPath,
+        {{QStringLiteral("content"), QString(4001, QLatin1Char('x'))}},
+        memberToken).status,
+        400);
+    QCOMPARE(request(
+        "POST", QStringLiteral("/api/issues/999999/comments"),
+        {{QStringLiteral("content"), QStringLiteral("Missing issue")}},
+        memberToken).status,
+        404);
+
+    const Reply memberCreated = request(
+        "POST", commentsPath,
+        {{QStringLiteral("content"), QStringLiteral("  First comment  ")}},
+        memberToken);
+    QCOMPARE(memberCreated.status, 201);
+    const QJsonObject memberComment = memberCreated.json()
+                                          .value(QStringLiteral("data")).toObject()
+                                          .value(QStringLiteral("comment")).toObject();
+    const qint64 memberCommentId =
+        memberComment.value(QStringLiteral("id")).toInteger();
+    QVERIFY(memberCommentId > 0);
+    QCOMPARE(memberComment.value(QStringLiteral("issue_id")).toInteger(),
+             issueId);
+    QCOMPARE(memberComment.value(QStringLiteral("user_id")).toInteger(),
+             member.id);
+    QCOMPARE(memberComment.value(QStringLiteral("content")).toString(),
+             QStringLiteral("First comment"));
+    QCOMPARE(memberComment.value(QStringLiteral("user")).toObject()
+                 .value(QStringLiteral("display_name")).toString(),
+             QStringLiteral("Comment Member"));
+    QVERIFY(!memberComment.value(QStringLiteral("created_at")).toString().isEmpty());
+
+    const Reply adminCreated = request(
+        "POST", commentsPath,
+        {{QStringLiteral("content"), QStringLiteral("Second comment")}},
+        m_token);
+    QCOMPARE(adminCreated.status, 201);
+    const qint64 adminCommentId = adminCreated.json()
+                                      .value(QStringLiteral("data")).toObject()
+                                      .value(QStringLiteral("comment")).toObject()
+                                      .value(QStringLiteral("id")).toInteger();
+    QVERIFY(adminCommentId > memberCommentId);
+
+    const Reply comments = request("GET", commentsPath, {}, guestToken);
+    QCOMPARE(comments.status, 200);
+    const QJsonArray rows = comments.json()
+                                .value(QStringLiteral("data")).toObject()
+                                .value(QStringLiteral("comments")).toArray();
+    QCOMPARE(rows.size(), 2);
+    QCOMPARE(rows.at(0).toObject().value(QStringLiteral("id")).toInteger(),
+             memberCommentId);
+    QCOMPARE(rows.at(1).toObject().value(QStringLiteral("id")).toInteger(),
+             adminCommentId);
+    for (const QJsonValue &value : rows) {
+        const QJsonObject comment = value.toObject();
+        QCOMPARE(comment.value(QStringLiteral("user")).toObject().size(), 3);
+        QVERIFY(comment.value(QStringLiteral("user")).toObject()
+                    .contains(QStringLiteral("id")));
+        QVERIFY(comment.value(QStringLiteral("user")).toObject()
+                    .contains(QStringLiteral("username")));
+        QVERIFY(comment.value(QStringLiteral("user")).toObject()
+                    .contains(QStringLiteral("display_name")));
+    }
+
+    const Reply issueWithCount = request(
+        "GET", QStringLiteral("/api/issues/%1").arg(issueId), {}, m_token);
+    QCOMPARE(issueWithCount.status, 200);
+    QCOMPARE(issueWithCount.json().value(QStringLiteral("data")).toObject()
+                 .value(QStringLiteral("issue")).toObject()
+                 .value(QStringLiteral("comment_count")).toInteger(),
+             qint64(2));
+
+    QCOMPARE(request("DELETE", QStringLiteral("/api/issues/%1").arg(issueId),
+                     {}, m_token).status,
+             200);
+    const QString databasePath =
+        m_temporaryDirectory.filePath(QStringLiteral("issue_panel.db"));
+    const QString checkConnection = QStringLiteral("comment_cascade_check");
+    {
+        QSqlDatabase database = QSqlDatabase::addDatabase(
+            QStringLiteral("QSQLITE"), checkConnection);
+        database.setDatabaseName(databasePath);
+        QVERIFY(database.open());
+        QSqlQuery query(database);
+        query.prepare(QStringLiteral(
+            "SELECT COUNT(*) FROM comments WHERE issue_id = ?"));
+        query.addBindValue(issueId);
+        QVERIFY(query.exec());
+        QVERIFY(query.next());
+        QCOMPARE(query.value(0).toInt(), 0);
+        database.close();
+    }
+    QSqlDatabase::removeDatabase(checkConnection);
+
+    QCOMPARE(request("DELETE", QStringLiteral("/api/blocks/%1").arg(blockId),
+                     {}, m_token).status,
+             200);
+    QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(member.id),
                      {}, m_token).status,
              200);
     QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(guest.id),
