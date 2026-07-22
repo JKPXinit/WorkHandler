@@ -1,5 +1,9 @@
 #include "httpserver.h"
 
+#include "attachments/attachmentcontroller.h"
+#include "attachments/attachmentdao.h"
+#include "attachments/attachmentservice.h"
+#include "attachments/imageprocessor.h"
 #include "blocks/blockcontroller.h"
 #include "blocks/blockdao.h"
 #include "blocks/blockservice.h"
@@ -14,7 +18,9 @@
 #include "users/useroptionsservice.h"
 
 #include <QCoreApplication>
+#include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QHostAddress>
 #include <QHttpServerRequest>
 #include <QHttpServerResponder>
@@ -91,16 +97,34 @@ bool HttpServer::initialize(QString *errorMessage)
     m_userOptionsService = std::make_unique<UserOptionsService>(m_database);
     m_userOptionsController = std::make_unique<UserOptionsController>(
         *m_apiContext, *m_userOptionsService);
+    const QString uploadRoot = QDir(
+        QFileInfo(m_database.databasePath()).absolutePath())
+                                   .filePath(QStringLiteral("uploads"));
+    m_imageProcessor = std::make_unique<ImageProcessor>(uploadRoot);
+    m_attachmentDao = std::make_unique<AttachmentDao>(m_database);
+    m_attachmentService = std::make_unique<AttachmentService>(
+        *m_attachmentDao, *m_imageProcessor, [this]() {
+            const ServerConfig config = configuration();
+            ImageProcessingOptions options;
+            options.maximumWidth = config.maxImageWidth;
+            options.keepOriginal = config.keepOriginal;
+            return options;
+        });
+    m_attachmentController = std::make_unique<AttachmentController>(
+        *m_apiContext, *m_attachmentService);
     m_blockDao = std::make_unique<BlockDao>(m_database);
-    m_blockService = std::make_unique<BlockService>(*m_blockDao);
+    m_blockService = std::make_unique<BlockService>(
+        *m_blockDao, *m_attachmentService);
     m_blockController = std::make_unique<BlockController>(
         *m_apiContext, *m_blockService);
     m_commentDao = std::make_unique<CommentDao>(m_database);
-    m_commentService = std::make_unique<CommentService>(*m_commentDao);
+    m_commentService = std::make_unique<CommentService>(
+        *m_commentDao, *m_attachmentService);
     m_commentController = std::make_unique<CommentController>(
         *m_apiContext, *m_commentService);
     m_issueDao = std::make_unique<IssueDao>(m_database);
-    m_issueService = std::make_unique<IssueService>(*m_issueDao);
+    m_issueService = std::make_unique<IssueService>(
+        *m_issueDao, *m_attachmentService);
     m_issueController = std::make_unique<IssueController>(
         *m_apiContext, *m_issueService);
 
@@ -369,9 +393,9 @@ bool HttpServer::updateConfiguration(const ServerConfig &config, QString *errorM
         }
         return false;
     }
-    if (config.maxImageWidth < 320 || config.maxImageWidth > 16384) {
+    if (config.maxImageWidth < 320 || config.maxImageWidth > 16383) {
         if (errorMessage) {
-            *errorMessage = tr("Maximum image width must be between 320 and 16384.");
+            *errorMessage = tr("Maximum image width must be between 320 and 16383.");
         }
         return false;
     }
@@ -431,6 +455,7 @@ void HttpServer::registerRoutes()
     m_blockController->registerRoutes(m_httpServer);
     m_issueController->registerRoutes(m_httpServer);
     m_commentController->registerRoutes(m_httpServer);
+    m_attachmentController->registerRoutes(m_httpServer);
 
     m_httpServer.route(
         QStringLiteral("/api/auth/login"), Method::Post,

@@ -1,5 +1,7 @@
 #include "blocks/blockservice.h"
 
+#include "attachments/attachmentservice.h"
+
 #include <QJsonValue>
 #include <QRegularExpression>
 
@@ -85,8 +87,10 @@ bool BlockServiceResult::ok() const
     return error == BlockServiceError::None;
 }
 
-BlockService::BlockService(BlockDao &dao)
+BlockService::BlockService(BlockDao &dao,
+                           AttachmentService &attachmentService)
     : m_dao(dao)
+    , m_attachmentService(attachmentService)
 {
 }
 
@@ -218,14 +222,26 @@ BlockServiceResult BlockService::remove(qint64 id) const
         return existing;
     }
 
+    StagedFileRemoval staged;
+    const AttachmentServiceResult stageResult =
+        m_attachmentService.stageBlockRemoval(id, &staged);
+    if (!stageResult.ok()) {
+        return {BlockServiceError::Database,
+                stageResult.code,
+                stageResult.message};
+    }
+
     bool removed = false;
     const BlockDaoResult daoResult = m_dao.remove(id, &removed);
     if (!daoResult.ok()) {
+        m_attachmentService.rollbackRemoval(&staged);
         return daoFailure(daoResult);
     }
     if (!removed) {
+        m_attachmentService.rollbackRemoval(&staged);
         return notFound();
     }
+    m_attachmentService.commitRemoval(&staged);
 
     BlockServiceResult result;
     result.deletedId = id;

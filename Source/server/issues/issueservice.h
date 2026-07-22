@@ -9,6 +9,7 @@
 
 #include <optional>
 
+class AttachmentService;
 struct UserRecord;
 
 struct IssueListInput
@@ -46,7 +47,7 @@ struct IssueServiceResult
 class IssueService
 {
 public:
-    explicit IssueService(IssueDao &dao);
+    IssueService(IssueDao &dao, AttachmentService &attachmentService);
 
     IssueServiceResult list(const IssueListInput &input) const;
     IssueServiceResult get(qint64 id) const;
@@ -68,6 +69,7 @@ private:
     static IssueServiceResult daoFailure(const IssueDaoResult &result);
 
     IssueDao &m_dao;
+    AttachmentService &m_attachmentService;
 };
 
 #endif // ISSUESERVICE_H

@@ -7,6 +7,8 @@
 #include <QList>
 #include <QString>
 
+class AttachmentService;
+
 enum class BlockServiceError {
     None,
     InvalidInput,
@@ -30,7 +32,7 @@ struct BlockServiceResult
 class BlockService
 {
 public:
-    explicit BlockService(BlockDao &dao);
+    BlockService(BlockDao &dao, AttachmentService &attachmentService);
 
     BlockServiceResult list() const;
     BlockServiceResult get(qint64 id) const;
@@ -41,6 +43,7 @@ public:
 private:
     static BlockServiceResult daoFailure(const BlockDaoResult &result);
     BlockDao &m_dao;
+    AttachmentService &m_attachmentService;
 };
 
 #endif // BLOCKSERVICE_H

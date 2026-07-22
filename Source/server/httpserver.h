@@ -15,6 +15,9 @@
 #include <functional>
 #include <memory>
 
+class AttachmentController;
+class AttachmentDao;
+class AttachmentService;
 class BlockController;
 class BlockDao;
 class BlockService;
@@ -24,6 +27,7 @@ class CommentService;
 class IssueController;
 class IssueDao;
 class IssueService;
+class ImageProcessor;
 class QNetworkAccessManager;
 class QTcpServer;
 class QHttpServerRequest;
@@ -120,6 +124,10 @@ private:
     std::unique_ptr<ApiContext> m_apiContext;
     std::unique_ptr<UserOptionsService> m_userOptionsService;
     std::unique_ptr<UserOptionsController> m_userOptionsController;
+    std::unique_ptr<ImageProcessor> m_imageProcessor;
+    std::unique_ptr<AttachmentDao> m_attachmentDao;
+    std::unique_ptr<AttachmentService> m_attachmentService;
+    std::unique_ptr<AttachmentController> m_attachmentController;
     std::unique_ptr<BlockDao> m_blockDao;
     std::unique_ptr<BlockService> m_blockService;
     std::unique_ptr<BlockController> m_blockController;

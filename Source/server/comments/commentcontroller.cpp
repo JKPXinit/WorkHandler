@@ -1,6 +1,7 @@
 #include "comments/commentcontroller.h"
 
 #include "api/apicontext.h"
+#include "api/multipartparser.h"
 #include "comments/commentservice.h"
 
 #include <QHttpServer>
@@ -10,6 +11,7 @@
 
 namespace {
 using StatusCode = QHttpServerResponse::StatusCode;
+constexpr qsizetype MaximumCommentBodySize = 30 * 1024 * 1024 + 256 * 1024;
 }
 
 CommentController::CommentController(ApiContext &apiContext,
@@ -54,15 +56,33 @@ void CommentController::registerRoutes(QHttpServer &server)
                 return ApiContext::authorizationError(authorization);
             }
 
-            QJsonObject body;
-            QString parseError;
-            if (!ApiContext::parseJsonObject(request, &body, &parseError)) {
-                return ApiContext::errorResponse(
-                    StatusCode::BadRequest,
-                    QStringLiteral("invalid_json"), parseError);
+            const QByteArray contentType = request.value("Content-Type").toLower();
+            CommentServiceResult result;
+            if (contentType.startsWith(
+                    QByteArrayLiteral("multipart/form-data"))) {
+                QString content;
+                QList<MultipartFile> files;
+                QString parseError;
+                if (!MultipartParser::parseComment(
+                        request, MaximumCommentBodySize, 9,
+                        &content, &files, &parseError)) {
+                    return ApiContext::errorResponse(
+                        StatusCode::BadRequest,
+                        QStringLiteral("invalid_multipart"), parseError);
+                }
+                result = m_service.createWithImages(
+                    issueId, content, files, authorization.user);
+            } else {
+                QJsonObject body;
+                QString parseError;
+                if (!ApiContext::parseJsonObject(request, &body, &parseError)) {
+                    return ApiContext::errorResponse(
+                        StatusCode::BadRequest,
+                        QStringLiteral("invalid_json"), parseError);
+                }
+                result = m_service.create(
+                    issueId, body, authorization.user);
             }
-            const CommentServiceResult result = m_service.create(
-                issueId, body, authorization.user);
             return result.ok()
                 ? ApiContext::successResponse(
                       {{QStringLiteral("comment"), result.comment.toJson()}},

@@ -218,7 +218,7 @@ m_Options_t *SoftwareConfig::strXml_to_Options(QString strxml) {
                         if (xmlReader.name() == "maxImageWidth") {
                             bool ok = false;
                             const int width = xmlReader.readElementText().toInt(&ok);
-                            if (ok && width >= 320 && width <= 16384) {
+                            if (ok && width >= 320 && width <= 16383) {
                                 OptionsTmp->m_httpServerConfig.maxImageWidth = width;
                             }
                         }

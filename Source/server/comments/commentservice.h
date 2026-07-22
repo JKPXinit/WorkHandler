@@ -1,6 +1,7 @@
 #ifndef COMMENTSERVICE_H
 #define COMMENTSERVICE_H
 
+#include "api/multipartparser.h"
 #include "comments/commentdao.h"
 
 #include <QJsonObject>
@@ -32,18 +33,24 @@ struct CommentServiceResult
 class CommentService
 {
 public:
-    explicit CommentService(CommentDao &dao);
+    CommentService(CommentDao &dao, class AttachmentService &attachmentService);
 
     CommentServiceResult list(qint64 issueId) const;
     CommentServiceResult create(qint64 issueId,
                                 const QJsonObject &values,
                                 const UserRecord &currentUser) const;
+    CommentServiceResult createWithImages(
+        qint64 issueId,
+        const QString &content,
+        const QList<MultipartFile> &files,
+        const UserRecord &currentUser) const;
 
 private:
     CommentServiceResult validateIssue(qint64 issueId) const;
     static CommentServiceResult daoFailure(const CommentDaoResult &result);
 
     CommentDao &m_dao;
+    AttachmentService &m_attachmentService;
 };
 
 #endif // COMMENTSERVICE_H

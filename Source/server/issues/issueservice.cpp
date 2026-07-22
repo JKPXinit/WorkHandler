@@ -1,5 +1,6 @@
 #include "issues/issueservice.h"
 
+#include "attachments/attachmentservice.h"
 #include "databasemanager.h"
 
 #include <QJsonValue>
@@ -127,8 +128,10 @@ bool IssueServiceResult::ok() const
     return error == IssueServiceError::None;
 }
 
-IssueService::IssueService(IssueDao &dao)
+IssueService::IssueService(IssueDao &dao,
+                           AttachmentService &attachmentService)
     : m_dao(dao)
+    , m_attachmentService(attachmentService)
 {
 }
 
@@ -409,15 +412,27 @@ IssueServiceResult IssueService::remove(
         return existingResult;
     }
 
+    StagedFileRemoval staged;
+    const AttachmentServiceResult stageResult =
+        m_attachmentService.stageIssueRemoval(id, &staged);
+    if (!stageResult.ok()) {
+        return {IssueServiceError::Database,
+                stageResult.code,
+                stageResult.message};
+    }
+
     bool removed = false;
     const IssueDaoResult daoResult = m_dao.remove(id, &removed);
     if (!daoResult.ok()) {
+        m_attachmentService.rollbackRemoval(&staged);
         return daoFailure(daoResult);
     }
     if (!removed) {
+        m_attachmentService.rollbackRemoval(&staged);
         return notFound(QStringLiteral("issue_not_found"),
                         QStringLiteral("Issue was not found."));
     }
+    m_attachmentService.commitRemoval(&staged);
     IssueServiceResult result;
     result.deletedId = id;
     return result;

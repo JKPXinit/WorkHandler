@@ -420,7 +420,7 @@ QWidget *ui_AdminOptions::createHttpPage(
     QCheckBox *keepOriginalCheck = new QCheckBox(
         tr("Keep original uploaded images"), runtimeGroup);
     QSpinBox *maxWidthSpin = new QSpinBox(runtimeGroup);
-    maxWidthSpin->setRange(320, 16384);
+    maxWidthSpin->setRange(320, 16383);
     runtimeForm->addRow(QString(), autoStartCheck);
     runtimeForm->addRow(QString(), keepOriginalCheck);
     runtimeForm->addRow(tr("Maximum image width:"), maxWidthSpin);
@@ -1320,4 +1320,3 @@ QWidget * ui_AdminOptions::createShortcutsPage()
     page->setLayout(lay);
     return page;
 }
-

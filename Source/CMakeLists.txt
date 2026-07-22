@@ -85,6 +85,16 @@ set(PROJECT_SOURCES
 set(BACKEND_SOURCES
     server/api/apicontext.cpp
     server/api/apicontext.h
+    server/api/multipartparser.cpp
+    server/api/multipartparser.h
+    server/attachments/attachmentcontroller.cpp
+    server/attachments/attachmentcontroller.h
+    server/attachments/attachmentdao.cpp
+    server/attachments/attachmentdao.h
+    server/attachments/attachmentservice.cpp
+    server/attachments/attachmentservice.h
+    server/attachments/imageprocessor.cpp
+    server/attachments/imageprocessor.h
     server/blocks/blockcontroller.cpp
     server/blocks/blockcontroller.h
     server/blocks/blockdao.cpp
@@ -127,6 +137,7 @@ target_compile_options(workhandler_backend PRIVATE
 )
 target_link_libraries(workhandler_backend PUBLIC
     Qt6::Core
+    Qt6::Gui
     Qt6::HttpServer
     Qt6::Network
     Qt6::Sql
