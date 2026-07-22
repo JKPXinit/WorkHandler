@@ -240,6 +240,11 @@ bool DatabaseManager::isOpen() const
     return m_database.isOpen();
 }
 
+QSqlDatabase DatabaseManager::connection() const
+{
+    return m_database;
+}
+
 bool DatabaseManager::wasCreated() const
 {
     return m_wasCreated;

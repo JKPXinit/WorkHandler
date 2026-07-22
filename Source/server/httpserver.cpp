@@ -1,17 +1,19 @@
 #include "httpserver.h"
 
+#include "blocks/blockcontroller.h"
+#include "blocks/blockdao.h"
+#include "blocks/blockservice.h"
 #include "passwordhasher.h"
+#include "users/useroptionscontroller.h"
+#include "users/useroptionsservice.h"
 
 #include <QCoreApplication>
 #include <QFile>
 #include <QHostAddress>
-#include <QHttpHeaders>
 #include <QHttpServerRequest>
 #include <QHttpServerResponder>
 #include <QHttpServerResponse>
 #include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonParseError>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -78,6 +80,15 @@ bool HttpServer::initialize(QString *errorMessage)
         return false;
     }
     m_tokenHelper.setSecret(secret);
+
+    m_apiContext = std::make_unique<ApiContext>(m_database, m_tokenHelper);
+    m_userOptionsService = std::make_unique<UserOptionsService>(m_database);
+    m_userOptionsController = std::make_unique<UserOptionsController>(
+        *m_apiContext, *m_userOptionsService);
+    m_blockDao = std::make_unique<BlockDao>(m_database);
+    m_blockService = std::make_unique<BlockService>(*m_blockDao);
+    m_blockController = std::make_unique<BlockController>(
+        *m_apiContext, *m_blockService);
 
     registerRoutes();
     m_initialized = true;
@@ -401,6 +412,9 @@ void HttpServer::registerRoutes()
                        [this]() { return staticFrontendResponse(); });
     m_httpServer.route(QStringLiteral("/api/health"), Method::Get,
                        [this]() { return healthResponse(); });
+
+    m_userOptionsController->registerRoutes(m_httpServer);
+    m_blockController->registerRoutes(m_httpServer);
 
     m_httpServer.route(
         QStringLiteral("/api/auth/login"), Method::Post,
@@ -746,46 +760,7 @@ void HttpServer::setState(State state, const QString &detail)
 HttpServer::AuthorizationResult HttpServer::authorize(
     const QHttpServerRequest &request, bool adminRequired) const
 {
-    AuthorizationResult result;
-    const QByteArray authorization = request.value("Authorization").trimmed();
-    constexpr char Prefix[] = "Bearer ";
-    if (!authorization.startsWith(Prefix)) {
-        result.code = QStringLiteral("unauthorized");
-        result.message = tr("A Bearer token is required.");
-        return result;
-    }
-
-    const TokenHelper::Claims claims = m_tokenHelper.validate(
-        QString::fromLatin1(authorization.mid(int(sizeof(Prefix) - 1))).trimmed());
-    if (!claims.valid) {
-        result.code = QStringLiteral("unauthorized");
-        result.message = claims.error;
-        return result;
-    }
-
-    QString databaseError;
-    const auto user = m_database.userById(claims.userId, &databaseError);
-    if (!databaseError.isEmpty() || !user) {
-        result.code = QStringLiteral("unauthorized");
-        result.message = databaseError.isEmpty()
-            ? tr("The token user no longer exists.")
-            : databaseErrorMessage(databaseError);
-        return result;
-    }
-    if (claims.tokenVersion != user->tokenVersion) {
-        result.code = QStringLiteral("unauthorized");
-        result.message = tr("The token is no longer valid.");
-        return result;
-    }
-    if (adminRequired && user->role != QStringLiteral("admin")) {
-        result.code = QStringLiteral("forbidden");
-        result.message = tr("Administrator permission is required.");
-        return result;
-    }
-
-    result.authorized = true;
-    result.user = *user;
-    return result;
+    return m_apiContext->authorize(request, adminRequired);
 }
 
 QHttpServerResponse HttpServer::staticFrontendResponse() const
@@ -819,72 +794,32 @@ QHttpServerResponse HttpServer::healthResponse() const
 QHttpServerResponse HttpServer::successResponse(const QJsonObject &data,
                                                 StatusCode status)
 {
-    QHttpServerResponse response(QJsonObject{
-        {QStringLiteral("ok"), true},
-        {QStringLiteral("data"), data}
-    }, status);
-    addCorsHeaders(&response);
-    return response;
+    return ApiContext::successResponse(data, status);
 }
 
 QHttpServerResponse HttpServer::errorResponse(StatusCode status,
                                               const QString &code,
                                               const QString &message)
 {
-    QHttpServerResponse response(QJsonObject{
-        {QStringLiteral("ok"), false},
-        {QStringLiteral("error"), QJsonObject{
-            {QStringLiteral("code"), code},
-            {QStringLiteral("message"), message}
-        }}
-    }, status);
-    addCorsHeaders(&response);
-    return response;
+    return ApiContext::errorResponse(status, code, message);
 }
 
 QHttpServerResponse HttpServer::authorizationError(
     const AuthorizationResult &authorization)
 {
-    const StatusCode status = authorization.code == QStringLiteral("forbidden")
-        ? StatusCode::Forbidden
-        : StatusCode::Unauthorized;
-    return errorResponse(status, authorization.code, authorization.message);
+    return ApiContext::authorizationError(authorization);
 }
 
 bool HttpServer::parseJsonObject(const QHttpServerRequest &request,
                                  QJsonObject *object,
                                  QString *errorMessage)
 {
-    QJsonParseError parseError;
-    const QJsonDocument document = QJsonDocument::fromJson(request.body(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
-        if (errorMessage) {
-            *errorMessage = parseError.error == QJsonParseError::NoError
-                ? QStringLiteral("The request body must be a JSON object.")
-                : parseError.errorString();
-        }
-        return false;
-    }
-    if (object) {
-        *object = document.object();
-    }
-    return true;
+    return ApiContext::parseJsonObject(request, object, errorMessage);
 }
 
 void HttpServer::addCorsHeaders(QHttpServerResponse *response)
 {
-    QHttpHeaders headers = response->headers();
-    headers.append(QHttpHeaders::WellKnownHeader::AccessControlAllowOrigin,
-                   QStringLiteral("*"));
-    headers.append(QHttpHeaders::WellKnownHeader::AccessControlAllowHeaders,
-                   QStringLiteral("Authorization, Content-Type"));
-    headers.append(QHttpHeaders::WellKnownHeader::AccessControlAllowMethods,
-                   QStringLiteral("GET, POST, PUT, DELETE, OPTIONS"));
-    headers.append(QHttpHeaders::WellKnownHeader::AccessControlMaxAge,
-                   QStringLiteral("600"));
-    headers.append(QHttpHeaders::WellKnownHeader::CacheControl,
-                   QStringLiteral("no-store"));
-    response->setHeaders(std::move(headers));
+    ApiContext::addCorsHeaders(response);
 }
 
 bool HttpServer::validRole(const QString &role)

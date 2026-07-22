@@ -83,6 +83,14 @@ set(PROJECT_SOURCES
 )
 
 set(BACKEND_SOURCES
+    server/api/apicontext.cpp
+    server/api/apicontext.h
+    server/blocks/blockcontroller.cpp
+    server/blocks/blockcontroller.h
+    server/blocks/blockdao.cpp
+    server/blocks/blockdao.h
+    server/blocks/blockservice.cpp
+    server/blocks/blockservice.h
     server/databasemanager.cpp
     server/databasemanager.h
     server/httpserver.cpp
@@ -91,6 +99,10 @@ set(BACKEND_SOURCES
     server/passwordhasher.h
     server/tokenhelper.cpp
     server/tokenhelper.h
+    server/users/useroptionscontroller.cpp
+    server/users/useroptionscontroller.h
+    server/users/useroptionsservice.cpp
+    server/users/useroptionsservice.h
 )
 
 add_library(workhandler_backend STATIC ${BACKEND_SOURCES})

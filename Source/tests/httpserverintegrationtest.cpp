@@ -15,6 +15,7 @@
 #include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlQuery>
+#include <QStringList>
 #include <QTcpServer>
 #include <QTemporaryDir>
 #include <QTest>
@@ -46,6 +47,7 @@ private slots:
     void legacyDatabaseMigration();
     void healthAndCors();
     void authentication();
+    void userOptionsAndBlockCrud();
     void userCrudAndLastAdminProtection();
     void userPasswordChangeAndTokenVersion();
     void accountSummaryAndAdminPasswordChange();
@@ -250,6 +252,250 @@ void HttpServerIntegrationTest::authentication()
                  .value(QStringLiteral("user")).toObject()
                  .value(QStringLiteral("username")).toString(),
              QStringLiteral("admin"));
+}
+
+void HttpServerIntegrationTest::userOptionsAndBlockCrud()
+{
+    QString errorMessage;
+    UserSummary member;
+    UserSummary guest;
+    QVERIFY2(m_server->createManagedUser(
+                 QStringLiteral("block_member"), &member, &errorMessage),
+             qPrintable(errorMessage));
+    QVERIFY2(m_server->createManagedUser(
+                 QStringLiteral("block_guest"), &guest, &errorMessage),
+             qPrintable(errorMessage));
+
+    const Reply guestUpdate = request(
+        "PUT", QStringLiteral("/api/users/%1").arg(guest.id),
+        {{QStringLiteral("username"), guest.username},
+         {QStringLiteral("role"), QStringLiteral("guest")},
+         {QStringLiteral("display_name"), QStringLiteral("Block Guest")}},
+        m_token);
+    QCOMPARE(guestUpdate.status, 200);
+
+    const auto login = [this](const QString &username) {
+        return request(
+            "POST", QStringLiteral("/api/auth/login"),
+            {{QStringLiteral("username"), username},
+             {QStringLiteral("password"), QStringLiteral("123456")}});
+    };
+    const Reply memberLogin = login(member.username);
+    const Reply guestLogin = login(guest.username);
+    QCOMPARE(memberLogin.status, 200);
+    QCOMPARE(guestLogin.status, 200);
+    const QString memberToken =
+        memberLogin.json().value(QStringLiteral("data")).toObject()
+            .value(QStringLiteral("token")).toString();
+    const QString guestToken =
+        guestLogin.json().value(QStringLiteral("data")).toObject()
+            .value(QStringLiteral("token")).toString();
+    QVERIFY(!memberToken.isEmpty());
+    QVERIFY(!guestToken.isEmpty());
+
+    QCOMPARE(request("GET", QStringLiteral("/api/users/options")).status, 401);
+    const Reply options = request(
+        "GET", QStringLiteral("/api/users/options"), {}, m_token);
+    QCOMPARE(options.status, 200);
+    const QJsonArray users = options.json().value(QStringLiteral("data")).toObject()
+                                 .value(QStringLiteral("users")).toArray();
+    QCOMPARE(users.size(), 3);
+    qint64 adminId = 0;
+    for (const QJsonValue &value : users) {
+        const QJsonObject user = value.toObject();
+        QCOMPARE(user.size(), 3);
+        QVERIFY(user.contains(QStringLiteral("display_name")));
+        QVERIFY(user.contains(QStringLiteral("id")));
+        QVERIFY(user.contains(QStringLiteral("username")));
+        if (user.value(QStringLiteral("username")).toString()
+            == QStringLiteral("admin")) {
+            adminId = user.value(QStringLiteral("id")).toInteger();
+        }
+    }
+    QVERIFY(adminId > 0);
+    QCOMPARE(request("GET", QStringLiteral("/api/users/options"), {},
+                     memberToken).status,
+             200);
+    QCOMPARE(request("GET", QStringLiteral("/api/users/options"), {},
+                     guestToken).status,
+             200);
+
+    QCOMPARE(request("GET", QStringLiteral("/api/blocks")).status, 401);
+    QCOMPARE(request("GET", QStringLiteral("/api/blocks"), {},
+                     memberToken).status,
+             200);
+    QCOMPARE(request("GET", QStringLiteral("/api/blocks"), {},
+                     guestToken).status,
+             200);
+    QCOMPARE(request("POST", QStringLiteral("/api/blocks"), {},
+                     m_token).status,
+             400);
+    QCOMPARE(request(
+        "POST", QStringLiteral("/api/blocks"),
+        {{QStringLiteral("title"), QStringLiteral("Invalid Color")},
+         {QStringLiteral("color"), QStringLiteral("blue")}},
+        m_token).status,
+        400);
+    QCOMPARE(request(
+        "POST", QStringLiteral("/api/blocks"),
+        {{QStringLiteral("title"), QStringLiteral("Invalid Order")},
+         {QStringLiteral("sort_order"), 1.5}},
+        m_token).status,
+        400);
+
+    const Reply firstCreated = request(
+        "POST", QStringLiteral("/api/blocks"),
+        {{QStringLiteral("title"), QStringLiteral("  First Block  ")},
+         {QStringLiteral("description"), QStringLiteral("First description")},
+         {QStringLiteral("color"), QStringLiteral("#0066cc")}},
+        m_token);
+    QCOMPARE(firstCreated.status, 201);
+    const QJsonObject first = firstCreated.json()
+                                  .value(QStringLiteral("data")).toObject()
+                                  .value(QStringLiteral("block")).toObject();
+    const qint64 firstId = first.value(QStringLiteral("id")).toInteger();
+    QVERIFY(firstId > 0);
+    QCOMPARE(first.value(QStringLiteral("title")).toString(),
+             QStringLiteral("First Block"));
+    QCOMPARE(first.value(QStringLiteral("sort_order")).toInt(), 0);
+    QCOMPARE(first.value(QStringLiteral("issue_count")).toInteger(), qint64(0));
+
+    const Reply secondCreated = request(
+        "POST", QStringLiteral("/api/blocks"),
+        {{QStringLiteral("title"), QStringLiteral("Second Block")}},
+        m_token);
+    QCOMPARE(secondCreated.status, 201);
+    const QJsonObject second = secondCreated.json()
+                                   .value(QStringLiteral("data")).toObject()
+                                   .value(QStringLiteral("block")).toObject();
+    const qint64 secondId = second.value(QStringLiteral("id")).toInteger();
+    QVERIFY(secondId > firstId);
+    QCOMPARE(second.value(QStringLiteral("sort_order")).toInt(), 1);
+
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/blocks/%1").arg(secondId),
+        {{QStringLiteral("sort_order"), 0}}, m_token).status,
+        200);
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/blocks/%1").arg(firstId),
+        {{QStringLiteral("sort_order"), 1}}, m_token).status,
+        200);
+    const Reply sorted = request(
+        "GET", QStringLiteral("/api/blocks"), {}, m_token);
+    QCOMPARE(sorted.status, 200);
+    const QJsonArray blocks = sorted.json().value(QStringLiteral("data")).toObject()
+                                  .value(QStringLiteral("blocks")).toArray();
+    QCOMPARE(blocks.size(), 2);
+    QCOMPARE(blocks.at(0).toObject().value(QStringLiteral("id")).toInteger(),
+             secondId);
+    QCOMPARE(blocks.at(1).toObject().value(QStringLiteral("id")).toInteger(),
+             firstId);
+
+    QCOMPARE(request(
+        "POST", QStringLiteral("/api/blocks"),
+        {{QStringLiteral("title"), QStringLiteral("Denied")}},
+        memberToken).status,
+        403);
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/blocks/%1").arg(firstId),
+        {{QStringLiteral("title"), QStringLiteral("Denied")}},
+        guestToken).status,
+        403);
+    QCOMPARE(request(
+        "DELETE", QStringLiteral("/api/blocks/%1").arg(firstId), {},
+        memberToken).status,
+        403);
+    QCOMPARE(request("GET", QStringLiteral("/api/blocks/999999"), {},
+                     m_token).status,
+             404);
+    QCOMPARE(request("PUT", QStringLiteral("/api/blocks/999999"),
+                     {{QStringLiteral("sort_order"), 0}}, m_token).status,
+             404);
+    QCOMPARE(request("DELETE", QStringLiteral("/api/blocks/999999"), {},
+                     m_token).status,
+             404);
+
+    const QString databasePath =
+        m_temporaryDirectory.filePath(QStringLiteral("issue_panel.db"));
+    const QString setupConnection = QStringLiteral("batch_one_cascade_setup");
+    qint64 issueId = 0;
+    {
+        QSqlDatabase database = QSqlDatabase::addDatabase(
+            QStringLiteral("QSQLITE"), setupConnection);
+        database.setDatabaseName(databasePath);
+        QVERIFY(database.open());
+        QSqlQuery query(database);
+        QVERIFY(query.exec(QStringLiteral("PRAGMA foreign_keys = ON")));
+        query.prepare(QStringLiteral(
+            "INSERT INTO issues(block_id, title, reporter_id) VALUES(?, ?, ?)"));
+        query.addBindValue(firstId);
+        query.addBindValue(QStringLiteral("Cascade issue"));
+        query.addBindValue(adminId);
+        QVERIFY(query.exec());
+        issueId = query.lastInsertId().toLongLong();
+        QVERIFY(issueId > 0);
+        query.prepare(QStringLiteral(
+            "INSERT INTO comments(issue_id, user_id, content) VALUES(?, ?, ?)"));
+        query.addBindValue(issueId);
+        query.addBindValue(adminId);
+        query.addBindValue(QStringLiteral("Cascade comment"));
+        QVERIFY(query.exec());
+        query.prepare(QStringLiteral(
+            "INSERT INTO attachments(issue_id, uploader_id, filename, storage_path) "
+            "VALUES(?, ?, ?, ?)"));
+        query.addBindValue(issueId);
+        query.addBindValue(adminId);
+        query.addBindValue(QStringLiteral("cascade.txt"));
+        query.addBindValue(QStringLiteral("cascade/cascade.txt"));
+        QVERIFY(query.exec());
+        database.close();
+    }
+    QSqlDatabase::removeDatabase(setupConnection);
+
+    const Reply withIssue = request(
+        "GET", QStringLiteral("/api/blocks/%1").arg(firstId), {}, m_token);
+    QCOMPARE(withIssue.status, 200);
+    QCOMPARE(withIssue.json().value(QStringLiteral("data")).toObject()
+                 .value(QStringLiteral("block")).toObject()
+                 .value(QStringLiteral("issue_count")).toInteger(),
+             qint64(1));
+    QCOMPARE(request("DELETE", QStringLiteral("/api/blocks/%1").arg(firstId),
+                     {}, m_token).status,
+             200);
+
+    const QString checkConnection = QStringLiteral("batch_one_cascade_check");
+    {
+        QSqlDatabase database = QSqlDatabase::addDatabase(
+            QStringLiteral("QSQLITE"), checkConnection);
+        database.setDatabaseName(databasePath);
+        QVERIFY(database.open());
+        QSqlQuery query(database);
+        const QStringList cascadeChecks = {
+            QStringLiteral("SELECT COUNT(*) FROM issues WHERE id = ?"),
+            QStringLiteral("SELECT COUNT(*) FROM comments WHERE issue_id = ?"),
+            QStringLiteral("SELECT COUNT(*) FROM attachments WHERE issue_id = ?")
+        };
+        for (const QString &statement : cascadeChecks) {
+            query.prepare(statement);
+            query.addBindValue(issueId);
+            QVERIFY(query.exec());
+            QVERIFY(query.next());
+            QCOMPARE(query.value(0).toInt(), 0);
+            query.finish();
+        }
+        database.close();
+    }
+    QSqlDatabase::removeDatabase(checkConnection);
+
+    QCOMPARE(request("DELETE", QStringLiteral("/api/blocks/%1").arg(secondId),
+                     {}, m_token).status,
+             200);
+    QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(member.id),
+                     {}, m_token).status,
+             200);
+    QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(guest.id),
+                     {}, m_token).status,
+             200);
 }
 
 void HttpServerIntegrationTest::userCrudAndLastAdminProtection()

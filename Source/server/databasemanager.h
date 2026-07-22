@@ -42,6 +42,7 @@ public:
                     QString *bootstrapAdminPassword = nullptr);
     bool isOpen() const;
     bool wasCreated() const;
+    QSqlDatabase connection() const;
 
     QList<UserRecord> users(QString *errorMessage = nullptr) const;
     std::optional<UserRecord> userById(qint64 id, QString *errorMessage = nullptr) const;

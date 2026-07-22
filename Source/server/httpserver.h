@@ -1,6 +1,7 @@
 #ifndef HTTPSERVER_H
 #define HTTPSERVER_H
 
+#include "api/apicontext.h"
 #include "databasemanager.h"
 #include "tokenhelper.h"
 
@@ -12,11 +13,17 @@
 #include <QtGlobal>
 
 #include <functional>
+#include <memory>
 
+class BlockController;
+class BlockDao;
+class BlockService;
 class QNetworkAccessManager;
 class QTcpServer;
 class QHttpServerRequest;
 class QHttpServerResponse;
+class UserOptionsController;
+class UserOptionsService;
 
 struct ServerConfig
 {
@@ -78,12 +85,7 @@ signals:
                               int maxImageWidth);
 
 private:
-    struct AuthorizationResult {
-        bool authorized {false};
-        UserRecord user;
-        QString code;
-        QString message;
-    };
+    using AuthorizationResult = ApiContext::AuthorizationResult;
 
     void registerRoutes();
     void setState(State state, const QString &detail = QString());
@@ -109,6 +111,12 @@ private:
     static bool validUsername(const QString &username);
     DatabaseManager m_database;
     TokenHelper m_tokenHelper;
+    std::unique_ptr<ApiContext> m_apiContext;
+    std::unique_ptr<UserOptionsService> m_userOptionsService;
+    std::unique_ptr<UserOptionsController> m_userOptionsController;
+    std::unique_ptr<BlockDao> m_blockDao;
+    std::unique_ptr<BlockService> m_blockService;
+    std::unique_ptr<BlockController> m_blockController;
     QHttpServer m_httpServer;
     QTcpServer *m_tcpServer {nullptr};
     QNetworkAccessManager *m_networkManager {nullptr};
