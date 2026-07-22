@@ -31,7 +31,6 @@ QDialog *HttpServerManagerDialog::setupHttpServerManagerDialog()
 
     m_dialog = new QDialog(m_mainWindow);
     m_dialog->setObjectName("HttpServerManagerDialog");
-    m_dialog->setMinimumSize(430, 520);
 
     setupUi();
     refreshConfiguration();
