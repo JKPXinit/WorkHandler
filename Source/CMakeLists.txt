@@ -113,6 +113,12 @@ set(BACKEND_SOURCES
     server/issues/issuedao.h
     server/issues/issueservice.cpp
     server/issues/issueservice.h
+    server/notifications/notificationcontroller.cpp
+    server/notifications/notificationcontroller.h
+    server/notifications/notificationdao.cpp
+    server/notifications/notificationdao.h
+    server/notifications/notificationmanager.cpp
+    server/notifications/notificationmanager.h
     server/databasemanager.cpp
     server/databasemanager.h
     server/httpserver.cpp

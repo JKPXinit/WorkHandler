@@ -28,6 +28,9 @@ class IssueController;
 class IssueDao;
 class IssueService;
 class ImageProcessor;
+class NotificationController;
+class NotificationDao;
+class NotificationManager;
 class QNetworkAccessManager;
 class QTcpServer;
 class QHttpServerRequest;
@@ -75,6 +78,13 @@ public:
     bool changeAdminPassword(const QString &currentPassword,
                              const QString &newPassword,
                              QString *errorMessage = nullptr);
+    bool localAdminUnreadCount(qint64 *count,
+                               QString *errorMessage = nullptr) const;
+    bool markAllLocalAdminNotificationsRead(
+        qint64 *deletedCount,
+        QString *errorMessage = nullptr);
+    bool issueExists(qint64 issueId,
+                     QString *errorMessage = nullptr) const;
 
 public slots:
     bool startServer(const QString &bindAddress, quint16 port);
@@ -88,6 +98,13 @@ signals:
     void reachabilityTested(bool reachable, const QString &detail);
     void bootstrapAdminCreated(const QString &username, const QString &password);
     void accountsChanged();
+    void notificationCreated(qint64 notificationId,
+                             qint64 recipientId,
+                             qint64 issueId,
+                             const QString &type,
+                             const QString &title,
+                             const QString &content);
+    void notificationCountChanged(qint64 recipientId);
     void configurationChanged(const QString &serverInterface,
                               quint16 serverPort,
                               bool autoStart,
@@ -128,13 +145,16 @@ private:
     std::unique_ptr<AttachmentDao> m_attachmentDao;
     std::unique_ptr<AttachmentService> m_attachmentService;
     std::unique_ptr<AttachmentController> m_attachmentController;
+    std::unique_ptr<IssueDao> m_issueDao;
+    std::unique_ptr<NotificationDao> m_notificationDao;
+    std::unique_ptr<NotificationManager> m_notificationManager;
+    std::unique_ptr<NotificationController> m_notificationController;
     std::unique_ptr<BlockDao> m_blockDao;
     std::unique_ptr<BlockService> m_blockService;
     std::unique_ptr<BlockController> m_blockController;
     std::unique_ptr<CommentDao> m_commentDao;
     std::unique_ptr<CommentService> m_commentService;
     std::unique_ptr<CommentController> m_commentController;
-    std::unique_ptr<IssueDao> m_issueDao;
     std::unique_ptr<IssueService> m_issueService;
     std::unique_ptr<IssueController> m_issueController;
     QHttpServer m_httpServer;

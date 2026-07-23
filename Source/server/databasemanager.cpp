@@ -152,12 +152,14 @@ bool DatabaseManager::initialize(QString *errorMessage,
             "CREATE TABLE IF NOT EXISTS notifications ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT,"
             "type TEXT NOT NULL CHECK(type IN ('issue_created','issue_assigned','comment_added','status_changed')),"
-            "title TEXT NOT NULL, content TEXT, related_id INTEGER,"
-            "sender_id INTEGER REFERENCES users(id), recipient_id INTEGER NOT NULL,"
+            "title TEXT NOT NULL, content TEXT,"
+            "related_id INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,"
+            "sender_id INTEGER REFERENCES users(id) ON DELETE SET NULL,"
+            "recipient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,"
             "is_read INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"),
         QStringLiteral(
             "CREATE INDEX IF NOT EXISTS idx_notifications_unread "
-            "ON notifications(recipient_id, is_read)"),
+            "ON notifications(recipient_id, is_read, created_at DESC, id DESC)"),
         QStringLiteral(
             "CREATE TABLE IF NOT EXISTS security_state ("
             "key TEXT PRIMARY KEY, value TEXT NOT NULL)")
@@ -172,7 +174,8 @@ bool DatabaseManager::initialize(QString *errorMessage,
     if (!migrateAttachmentsToComments(errorMessage)
         || !execute(QStringLiteral(
                 "CREATE INDEX IF NOT EXISTS idx_attachments_comment_id "
-                "ON attachments(comment_id)"), errorMessage)) {
+                "ON attachments(comment_id)"), errorMessage)
+        || !migrateNotifications(errorMessage)) {
         return false;
     }
 
@@ -452,6 +455,125 @@ bool DatabaseManager::migrateAttachmentsToComments(QString *errorMessage)
             "CREATE INDEX idx_attachments_comment_id ON attachments(comment_id)"))) {
         return rollback(schemaQuery.lastError().text());
     }
+    if (!m_database.commit()) {
+        const QString detail = m_database.lastError().text();
+        m_database.rollback();
+        setError(errorMessage, detail);
+        return false;
+    }
+    return true;
+}
+
+bool DatabaseManager::migrateNotifications(QString *errorMessage)
+{
+    bool relatedIdNotNull = false;
+    QSqlQuery columnsQuery(m_database);
+    if (!columnsQuery.exec(QStringLiteral("PRAGMA table_info(notifications)"))) {
+        setError(errorMessage, columnsQuery.lastError().text());
+        return false;
+    }
+    while (columnsQuery.next()) {
+        if (columnsQuery.value(1).toString() == QStringLiteral("related_id")) {
+            relatedIdNotNull = columnsQuery.value(3).toInt() != 0;
+            break;
+        }
+    }
+    columnsQuery.finish();
+
+    QHash<QString, QString> deleteActions;
+    QSqlQuery foreignKeyQuery(m_database);
+    if (!foreignKeyQuery.exec(QStringLiteral(
+            "PRAGMA foreign_key_list(notifications)"))) {
+        setError(errorMessage, foreignKeyQuery.lastError().text());
+        return false;
+    }
+    while (foreignKeyQuery.next()) {
+        deleteActions.insert(foreignKeyQuery.value(3).toString(),
+                             foreignKeyQuery.value(6).toString().toUpper());
+    }
+    foreignKeyQuery.finish();
+
+    const bool targetSchema = relatedIdNotNull
+        && deleteActions.value(QStringLiteral("related_id"))
+               == QStringLiteral("CASCADE")
+        && deleteActions.value(QStringLiteral("sender_id"))
+               == QStringLiteral("SET NULL")
+        && deleteActions.value(QStringLiteral("recipient_id"))
+               == QStringLiteral("CASCADE");
+    QStringList indexColumns;
+    QSqlQuery indexQuery(m_database);
+    if (!indexQuery.exec(QStringLiteral(
+            "PRAGMA index_info(idx_notifications_unread)"))) {
+        setError(errorMessage, indexQuery.lastError().text());
+        return false;
+    }
+    while (indexQuery.next()) {
+        indexColumns.append(indexQuery.value(2).toString());
+    }
+    indexQuery.finish();
+    const QStringList targetIndexColumns = {
+        QStringLiteral("recipient_id"),
+        QStringLiteral("is_read"),
+        QStringLiteral("created_at"),
+        QStringLiteral("id")
+    };
+    if (targetSchema) {
+        if (indexColumns == targetIndexColumns) {
+            return true;
+        }
+        return execute(QStringLiteral(
+                   "DROP INDEX IF EXISTS idx_notifications_unread"),
+                       errorMessage)
+            && execute(QStringLiteral(
+                   "CREATE INDEX idx_notifications_unread ON notifications("
+                   "recipient_id, is_read, created_at DESC, id DESC)"),
+                       errorMessage);
+    }
+
+    if (!m_database.transaction()) {
+        setError(errorMessage, m_database.lastError().text());
+        return false;
+    }
+    const auto rollback = [this, errorMessage](const QString &message) {
+        m_database.rollback();
+        setError(errorMessage, message);
+        return false;
+    };
+
+    QSqlQuery query(m_database);
+    if (!query.exec(QStringLiteral(
+            "DROP INDEX IF EXISTS idx_notifications_unread"))
+        || !query.exec(QStringLiteral(
+            "ALTER TABLE notifications RENAME TO notifications_legacy"))
+        || !query.exec(QStringLiteral(
+            "CREATE TABLE notifications ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "type TEXT NOT NULL CHECK(type IN "
+            "('issue_created','issue_assigned','comment_added','status_changed')),"
+            "title TEXT NOT NULL, content TEXT,"
+            "related_id INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,"
+            "sender_id INTEGER REFERENCES users(id) ON DELETE SET NULL,"
+            "recipient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,"
+            "is_read INTEGER DEFAULT 0,"
+            "created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"))
+        || !query.exec(QStringLiteral(
+            "INSERT INTO notifications("
+            "id, type, title, content, related_id, sender_id, recipient_id, "
+            "is_read, created_at) "
+            "SELECT n.id, n.type, n.title, n.content, n.related_id, "
+            "CASE WHEN sender.id IS NULL THEN NULL ELSE n.sender_id END, "
+            "n.recipient_id, COALESCE(n.is_read, 0), n.created_at "
+            "FROM notifications_legacy n "
+            "JOIN users recipient ON recipient.id = n.recipient_id "
+            "JOIN issues issue ON issue.id = n.related_id "
+            "LEFT JOIN users sender ON sender.id = n.sender_id"))
+        || !query.exec(QStringLiteral("DROP TABLE notifications_legacy"))
+        || !query.exec(QStringLiteral(
+            "CREATE INDEX idx_notifications_unread ON notifications("
+            "recipient_id, is_read, created_at DESC, id DESC)"))) {
+        return rollback(query.lastError().text());
+    }
+
     if (!m_database.commit()) {
         const QString detail = m_database.lastError().text();
         m_database.rollback();

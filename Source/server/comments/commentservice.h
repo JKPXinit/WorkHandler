@@ -9,6 +9,7 @@
 #include <QString>
 
 struct UserRecord;
+class NotificationManager;
 
 enum class CommentServiceError {
     None,
@@ -33,17 +34,19 @@ struct CommentServiceResult
 class CommentService
 {
 public:
-    CommentService(CommentDao &dao, class AttachmentService &attachmentService);
+    CommentService(CommentDao &dao,
+                   class AttachmentService &attachmentService,
+                   NotificationManager &notificationManager);
 
     CommentServiceResult list(qint64 issueId) const;
     CommentServiceResult create(qint64 issueId,
                                 const QJsonObject &values,
-                                const UserRecord &currentUser) const;
+                                const UserRecord &currentUser);
     CommentServiceResult createWithImages(
         qint64 issueId,
         const QString &content,
         const QList<MultipartFile> &files,
-        const UserRecord &currentUser) const;
+        const UserRecord &currentUser);
 
 private:
     CommentServiceResult validateIssue(qint64 issueId) const;
@@ -51,6 +54,7 @@ private:
 
     CommentDao &m_dao;
     AttachmentService &m_attachmentService;
+    NotificationManager &m_notificationManager;
 };
 
 #endif // COMMENTSERVICE_H

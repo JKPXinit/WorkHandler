@@ -13,6 +13,9 @@
 #include "issues/issuecontroller.h"
 #include "issues/issuedao.h"
 #include "issues/issueservice.h"
+#include "notifications/notificationcontroller.h"
+#include "notifications/notificationdao.h"
+#include "notifications/notificationmanager.h"
 #include "passwordhasher.h"
 #include "users/useroptionscontroller.h"
 #include "users/useroptionsservice.h"
@@ -112,19 +115,38 @@ bool HttpServer::initialize(QString *errorMessage)
         });
     m_attachmentController = std::make_unique<AttachmentController>(
         *m_apiContext, *m_attachmentService);
+    m_issueDao = std::make_unique<IssueDao>(m_database);
+    m_notificationDao = std::make_unique<NotificationDao>(m_database);
+    m_notificationManager = std::make_unique<NotificationManager>(
+        m_database, *m_notificationDao, *m_issueDao,
+        [this](const QList<NotificationRecord> &created,
+               const QList<qint64> &changedRecipients) {
+            for (const NotificationRecord &record : created) {
+                emit notificationCreated(record.id,
+                                         record.recipientId,
+                                         record.relatedId,
+                                         record.type,
+                                         record.title,
+                                         record.content);
+            }
+            for (qint64 recipientId : changedRecipients) {
+                emit notificationCountChanged(recipientId);
+            }
+        });
+    m_notificationController = std::make_unique<NotificationController>(
+        *m_apiContext, *m_notificationManager);
     m_blockDao = std::make_unique<BlockDao>(m_database);
     m_blockService = std::make_unique<BlockService>(
-        *m_blockDao, *m_attachmentService);
+        *m_blockDao, *m_attachmentService, *m_notificationManager);
     m_blockController = std::make_unique<BlockController>(
         *m_apiContext, *m_blockService);
     m_commentDao = std::make_unique<CommentDao>(m_database);
     m_commentService = std::make_unique<CommentService>(
-        *m_commentDao, *m_attachmentService);
+        *m_commentDao, *m_attachmentService, *m_notificationManager);
     m_commentController = std::make_unique<CommentController>(
         *m_apiContext, *m_commentService);
-    m_issueDao = std::make_unique<IssueDao>(m_database);
     m_issueService = std::make_unique<IssueService>(
-        *m_issueDao, *m_attachmentService);
+        *m_issueDao, *m_attachmentService, *m_notificationManager);
     m_issueController = std::make_unique<IssueController>(
         *m_apiContext, *m_issueService);
 
@@ -298,6 +320,42 @@ bool HttpServer::changeAdminPassword(const QString &currentPassword,
     return true;
 }
 
+bool HttpServer::localAdminUnreadCount(qint64 *count,
+                                       QString *errorMessage) const
+{
+    if (!m_notificationManager) {
+        if (errorMessage) {
+            *errorMessage = tr("Notification service is not initialized.");
+        }
+        return false;
+    }
+    return m_notificationManager->localAdminUnreadCount(count, errorMessage);
+}
+
+bool HttpServer::markAllLocalAdminNotificationsRead(
+    qint64 *deletedCount, QString *errorMessage)
+{
+    if (!m_notificationManager) {
+        if (errorMessage) {
+            *errorMessage = tr("Notification service is not initialized.");
+        }
+        return false;
+    }
+    return m_notificationManager->markAllLocalAdminNotificationsRead(
+        deletedCount, errorMessage);
+}
+
+bool HttpServer::issueExists(qint64 issueId, QString *errorMessage) const
+{
+    if (!m_notificationManager) {
+        if (errorMessage) {
+            *errorMessage = tr("Notification service is not initialized.");
+        }
+        return false;
+    }
+    return m_notificationManager->issueExists(issueId, errorMessage);
+}
+
 bool HttpServer::startServer(const QString &bindAddress, quint16 port)
 {
     if (!m_initialized) {
@@ -456,6 +514,7 @@ void HttpServer::registerRoutes()
     m_issueController->registerRoutes(m_httpServer);
     m_commentController->registerRoutes(m_httpServer);
     m_attachmentController->registerRoutes(m_httpServer);
+    m_notificationController->registerRoutes(m_httpServer);
 
     m_httpServer.route(
         QStringLiteral("/api/auth/login"), Method::Post,

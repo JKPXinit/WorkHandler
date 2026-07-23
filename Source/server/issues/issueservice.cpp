@@ -2,6 +2,7 @@
 
 #include "attachments/attachmentservice.h"
 #include "databasemanager.h"
+#include "notifications/notificationmanager.h"
 
 #include <QJsonValue>
 
@@ -129,9 +130,11 @@ bool IssueServiceResult::ok() const
 }
 
 IssueService::IssueService(IssueDao &dao,
-                           AttachmentService &attachmentService)
+                           AttachmentService &attachmentService,
+                           NotificationManager &notificationManager)
     : m_dao(dao)
     , m_attachmentService(attachmentService)
+    , m_notificationManager(notificationManager)
 {
 }
 
@@ -223,7 +226,7 @@ IssueServiceResult IssueService::get(qint64 id) const
 }
 
 IssueServiceResult IssueService::create(
-    const QJsonObject &values, const UserRecord &currentUser) const
+    const QJsonObject &values, const UserRecord &currentUser)
 {
     if (!canCreate(currentUser)) {
         return forbidden(QStringLiteral("issue_write_forbidden"),
@@ -289,11 +292,15 @@ IssueServiceResult IssueService::create(
     issue.reporterId = currentUser.id;
     IssueServiceResult result;
     const IssueDaoResult daoResult = m_dao.create(issue, &result.issue);
-    return daoResult.ok() ? result : daoFailure(daoResult);
+    if (!daoResult.ok()) {
+        return daoFailure(daoResult);
+    }
+    m_notificationManager.issueCreated(result.issue, currentUser);
+    return result;
 }
 
 IssueServiceResult IssueService::update(
-    qint64 id, const QJsonObject &values, const UserRecord &currentUser) const
+    qint64 id, const QJsonObject &values, const UserRecord &currentUser)
 {
     IssueServiceResult existingResult = get(id);
     if (!existingResult.ok()) {
@@ -373,11 +380,17 @@ IssueServiceResult IssueService::update(
 
     IssueServiceResult result;
     const IssueDaoResult daoResult = m_dao.update(issue, &result.issue);
-    return daoResult.ok() ? result : daoFailure(daoResult);
+    if (!daoResult.ok()) {
+        return daoFailure(daoResult);
+    }
+    m_notificationManager.issueUpdated(existingResult.issue,
+                                       result.issue,
+                                       currentUser);
+    return result;
 }
 
 IssueServiceResult IssueService::changeStatus(
-    qint64 id, const QJsonObject &values, const UserRecord &currentUser) const
+    qint64 id, const QJsonObject &values, const UserRecord &currentUser)
 {
     IssueServiceResult existingResult = get(id);
     if (!existingResult.ok()) {
@@ -397,11 +410,17 @@ IssueServiceResult IssueService::changeStatus(
     IssueServiceResult result;
     const IssueDaoResult daoResult = m_dao.updateStatus(
         id, values.value(QStringLiteral("status")).toString(), &result.issue);
-    return daoResult.ok() ? result : daoFailure(daoResult);
+    if (!daoResult.ok()) {
+        return daoFailure(daoResult);
+    }
+    m_notificationManager.statusChanged(existingResult.issue,
+                                        result.issue,
+                                        currentUser);
+    return result;
 }
 
 IssueServiceResult IssueService::remove(
-    qint64 id, const UserRecord &currentUser) const
+    qint64 id, const UserRecord &currentUser)
 {
     if (currentUser.role != QStringLiteral("admin")) {
         return forbidden(QStringLiteral("issue_delete_forbidden"),
@@ -433,6 +452,7 @@ IssueServiceResult IssueService::remove(
                         QStringLiteral("Issue was not found."));
     }
     m_attachmentService.commitRemoval(&staged);
+    m_notificationManager.notifyLocalAdminCountChanged();
     IssueServiceResult result;
     result.deletedId = id;
     return result;

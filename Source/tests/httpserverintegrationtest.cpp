@@ -56,6 +56,7 @@ private slots:
     void userOptionsAndBlockCrud();
     void issueCrudFilteringAndPermissions();
     void commentReadAndCreatePermissions();
+    void notificationApiAndBusinessEvents();
     void commentImagesAndCascadeCleanup();
     void attachmentUploadReadAndDeletePermissions();
     void legacyAttachmentTestRemoved();
@@ -199,6 +200,45 @@ void HttpServerIntegrationTest::legacyDatabaseMigration()
         query.addBindValue(QStringLiteral("user"));
         query.addBindValue(QStringLiteral("Legacy User"));
         QVERIFY(query.exec());
+        QVERIFY(query.exec(QStringLiteral(
+            "CREATE TABLE blocks ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, "
+            "description TEXT, color TEXT DEFAULT '#3b82f6', "
+            "sort_order INTEGER DEFAULT 0)")));
+        QVERIFY(query.exec(QStringLiteral(
+            "CREATE TABLE issues ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, block_id INTEGER NOT NULL, "
+            "title TEXT NOT NULL, description TEXT, status TEXT DEFAULT 'open', "
+            "priority TEXT DEFAULT 'medium', reporter_id INTEGER NOT NULL, "
+            "assignee_id INTEGER, "
+            "created_at DATETIME DEFAULT CURRENT_TIMESTAMP)")));
+        QVERIFY(query.exec(QStringLiteral(
+            "INSERT INTO blocks(id, title) VALUES(1, 'Legacy Block')")));
+        QVERIFY(query.exec(QStringLiteral(
+            "INSERT INTO issues(id, block_id, title, reporter_id) "
+            "VALUES(1, 1, 'Legacy Issue', 1)")));
+        QVERIFY(query.exec(QStringLiteral(
+            "CREATE TABLE notifications ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, "
+            "title TEXT NOT NULL, content TEXT, related_id INTEGER, "
+            "sender_id INTEGER REFERENCES users(id), recipient_id INTEGER NOT NULL, "
+            "is_read INTEGER DEFAULT 0, "
+            "created_at DATETIME DEFAULT CURRENT_TIMESTAMP)")));
+        QVERIFY(query.exec(QStringLiteral(
+            "CREATE INDEX idx_notifications_unread "
+            "ON notifications(recipient_id, is_read)")));
+        QVERIFY(query.exec(QStringLiteral(
+            "INSERT INTO notifications("
+            "id, type, title, related_id, sender_id, recipient_id) "
+            "VALUES(1, 'issue_created', 'Legacy valid', 1, 1, 1)")));
+        QVERIFY(query.exec(QStringLiteral(
+            "INSERT INTO notifications("
+            "id, type, title, related_id, sender_id, recipient_id) "
+            "VALUES(2, 'comment_added', 'Legacy sender removed', 1, 999, 1)")));
+        QVERIFY(query.exec(QStringLiteral(
+            "INSERT INTO notifications("
+            "id, type, title, related_id, sender_id, recipient_id) "
+            "VALUES(3, 'status_changed', 'Legacy orphan', 999, 1, 1)")));
         database.close();
     }
     QSqlDatabase::removeDatabase(connectionName);
@@ -227,6 +267,49 @@ void HttpServerIntegrationTest::legacyDatabaseMigration()
         "SELECT value FROM security_state WHERE key = 'token_secret'")));
     QVERIFY(migratedQuery.next());
     QCOMPARE(migratedQuery.value(0).toString(), QStringLiteral("legacy-secret"));
+    QVERIFY(migratedQuery.exec(QStringLiteral(
+        "SELECT id, sender_id FROM notifications ORDER BY id")));
+    QVERIFY(migratedQuery.next());
+    QCOMPARE(migratedQuery.value(0).toLongLong(), qint64(1));
+    QCOMPARE(migratedQuery.value(1).toLongLong(), qint64(1));
+    QVERIFY(migratedQuery.next());
+    QCOMPARE(migratedQuery.value(0).toLongLong(), qint64(2));
+    QVERIFY(migratedQuery.value(1).isNull());
+    QVERIFY(!migratedQuery.next());
+
+    bool relatedCascade = false;
+    bool senderSetNull = false;
+    bool recipientCascade = false;
+    QVERIFY(migratedQuery.exec(QStringLiteral(
+        "PRAGMA foreign_key_list(notifications)")));
+    while (migratedQuery.next()) {
+        const QString column = migratedQuery.value(3).toString();
+        const QString action = migratedQuery.value(6).toString().toUpper();
+        relatedCascade = relatedCascade
+            || (column == QStringLiteral("related_id")
+                && action == QStringLiteral("CASCADE"));
+        senderSetNull = senderSetNull
+            || (column == QStringLiteral("sender_id")
+                && action == QStringLiteral("SET NULL"));
+        recipientCascade = recipientCascade
+            || (column == QStringLiteral("recipient_id")
+                && action == QStringLiteral("CASCADE"));
+    }
+    QVERIFY(relatedCascade);
+    QVERIFY(senderSetNull);
+    QVERIFY(recipientCascade);
+
+    QStringList notificationIndexColumns;
+    QVERIFY(migratedQuery.exec(QStringLiteral(
+        "PRAGMA index_info(idx_notifications_unread)")));
+    while (migratedQuery.next()) {
+        notificationIndexColumns.append(migratedQuery.value(2).toString());
+    }
+    QCOMPARE(notificationIndexColumns,
+             QStringList({QStringLiteral("recipient_id"),
+                          QStringLiteral("is_read"),
+                          QStringLiteral("created_at"),
+                          QStringLiteral("id")}));
     migratedDatabase.close();
     QSqlDatabase::removeDatabase(QStringLiteral("legacy_migration_check"));
 }
@@ -1113,6 +1196,280 @@ void HttpServerIntegrationTest::commentReadAndCreatePermissions()
                      {}, m_token).status,
              200);
     QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(guest.id),
+                     {}, m_token).status,
+             200);
+}
+
+void HttpServerIntegrationTest::notificationApiAndBusinessEvents()
+{
+    QCOMPARE(request("GET", QStringLiteral("/api/notifications")).status, 401);
+    QCOMPARE(request("GET", QStringLiteral("/api/notifications/unread-count")).status,
+             401);
+    QCOMPARE(request("PUT", QStringLiteral("/api/notifications/read-all")).status,
+             401);
+    QCOMPARE(request("PUT", QStringLiteral("/api/notifications/1/read")).status,
+             401);
+
+    QCOMPARE(request("PUT", QStringLiteral("/api/notifications/read-all"), {},
+                     m_token).status,
+             200);
+
+    QString errorMessage;
+    UserSummary reporter;
+    UserSummary assignee;
+    QVERIFY2(m_server->createManagedUser(
+                 QStringLiteral("notification_reporter"), &reporter,
+                 &errorMessage),
+             qPrintable(errorMessage));
+    QVERIFY2(m_server->createManagedUser(
+                 QStringLiteral("notification_assignee"), &assignee,
+                 &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/users/%1").arg(reporter.id),
+        {{QStringLiteral("username"), reporter.username},
+         {QStringLiteral("role"), QStringLiteral("user")},
+         {QStringLiteral("display_name"), QStringLiteral("Notification Reporter")}},
+        m_token).status,
+        200);
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/users/%1").arg(assignee.id),
+        {{QStringLiteral("username"), assignee.username},
+         {QStringLiteral("role"), QStringLiteral("user")},
+         {QStringLiteral("display_name"), QStringLiteral("Notification Assignee")}},
+        m_token).status,
+        200);
+
+    const auto login = [this](const QString &username) {
+        return request(
+            "POST", QStringLiteral("/api/auth/login"),
+            {{QStringLiteral("username"), username},
+             {QStringLiteral("password"), QStringLiteral("123456")}});
+    };
+    const Reply reporterLogin = login(reporter.username);
+    const Reply assigneeLogin = login(assignee.username);
+    QCOMPARE(reporterLogin.status, 200);
+    QCOMPARE(assigneeLogin.status, 200);
+    const QString reporterToken =
+        reporterLogin.json().value(QStringLiteral("data")).toObject()
+            .value(QStringLiteral("token")).toString();
+    const QString assigneeToken =
+        assigneeLogin.json().value(QStringLiteral("data")).toObject()
+            .value(QStringLiteral("token")).toString();
+    QVERIFY(!reporterToken.isEmpty());
+    QVERIFY(!assigneeToken.isEmpty());
+
+    QSignalSpy createdSpy(m_server.get(), &HttpServer::notificationCreated);
+    QSignalSpy countChangedSpy(m_server.get(),
+                               &HttpServer::notificationCountChanged);
+
+    const Reply blockCreated = request(
+        "POST", QStringLiteral("/api/blocks"),
+        {{QStringLiteral("title"), QStringLiteral("Notification Block")}},
+        m_token);
+    QCOMPARE(blockCreated.status, 201);
+    const qint64 blockId = blockCreated.json()
+                               .value(QStringLiteral("data")).toObject()
+                               .value(QStringLiteral("block")).toObject()
+                               .value(QStringLiteral("id")).toInteger();
+    QVERIFY(blockId > 0);
+
+    const Reply issueCreated = request(
+        "POST", QStringLiteral("/api/issues"),
+        {{QStringLiteral("block_id"), blockId},
+         {QStringLiteral("title"), QStringLiteral("Notification Issue")},
+         {QStringLiteral("assignee_id"), assignee.id}},
+        reporterToken);
+    QCOMPARE(issueCreated.status, 201);
+    const qint64 issueId = issueCreated.json()
+                               .value(QStringLiteral("data")).toObject()
+                               .value(QStringLiteral("issue")).toObject()
+                               .value(QStringLiteral("id")).toInteger();
+    QVERIFY(issueId > 0);
+    QCOMPARE(createdSpy.count(), 2);
+    QCOMPARE(countChangedSpy.count(), 2);
+
+    const auto unreadCount = [this](const QString &token) {
+        return request("GET", QStringLiteral("/api/notifications/unread-count"),
+                       {}, token)
+            .json().value(QStringLiteral("data")).toObject()
+            .value(QStringLiteral("unread_count")).toInteger();
+    };
+    QCOMPARE(unreadCount(m_token), qint64(1));
+    QCOMPARE(unreadCount(reporterToken), qint64(0));
+    QCOMPARE(unreadCount(assigneeToken), qint64(1));
+
+    const Reply adminList = request(
+        "GET", QStringLiteral("/api/notifications"), {}, m_token);
+    QCOMPARE(adminList.status, 200);
+    const QJsonArray adminNotifications = adminList.json()
+                                               .value(QStringLiteral("data")).toObject()
+                                               .value(QStringLiteral("notifications")).toArray();
+    QCOMPARE(adminNotifications.size(), 1);
+    const QJsonObject adminNotification = adminNotifications.first().toObject();
+    QCOMPARE(adminNotification.value(QStringLiteral("type")).toString(),
+             QStringLiteral("issue_created"));
+    QCOMPARE(adminNotification.value(QStringLiteral("related_id")).toInteger(),
+             issueId);
+    QVERIFY(!adminNotification.contains(QStringLiteral("recipient_id")));
+    QCOMPARE(adminNotification.value(QStringLiteral("sender")).toObject()
+                 .value(QStringLiteral("id")).toInteger(),
+             reporter.id);
+    const qint64 adminNotificationId =
+        adminNotification.value(QStringLiteral("id")).toInteger();
+    QVERIFY(adminNotificationId > 0);
+
+    QCOMPARE(request(
+        "PUT",
+        QStringLiteral("/api/notifications/%1/read").arg(adminNotificationId),
+        {}, assigneeToken).status,
+        404);
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/notifications/not-a-number/read"), {},
+        m_token).status,
+        400);
+    const Reply readOne = request(
+        "PUT",
+        QStringLiteral("/api/notifications/%1/read").arg(adminNotificationId),
+        {}, m_token);
+    QCOMPARE(readOne.status, 200);
+    QCOMPARE(readOne.json().value(QStringLiteral("data")).toObject()
+                 .value(QStringLiteral("deleted_id")).toInteger(),
+             adminNotificationId);
+    QCOMPARE(request(
+        "PUT",
+        QStringLiteral("/api/notifications/%1/read").arg(adminNotificationId),
+        {}, m_token).status,
+        404);
+
+    const int signalsAfterRead = createdSpy.count();
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/issues/%1").arg(issueId),
+        {{QStringLiteral("assignee_id"), assignee.id}}, reporterToken).status,
+        200);
+    QCOMPARE(createdSpy.count(), signalsAfterRead);
+
+    const QString commentsPath =
+        QStringLiteral("/api/issues/%1/comments").arg(issueId);
+    QCOMPARE(request(
+        "POST", commentsPath,
+        {{QStringLiteral("content"), QStringLiteral("First line\nSecond line")}},
+        assigneeToken).status,
+        201);
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/issues/%1/status").arg(issueId),
+        {{QStringLiteral("status"), QStringLiteral("in_progress")}},
+        reporterToken).status,
+        200);
+    const int signalsAfterStatus = createdSpy.count();
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/issues/%1/status").arg(issueId),
+        {{QStringLiteral("status"), QStringLiteral("in_progress")}},
+        reporterToken).status,
+        200);
+    QCOMPARE(createdSpy.count(), signalsAfterStatus);
+
+    QByteArray pngData;
+    QBuffer pngBuffer(&pngData);
+    QImage image(8, 8, QImage::Format_ARGB32);
+    image.fill(Qt::green);
+    QVERIFY(pngBuffer.open(QIODevice::WriteOnly));
+    QVERIFY(image.save(&pngBuffer, "PNG"));
+    QCOMPARE(requestCommentMultipart(
+        commentsPath, QStringLiteral("![Image](upload:0)"),
+        {{QStringLiteral("notification.png"), pngData}}, assigneeToken).status,
+        201);
+
+    QCOMPARE(createdSpy.count(), 8);
+    QCOMPARE(unreadCount(m_token), qint64(3));
+    QCOMPARE(unreadCount(reporterToken), qint64(2));
+    QCOMPARE(unreadCount(assigneeToken), qint64(2));
+
+    qint64 localAdminCount = 0;
+    QVERIFY2(m_server->localAdminUnreadCount(&localAdminCount, &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(localAdminCount, qint64(3));
+    QVERIFY2(m_server->issueExists(issueId, &errorMessage),
+             qPrintable(errorMessage));
+
+    const Reply readAll = request(
+        "PUT", QStringLiteral("/api/notifications/read-all"), {}, m_token);
+    QCOMPARE(readAll.status, 200);
+    QCOMPARE(readAll.json().value(QStringLiteral("data")).toObject()
+                 .value(QStringLiteral("deleted_count")).toInteger(),
+             qint64(3));
+    QCOMPARE(request("PUT", QStringLiteral("/api/notifications/read-all"), {},
+                     m_token).json().value(QStringLiteral("data")).toObject()
+                 .value(QStringLiteral("deleted_count")).toInteger(),
+             qint64(0));
+    qint64 locallyDeleted = -1;
+    QVERIFY2(m_server->markAllLocalAdminNotificationsRead(
+                 &locallyDeleted, &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(locallyDeleted, qint64(0));
+
+    const QString databasePath =
+        m_temporaryDirectory.filePath(QStringLiteral("issue_panel.db"));
+    const QString failureConnection =
+        QStringLiteral("notification_failure_injection");
+    {
+        QSqlDatabase database = QSqlDatabase::addDatabase(
+            QStringLiteral("QSQLITE"), failureConnection);
+        database.setDatabaseName(databasePath);
+        QVERIFY(database.open());
+        QSqlQuery query(database);
+        QVERIFY(query.exec(QStringLiteral(
+            "ALTER TABLE notifications RENAME TO notifications_unavailable")));
+        database.close();
+    }
+    QSqlDatabase::removeDatabase(failureConnection);
+
+    const Reply issueWithoutNotification = request(
+        "POST", QStringLiteral("/api/issues"),
+        {{QStringLiteral("block_id"), blockId},
+         {QStringLiteral("title"), QStringLiteral("Notification Failure Issue")}},
+        reporterToken);
+
+    {
+        QSqlDatabase database = QSqlDatabase::addDatabase(
+            QStringLiteral("QSQLITE"), failureConnection);
+        database.setDatabaseName(databasePath);
+        QVERIFY(database.open());
+        QSqlQuery query(database);
+        QVERIFY(query.exec(QStringLiteral(
+            "ALTER TABLE notifications_unavailable RENAME TO notifications")));
+        database.close();
+    }
+    QSqlDatabase::removeDatabase(failureConnection);
+    QCOMPARE(issueWithoutNotification.status, 201);
+    const qint64 issueWithoutNotificationId = issueWithoutNotification.json()
+        .value(QStringLiteral("data")).toObject()
+        .value(QStringLiteral("issue")).toObject()
+        .value(QStringLiteral("id")).toInteger();
+    QVERIFY(issueWithoutNotificationId > 0);
+    QCOMPARE(unreadCount(m_token), qint64(0));
+    QCOMPARE(request(
+        "DELETE",
+        QStringLiteral("/api/issues/%1").arg(issueWithoutNotificationId), {},
+        m_token).status,
+        200);
+
+    QCOMPARE(request("DELETE", QStringLiteral("/api/issues/%1").arg(issueId),
+                     {}, m_token).status,
+             200);
+    QCOMPARE(unreadCount(reporterToken), qint64(0));
+    QCOMPARE(unreadCount(assigneeToken), qint64(0));
+    errorMessage.clear();
+    QVERIFY(!m_server->issueExists(issueId, &errorMessage));
+    QVERIFY(errorMessage.isEmpty());
+
+    QCOMPARE(request("DELETE", QStringLiteral("/api/blocks/%1").arg(blockId),
+                     {}, m_token).status,
+             200);
+    QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(reporter.id),
+                     {}, m_token).status,
+             200);
+    QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(assignee.id),
                      {}, m_token).status,
              200);
 }

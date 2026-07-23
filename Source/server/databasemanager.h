@@ -79,6 +79,7 @@ public:
 
 private:
     bool migrateAttachmentsToComments(QString *errorMessage);
+    bool migrateNotifications(QString *errorMessage);
     bool execute(const QString &sql, QString *errorMessage = nullptr) const;
     bool setSecurityState(const QString &key,
                           const QString &value,

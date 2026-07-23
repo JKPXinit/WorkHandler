@@ -10,6 +10,7 @@
 #include <optional>
 
 class AttachmentService;
+class NotificationManager;
 struct UserRecord;
 
 struct IssueListInput
@@ -47,20 +48,22 @@ struct IssueServiceResult
 class IssueService
 {
 public:
-    IssueService(IssueDao &dao, AttachmentService &attachmentService);
+    IssueService(IssueDao &dao,
+                 AttachmentService &attachmentService,
+                 NotificationManager &notificationManager);
 
     IssueServiceResult list(const IssueListInput &input) const;
     IssueServiceResult get(qint64 id) const;
     IssueServiceResult create(const QJsonObject &values,
-                              const UserRecord &currentUser) const;
+                              const UserRecord &currentUser);
     IssueServiceResult update(qint64 id,
                               const QJsonObject &values,
-                              const UserRecord &currentUser) const;
+                              const UserRecord &currentUser);
     IssueServiceResult changeStatus(qint64 id,
                                     const QJsonObject &values,
-                                    const UserRecord &currentUser) const;
+                                    const UserRecord &currentUser);
     IssueServiceResult remove(qint64 id,
-                              const UserRecord &currentUser) const;
+                              const UserRecord &currentUser);
 
 private:
     IssueServiceResult validateBlock(qint64 id) const;
@@ -70,6 +73,7 @@ private:
 
     IssueDao &m_dao;
     AttachmentService &m_attachmentService;
+    NotificationManager &m_notificationManager;
 };
 
 #endif // ISSUESERVICE_H

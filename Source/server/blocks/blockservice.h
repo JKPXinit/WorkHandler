@@ -8,6 +8,7 @@
 #include <QString>
 
 class AttachmentService;
+class NotificationManager;
 
 enum class BlockServiceError {
     None,
@@ -32,18 +33,21 @@ struct BlockServiceResult
 class BlockService
 {
 public:
-    BlockService(BlockDao &dao, AttachmentService &attachmentService);
+    BlockService(BlockDao &dao,
+                 AttachmentService &attachmentService,
+                 NotificationManager &notificationManager);
 
     BlockServiceResult list() const;
     BlockServiceResult get(qint64 id) const;
     BlockServiceResult create(const QJsonObject &values) const;
     BlockServiceResult update(qint64 id, const QJsonObject &values) const;
-    BlockServiceResult remove(qint64 id) const;
+    BlockServiceResult remove(qint64 id);
 
 private:
     static BlockServiceResult daoFailure(const BlockDaoResult &result);
     BlockDao &m_dao;
     AttachmentService &m_attachmentService;
+    NotificationManager &m_notificationManager;
 };
 
 #endif // BLOCKSERVICE_H

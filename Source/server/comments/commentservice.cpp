@@ -2,6 +2,7 @@
 
 #include "attachments/attachmentservice.h"
 #include "databasemanager.h"
+#include "notifications/notificationmanager.h"
 
 #include <QRegularExpression>
 #include <QSet>
@@ -33,9 +34,11 @@ bool CommentServiceResult::ok() const
 }
 
 CommentService::CommentService(CommentDao &dao,
-                               AttachmentService &attachmentService)
+                               AttachmentService &attachmentService,
+                               NotificationManager &notificationManager)
     : m_dao(dao)
     , m_attachmentService(attachmentService)
+    , m_notificationManager(notificationManager)
 {
 }
 
@@ -55,7 +58,7 @@ CommentServiceResult CommentService::createWithImages(
     qint64 issueId,
     const QString &content,
     const QList<MultipartFile> &files,
-    const UserRecord &currentUser) const
+    const UserRecord &currentUser)
 {
     if (currentUser.role != QStringLiteral("admin")
         && currentUser.role != QStringLiteral("user")) {
@@ -110,13 +113,14 @@ CommentServiceResult CommentService::createWithImages(
         m_attachmentService.removeFiles(imageResult.attachments);
         return daoFailure(daoResult);
     }
+    m_notificationManager.commentAdded(issueId, result.comment, currentUser);
     return result;
 }
 
 CommentServiceResult CommentService::create(
     qint64 issueId,
     const QJsonObject &values,
-    const UserRecord &currentUser) const
+    const UserRecord &currentUser)
 {
     if (currentUser.role != QStringLiteral("admin")
         && currentUser.role != QStringLiteral("user")) {
@@ -142,7 +146,11 @@ CommentServiceResult CommentService::create(
     CommentServiceResult result;
     const CommentDaoResult daoResult = m_dao.create(
         issueId, currentUser.id, content, &result.comment);
-    return daoResult.ok() ? result : daoFailure(daoResult);
+    if (!daoResult.ok()) {
+        return daoFailure(daoResult);
+    }
+    m_notificationManager.commentAdded(issueId, result.comment, currentUser);
+    return result;
 }
 
 CommentServiceResult CommentService::validateIssue(qint64 issueId) const

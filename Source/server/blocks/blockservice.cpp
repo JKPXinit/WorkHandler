@@ -1,6 +1,7 @@
 #include "blocks/blockservice.h"
 
 #include "attachments/attachmentservice.h"
+#include "notifications/notificationmanager.h"
 
 #include <QJsonValue>
 #include <QRegularExpression>
@@ -88,9 +89,11 @@ bool BlockServiceResult::ok() const
 }
 
 BlockService::BlockService(BlockDao &dao,
-                           AttachmentService &attachmentService)
+                           AttachmentService &attachmentService,
+                           NotificationManager &notificationManager)
     : m_dao(dao)
     , m_attachmentService(attachmentService)
+    , m_notificationManager(notificationManager)
 {
 }
 
@@ -215,7 +218,7 @@ BlockServiceResult BlockService::update(qint64 id,
     return daoResult.ok() ? result : daoFailure(daoResult);
 }
 
-BlockServiceResult BlockService::remove(qint64 id) const
+BlockServiceResult BlockService::remove(qint64 id)
 {
     const BlockServiceResult existing = get(id);
     if (!existing.ok()) {
@@ -242,6 +245,7 @@ BlockServiceResult BlockService::remove(qint64 id) const
         return notFound();
     }
     m_attachmentService.commitRemoval(&staged);
+    m_notificationManager.notifyLocalAdminCountChanged();
 
     BlockServiceResult result;
     result.deletedId = id;
