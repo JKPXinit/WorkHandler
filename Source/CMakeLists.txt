@@ -62,6 +62,8 @@ set(PROJECT_SOURCES
     myUI/ui/uiAdminoptions.h
     myUI/ui/uiAnimation.cpp
     myUI/ui/uiAnimation.h
+    myUI/ui/trayiconrenderer.cpp
+    myUI/ui/trayiconrenderer.h
     myUI/ui/thememanager.cpp
     myUI/ui/thememanager.h
     myUI/ui/languagemanager.cpp
@@ -240,5 +242,25 @@ if(BUILD_TESTING)
     )
     add_test(NAME workhandler_maintenance_tests
              COMMAND workhandler_maintenance_tests)
+
+    qt_add_executable(workhandler_tray_tests
+        tests/trayiconrenderertest.cpp
+        myUI/ui/trayiconrenderer.cpp
+        myUI/ui/trayiconrenderer.h
+    )
+    set_target_properties(workhandler_tray_tests PROPERTIES
+        AUTOUIC OFF
+        AUTORCC OFF
+    )
+    target_include_directories(workhandler_tray_tests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/myUI/ui"
+    )
+    target_link_libraries(workhandler_tray_tests PRIVATE
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Test
+    )
+    add_test(NAME workhandler_tray_tests
+             COMMAND workhandler_tray_tests)
 
 endif()
