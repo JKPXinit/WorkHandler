@@ -143,7 +143,8 @@ bool DatabaseManager::initialize(QString *errorMessage,
             "issue_id INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,"
             "comment_id INTEGER NOT NULL REFERENCES comments(id) ON DELETE CASCADE,"
             "uploader_id INTEGER NOT NULL, filename TEXT NOT NULL,"
-            "storage_path TEXT NOT NULL, thumb_path TEXT, file_size INTEGER,"
+            "storage_path TEXT NOT NULL, thumb_path TEXT, original_path TEXT,"
+            "file_size INTEGER,"
             "created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"),
         QStringLiteral(
             "CREATE INDEX IF NOT EXISTS idx_attachments_issue_id "
@@ -175,6 +176,7 @@ bool DatabaseManager::initialize(QString *errorMessage,
         || !execute(QStringLiteral(
                 "CREATE INDEX IF NOT EXISTS idx_attachments_comment_id "
                 "ON attachments(comment_id)"), errorMessage)
+        || !migrateAttachmentOriginalPath(errorMessage)
         || !migrateNotifications(errorMessage)) {
         return false;
     }
@@ -378,7 +380,7 @@ bool DatabaseManager::migrateAttachmentsToComments(QString *errorMessage)
             "comment_id INTEGER NOT NULL REFERENCES comments(id) ON DELETE CASCADE,"
             "uploader_id INTEGER NOT NULL,"
             "filename TEXT NOT NULL, storage_path TEXT NOT NULL,"
-            "thumb_path TEXT, file_size INTEGER,"
+            "thumb_path TEXT, original_path TEXT, file_size INTEGER,"
             "created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"))) {
         return rollback(schemaQuery.lastError().text());
     }
@@ -462,6 +464,24 @@ bool DatabaseManager::migrateAttachmentsToComments(QString *errorMessage)
         return false;
     }
     return true;
+}
+
+bool DatabaseManager::migrateAttachmentOriginalPath(QString *errorMessage)
+{
+    QSqlQuery query(m_database);
+    if (!query.exec(QStringLiteral("PRAGMA table_info(attachments)"))) {
+        setError(errorMessage, query.lastError().text());
+        return false;
+    }
+    while (query.next()) {
+        if (query.value(1).toString() == QStringLiteral("original_path")) {
+            return true;
+        }
+    }
+    query.finish();
+    return execute(QStringLiteral(
+        "ALTER TABLE attachments ADD COLUMN original_path TEXT"),
+                   errorMessage);
 }
 
 bool DatabaseManager::migrateNotifications(QString *errorMessage)

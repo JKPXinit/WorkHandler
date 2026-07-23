@@ -30,7 +30,8 @@ QString attachmentProjection()
 {
     return QStringLiteral(
         "SELECT id, issue_id, comment_id, uploader_id, filename, storage_path, "
-        "COALESCE(thumb_path, ''), COALESCE(file_size, 0), created_at "
+        "COALESCE(thumb_path, ''), COALESCE(original_path, ''), "
+        "COALESCE(file_size, 0), created_at "
         "FROM attachments ");
 }
 }
@@ -50,10 +51,11 @@ QJsonObject AttachmentRecord::toJson() const
 
 QStringList AttachmentRecord::filePaths() const
 {
-    QStringList paths = {storagePath, thumbnailPath};
-    if (storagePath.endsWith(QStringLiteral(".webp"), Qt::CaseInsensitive)) {
-        paths.append(storagePath.left(storagePath.size() - 5)
-                     + QStringLiteral("_original.bin"));
+    QStringList paths;
+    for (const QString &path : {storagePath, thumbnailPath, originalPath}) {
+        if (!path.isEmpty() && !paths.contains(path)) {
+            paths.append(path);
+        }
     }
     return paths;
 }
@@ -85,7 +87,8 @@ AttachmentDaoResult AttachmentDao::attachmentsForBlock(
         QStringLiteral(
             "SELECT a.id, a.issue_id, a.comment_id, a.uploader_id, a.filename, "
             "a.storage_path, COALESCE(a.thumb_path, ''), "
-            "COALESCE(a.file_size, 0), a.created_at "
+            "COALESCE(a.original_path, ''), COALESCE(a.file_size, 0), "
+            "a.created_at "
             "FROM attachments a JOIN issues i ON i.id = a.issue_id "
             "WHERE i.block_id = ? ORDER BY a.id ASC"),
         blockId, attachments);
@@ -142,7 +145,8 @@ AttachmentRecord AttachmentDao::readAttachment(const QSqlQuery &query)
     attachment.filename = query.value(4).toString();
     attachment.storagePath = query.value(5).toString();
     attachment.thumbnailPath = query.value(6).toString();
-    attachment.fileSize = query.value(7).toLongLong();
-    attachment.createdAt = query.value(8).toString();
+    attachment.originalPath = query.value(7).toString();
+    attachment.fileSize = query.value(8).toLongLong();
+    attachment.createdAt = query.value(9).toString();
     return attachment;
 }

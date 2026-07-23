@@ -178,19 +178,22 @@ CommentDaoResult CommentDao::createWithAttachments(
     QSqlQuery attachmentQuery(database);
     attachmentQuery.prepare(QStringLiteral(
         "INSERT INTO attachments(issue_id, comment_id, uploader_id, filename, "
-        "storage_path, thumb_path, file_size) VALUES(?, ?, ?, ?, ?, ?, ?)"));
+        "storage_path, thumb_path, original_path, file_size) "
+        "VALUES(?, ?, ?, ?, ?, ?, ?, ?)"));
     for (qsizetype index = 0; index < attachments.size(); ++index) {
         const AttachmentRecord &attachment = attachments.at(index);
         attachmentQuery.clear();
         attachmentQuery.prepare(QStringLiteral(
             "INSERT INTO attachments(issue_id, comment_id, uploader_id, filename, "
-            "storage_path, thumb_path, file_size) VALUES(?, ?, ?, ?, ?, ?, ?)"));
+            "storage_path, thumb_path, original_path, file_size) "
+            "VALUES(?, ?, ?, ?, ?, ?, ?, ?)"));
         attachmentQuery.addBindValue(issueId);
         attachmentQuery.addBindValue(commentId);
         attachmentQuery.addBindValue(userId);
         attachmentQuery.addBindValue(attachment.filename);
         attachmentQuery.addBindValue(attachment.storagePath);
         attachmentQuery.addBindValue(attachment.thumbnailPath);
+        attachmentQuery.addBindValue(attachment.originalPath);
         attachmentQuery.addBindValue(attachment.fileSize);
         if (!attachmentQuery.exec()) {
             return rollback(attachmentQuery.lastError());
@@ -268,7 +271,8 @@ CommentDaoResult CommentDao::loadAttachments(CommentRecord *comment) const
     QSqlQuery query(m_database.connection());
     query.prepare(QStringLiteral(
         "SELECT id, issue_id, comment_id, uploader_id, filename, storage_path, "
-        "COALESCE(thumb_path, ''), COALESCE(file_size, 0), created_at "
+        "COALESCE(thumb_path, ''), COALESCE(original_path, ''), "
+        "COALESCE(file_size, 0), created_at "
         "FROM attachments WHERE comment_id = ? ORDER BY id ASC"));
     query.addBindValue(comment->id);
     if (!query.exec()) {
@@ -283,8 +287,9 @@ CommentDaoResult CommentDao::loadAttachments(CommentRecord *comment) const
         attachment.filename = query.value(4).toString();
         attachment.storagePath = query.value(5).toString();
         attachment.thumbnailPath = query.value(6).toString();
-        attachment.fileSize = query.value(7).toLongLong();
-        attachment.createdAt = query.value(8).toString();
+        attachment.originalPath = query.value(7).toString();
+        attachment.fileSize = query.value(8).toLongLong();
+        attachment.createdAt = query.value(9).toString();
         comment->attachments.append(attachment);
     }
     return success();

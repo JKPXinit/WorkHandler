@@ -20,6 +20,7 @@ struct AttachmentRecord
     QString filename;
     QString storagePath;
     QString thumbnailPath;
+    QString originalPath;
     qint64 fileSize {0};
     QString createdAt;
 

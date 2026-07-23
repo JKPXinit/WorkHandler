@@ -90,6 +90,7 @@ AttachmentServiceResult AttachmentService::processCommentImages(
         attachment.filename = file.filename;
         attachment.storagePath = image.storagePath;
         attachment.thumbnailPath = image.thumbnailPath;
+        attachment.originalPath = image.originalPath;
         attachment.fileSize = image.fileSize;
         result.attachments.append(attachment);
     }

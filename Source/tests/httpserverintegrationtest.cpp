@@ -28,6 +28,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <utility>
 
 class HttpServerIntegrationTest : public QObject
 {
@@ -1582,6 +1583,17 @@ void HttpServerIntegrationTest::commentImagesAndCascadeCleanup()
          {QStringLiteral("tall.png"), tallImage}},
         guestToken).status,
         403);
+    m_server->setConfigurationProvider([this](QString *providerError) {
+        if (providerError) {
+            providerError->clear();
+        }
+        ServerConfig config;
+        config.serverInterface = QStringLiteral("127.0.0.1");
+        config.serverPort = m_port;
+        config.keepOriginal = true;
+        config.maxImageWidth = 1600;
+        return config;
+    });
     const Reply created = requestCommentMultipart(
         commentsPath,
         QStringLiteral("前置\n![第一张](upload:0)\n后置\n![第二张](upload:1)\n![大图](upload:2)\n![长图](upload:3)"),
@@ -1590,6 +1602,16 @@ void HttpServerIntegrationTest::commentImagesAndCascadeCleanup()
          {QStringLiteral("large.png"), largeImage},
          {QStringLiteral("tall.png"), tallImage}},
         memberToken);
+    m_server->setConfigurationProvider([this](QString *providerError) {
+        if (providerError) {
+            providerError->clear();
+        }
+        ServerConfig config;
+        config.serverInterface = QStringLiteral("127.0.0.1");
+        config.serverPort = m_port;
+        config.maxImageWidth = 1600;
+        return config;
+    });
     QCOMPARE(created.status, 201);
     const QJsonObject comment = created.json().value(QStringLiteral("data")).toObject()
                                     .value(QStringLiteral("comment")).toObject();
@@ -1601,6 +1623,38 @@ void HttpServerIntegrationTest::commentImagesAndCascadeCleanup()
     QVERIFY(!storedContent.contains(QStringLiteral("upload:")));
     const qint64 attachmentId = attachments.at(0).toObject()
                                     .value(QStringLiteral("id")).toInteger();
+    QVERIFY(!attachments.at(0).toObject().contains(
+        QStringLiteral("original_path")));
+    QStringList originalFiles;
+    const QString originalConnection = QStringLiteral(
+        "comment_original_path_check");
+    {
+        QSqlDatabase database = QSqlDatabase::addDatabase(
+            QStringLiteral("QSQLITE"), originalConnection);
+        database.setDatabaseName(
+            m_temporaryDirectory.filePath(QStringLiteral("issue_panel.db")));
+        QVERIFY(database.open());
+        QSqlQuery query(database);
+        query.prepare(QStringLiteral(
+            "SELECT storage_path, thumb_path, original_path "
+            "FROM attachments WHERE id = ?"));
+        query.addBindValue(attachmentId);
+        QVERIFY(query.exec());
+        QVERIFY(query.next());
+        for (int column = 0; column < 3; ++column) {
+            const QString relativePath = query.value(column).toString();
+            QVERIFY(!relativePath.isEmpty());
+            originalFiles.append(QDir(
+                m_temporaryDirectory.filePath(QStringLiteral("uploads")))
+                                     .filePath(relativePath));
+        }
+        database.close();
+    }
+    QSqlDatabase::removeDatabase(originalConnection);
+    QCOMPARE(originalFiles.size(), 3);
+    for (const QString &path : std::as_const(originalFiles)) {
+        QVERIFY(QFileInfo::exists(path));
+    }
     QCOMPARE(request("GET", QStringLiteral("/api/attachments/%1").arg(attachmentId), {}, guestToken).status, 200);
     QCOMPARE(request("DELETE", QStringLiteral("/api/attachments/%1").arg(attachmentId), {}, m_token).status, 405);
     const qint64 largeAttachmentId = attachments.at(2).toObject()
@@ -1629,6 +1683,9 @@ void HttpServerIntegrationTest::commentImagesAndCascadeCleanup()
                  .value(QStringLiteral("comments")).toArray().at(0).toObject()
                  .value(QStringLiteral("attachments")).toArray().size(), 4);
     QCOMPARE(request("DELETE", QStringLiteral("/api/issues/%1").arg(issueId), {}, m_token).status, 200);
+    for (const QString &path : std::as_const(originalFiles)) {
+        QVERIFY(!QFileInfo::exists(path));
+    }
     QCOMPARE(request("DELETE", QStringLiteral("/api/blocks/%1").arg(blockId), {}, m_token).status, 200);
     QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(member.id), {}, m_token).status, 200);
     QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(guest.id), {}, m_token).status, 200);
