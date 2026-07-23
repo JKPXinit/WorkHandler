@@ -36,6 +36,7 @@ typedef struct m_Options {
         int  logRotationMaxSizeMB;      // 按大小时的阈值（MB）
         int  logRotationIntervalDays;   // 按时间时的间隔（天）
         int  logRotationMaxBackups;     // 最多保留的备份文件数
+        int  logRetentionDays;           // 日志文件保留天数
     };
     systemConfig_t m_systemConfig;
 
@@ -88,6 +89,8 @@ public:
     void setLogRotationIntervalDays(int days) { m_Config->m_systemConfig.logRotationIntervalDays = days; }
     int logRotationMaxBackups() const { return m_Config->m_systemConfig.logRotationMaxBackups; }
     void setLogRotationMaxBackups(int count) { m_Config->m_systemConfig.logRotationMaxBackups = count; }
+    int logRetentionDays() const { return m_Config->m_systemConfig.logRetentionDays; }
+    void setLogRetentionDays(int days) { m_Config->m_systemConfig.logRetentionDays = days; }
 
     // HTTP server config
     QString httpServerInterfaceName() const { return m_Config->m_httpServerConfig.interfaceName; }

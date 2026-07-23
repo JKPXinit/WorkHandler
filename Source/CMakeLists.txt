@@ -113,6 +113,10 @@ set(BACKEND_SOURCES
     server/issues/issuedao.h
     server/issues/issueservice.cpp
     server/issues/issueservice.h
+    server/maintenance/maintenancedao.cpp
+    server/maintenance/maintenancedao.h
+    server/maintenance/maintenancemanager.cpp
+    server/maintenance/maintenancemanager.h
     server/notifications/notificationcontroller.cpp
     server/notifications/notificationcontroller.h
     server/notifications/notificationdao.cpp
@@ -220,4 +224,21 @@ if(BUILD_TESTING)
     )
     add_test(NAME workhandler_httpserver_tests
              COMMAND workhandler_httpserver_tests)
+
+    qt_add_executable(workhandler_maintenance_tests
+        tests/maintenancetest.cpp
+    )
+    set_target_properties(workhandler_maintenance_tests PROPERTIES
+        AUTOUIC OFF
+        AUTORCC OFF
+    )
+    target_link_libraries(workhandler_maintenance_tests PRIVATE
+        Qt6::Core
+        Qt6::Sql
+        Qt6::Test
+        workhandler_backend
+    )
+    add_test(NAME workhandler_maintenance_tests
+             COMMAND workhandler_maintenance_tests)
+
 endif()

@@ -58,6 +58,9 @@ public:
     // 获取当前配置
     LogConfig getConfig() const;
 
+    // 获取当前实际写入的日志文件路径
+    QString activeLogFilePath() const;
+
     // 写入日志（核心函数）
     void log(LogLevel level, const QString &message,
              const char *file, int line, const char *function);

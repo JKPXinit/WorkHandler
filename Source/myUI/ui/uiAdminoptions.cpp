@@ -1055,9 +1055,21 @@ QWidget * ui_AdminOptions::createSystemPage()
     backupLayout->addWidget(maxBackupSpinBox);
     backupLayout->addStretch();
 
+    QHBoxLayout *retentionLayout = new QHBoxLayout();
+    QLabel *retentionLabel = new QLabel(tr("Retain log files:"), logGroup);
+    QSpinBox *retentionSpinBox = new QSpinBox(logGroup);
+    retentionSpinBox->setRange(1, 3650);
+    retentionSpinBox->setSuffix(tr(" days"));
+    retentionSpinBox->setValue(
+        m_mainWindow->m_softwareconfig->logRetentionDays());
+    retentionLayout->addWidget(retentionLabel);
+    retentionLayout->addWidget(retentionSpinBox);
+    retentionLayout->addStretch();
+
     logLayout->addLayout(sizeLayout);
     logLayout->addLayout(timeLayout);
     logLayout->addLayout(backupLayout);
+    logLayout->addLayout(retentionLayout);
 
     // 设置轮转模式单选按钮初始状态
     int rotMode = m_mainWindow->m_softwareconfig->logRotationMode();
@@ -1137,17 +1149,32 @@ QWidget * ui_AdminOptions::createSystemPage()
         myLogger::instance()->setConfig(cfg);
     });
 
+    connect(retentionSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, [=](int val) {
+        m_mainWindow->m_softwareconfig->setLogRetentionDays(val);
+        m_mainWindow->m_softwareconfig->Write_config();
+    });
+
     // 控制台/文件模式切换时同步轮转控件 enabled
     connect(logConsoleRadio, &QRadioButton::toggled, this, [=](bool checked) {
-        if (checked) rotationCheckBox->setEnabled(false);
+        if (checked) {
+            rotationCheckBox->setEnabled(false);
+            retentionLabel->setEnabled(false);
+            retentionSpinBox->setEnabled(false);
+        }
         setRotationSubEnabled(false);
     });
     connect(logFileRadio, &QRadioButton::toggled, this, [=](bool checked) {
         if (checked) {
             rotationCheckBox->setEnabled(true);
+            retentionLabel->setEnabled(true);
+            retentionSpinBox->setEnabled(true);
             setRotationSubEnabled(rotationCheckBox->isChecked());
         }
     });
+
+    retentionLabel->setEnabled(isFileMode);
+    retentionSpinBox->setEnabled(isFileMode);
 
     lay->addWidget(logGroup);
 

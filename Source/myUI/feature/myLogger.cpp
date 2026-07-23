@@ -106,6 +106,12 @@ LogConfig myLogger::getConfig() const
     return m_config;
 }
 
+QString myLogger::activeLogFilePath() const
+{
+    QMutexLocker locker(const_cast<QMutex*>(&m_logMutex));
+    return m_logFile ? m_logFile->fileName() : QString();
+}
+
 void myLogger::log(LogLevel level, const QString &message,
                    const char *file, int line, const char *function)
 {

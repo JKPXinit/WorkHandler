@@ -89,6 +89,7 @@ m_Options_t *SoftwareConfig::strXml_to_Options(QString strxml) {
     OptionsTmp->m_systemConfig.logRotationMaxSizeMB    = 10;
     OptionsTmp->m_systemConfig.logRotationIntervalDays = 1;
     OptionsTmp->m_systemConfig.logRotationMaxBackups   = 5;
+    OptionsTmp->m_systemConfig.logRetentionDays        = 30;
     OptionsTmp->m_httpServerConfig.interfaceName.clear();
     OptionsTmp->m_httpServerConfig.selectedAddress.clear();
     OptionsTmp->m_httpServerConfig.port = 8080;
@@ -177,6 +178,14 @@ m_Options_t *SoftwareConfig::strXml_to_Options(QString strxml) {
                         if (xmlReader.name() == "logRotationMaxBackups") {
                             OptionsTmp->m_systemConfig.logRotationMaxBackups = xmlReader.readElementText().toInt();
                         }
+
+                        if (xmlReader.name() == "logRetentionDays") {
+                            bool ok = false;
+                            const int days = xmlReader.readElementText().toInt(&ok);
+                            if (ok && days >= 1 && days <= 3650) {
+                                OptionsTmp->m_systemConfig.logRetentionDays = days;
+                            }
+                        }
                     }
                 } // System
 
@@ -263,6 +272,7 @@ void SoftwareConfig::Default_Config() {
     m_Config->m_systemConfig.logRotationMaxSizeMB    = 10;
     m_Config->m_systemConfig.logRotationIntervalDays = 1;
     m_Config->m_systemConfig.logRotationMaxBackups   = 5;
+    m_Config->m_systemConfig.logRetentionDays        = 30;
     m_Config->m_httpServerConfig.interfaceName.clear();
     m_Config->m_httpServerConfig.selectedAddress.clear();
     m_Config->m_httpServerConfig.port = 8080;
@@ -318,6 +328,7 @@ QString SoftwareConfig::Options_to_strXml(m_Options_t *OptionsTmp) {
     writer.writeTextElement("logRotationMaxSizeMB",    QString::number(OptionsTmp->m_systemConfig.logRotationMaxSizeMB));
     writer.writeTextElement("logRotationIntervalDays", QString::number(OptionsTmp->m_systemConfig.logRotationIntervalDays));
     writer.writeTextElement("logRotationMaxBackups",   QString::number(OptionsTmp->m_systemConfig.logRotationMaxBackups));
+    writer.writeTextElement("logRetentionDays",        QString::number(OptionsTmp->m_systemConfig.logRetentionDays));
     writer.writeEndElement();               // 软件设置
 
     writer.writeStartElement("HttpServer");
