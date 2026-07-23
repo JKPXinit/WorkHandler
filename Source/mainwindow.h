@@ -2,6 +2,7 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include <QUrl>
 
 #include "DockManager.h"
 
@@ -14,6 +15,7 @@ class logViewerDialog;
 class aboutDialog;
 class HttpServerManagerDialog;
 class HttpServer;
+class QTimer;
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -45,9 +47,14 @@ private slots:
 
 private:
     Ui::MainWindow *ui;
+    QTimer *m_notificationCalibrationTimer {nullptr};
+    QUrl m_pendingWebUrl;
 
     void closeEvent(QCloseEvent *e);
     void changeEvent(QEvent *e);
+    void refreshTrayUnreadCount();
+    bool startConfiguredServer();
+    void openWebPanel(qint64 issueId = 0);
 
 
 };

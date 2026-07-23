@@ -8,6 +8,7 @@
 #include <QTranslator>
 
 #include "public.h"
+#include "trayiconrenderer.h"
 
 
 #define UI_DEBUUG   0
@@ -29,6 +30,14 @@ public:
     uiManager(MainWindow *mainWindow);
     void closeSplash();
     bool onCloseEvent(QCloseEvent *);
+
+signals:
+    void openWebPanelRequested();
+    void openIssueRequested(qint64 issueId);
+    void startServerRequested();
+    void stopServerRequested();
+    void markAllNotificationsReadRequested();
+    void quitRequested();
 
 public:
     QDialog *logVieweDialog;
@@ -52,6 +61,11 @@ public slots:
     void retranslateUi();
     void languageComBox_currenIndexChanged(int index);
     void themeComboBox_currenIndexChanged(int index);
+    void setServerState(TrayServerState state);
+    void setUnreadCount(qint64 unreadCount);
+    void showAdminNotification(qint64 issueId,
+                               const QString &title,
+                               const QString &content);
 
 private slots:
 
@@ -99,8 +113,16 @@ private:
     QSplashScreen *m_splash{nullptr};
     QSystemTrayIcon *m_trayIcon{nullptr};
     QMenu *m_trayMenu{nullptr};
+    QAction *m_trayOpenWebAction {nullptr};
+    QAction *m_trayServerAction {nullptr};
+    QAction *m_trayMarkAllReadAction {nullptr};
+    TrayServerState m_trayServerState {TrayServerState::Stopped};
+    qint64 m_trayUnreadCount {0};
+    qint64 m_lastToastIssueId {0};
+    bool m_backgroundMessageShown {false};
 
     void initIcon();
+    void refreshTrayPresentation();
 };
 
 #endif // _UIMANAGER_H

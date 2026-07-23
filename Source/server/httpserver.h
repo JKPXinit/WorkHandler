@@ -3,6 +3,7 @@
 
 #include "api/apicontext.h"
 #include "databasemanager.h"
+#include "maintenance/maintenancemanager.h"
 #include "tokenhelper.h"
 
 #include <QHttpServer>
@@ -28,6 +29,7 @@ class IssueController;
 class IssueDao;
 class IssueService;
 class ImageProcessor;
+class MaintenanceDao;
 class NotificationController;
 class NotificationDao;
 class NotificationManager;
@@ -71,6 +73,8 @@ public:
     bool isRunning() const;
     ServerConfig configuration(QString *errorMessage = nullptr) const;
     void setConfigurationProvider(std::function<ServerConfig(QString *)> provider);
+    void setMaintenanceConfigurationProvider(
+        std::function<MaintenanceConfig()> provider);
     QList<UserSummary> accountSummaries(QString *errorMessage = nullptr) const;
     bool createManagedUser(const QString &username,
                            UserSummary *createdUser = nullptr,
@@ -85,10 +89,13 @@ public:
         QString *errorMessage = nullptr);
     bool issueExists(qint64 issueId,
                      QString *errorMessage = nullptr) const;
+    bool isLocalAdminRecipient(qint64 userId,
+                               QString *errorMessage = nullptr) const;
 
 public slots:
     bool startServer(const QString &bindAddress, quint16 port);
     void stopServer();
+    void shutdown();
     void restartServer(const QString &bindAddress, quint16 port);
     bool updateConfiguration(const ServerConfig &config, QString *errorMessage = nullptr);
     void testReachability(const QUrl &url);
@@ -105,6 +112,7 @@ signals:
                              const QString &title,
                              const QString &content);
     void notificationCountChanged(qint64 recipientId);
+    void maintenanceLogMessage(int level, const QString &message);
     void configurationChanged(const QString &serverInterface,
                               quint16 serverPort,
                               bool autoStart,
@@ -138,6 +146,8 @@ private:
     static bool validUsername(const QString &username);
     DatabaseManager m_database;
     TokenHelper m_tokenHelper;
+    std::unique_ptr<MaintenanceDao> m_maintenanceDao;
+    std::unique_ptr<MaintenanceManager> m_maintenanceManager;
     std::unique_ptr<ApiContext> m_apiContext;
     std::unique_ptr<UserOptionsService> m_userOptionsService;
     std::unique_ptr<UserOptionsController> m_userOptionsController;
@@ -164,7 +174,9 @@ private:
     QString m_bindAddress;
     quint16 m_port {0};
     bool m_initialized {false};
+    bool m_shuttingDown {false};
     std::function<ServerConfig(QString *)> m_configurationProvider;
+    std::function<MaintenanceConfig()> m_maintenanceConfigurationProvider;
 };
 
 #endif // HTTPSERVER_H

@@ -13,6 +13,8 @@
 #include "issues/issuecontroller.h"
 #include "issues/issuedao.h"
 #include "issues/issueservice.h"
+#include "maintenance/maintenancedao.h"
+#include "maintenance/maintenancemanager.h"
 #include "notifications/notificationcontroller.h"
 #include "notifications/notificationdao.h"
 #include "notifications/notificationmanager.h"
@@ -67,9 +69,7 @@ HttpServer::HttpServer(const QString &databasePath, QObject *parent)
 
 HttpServer::~HttpServer()
 {
-    if (m_tcpServer) {
-        m_tcpServer->close();
-    }
+    shutdown();
 }
 
 bool HttpServer::initialize(QString *errorMessage)
@@ -96,13 +96,29 @@ bool HttpServer::initialize(QString *errorMessage)
     }
     m_tokenHelper.setSecret(secret);
 
+    const QString uploadRoot = QDir(
+        QFileInfo(m_database.databasePath()).absolutePath())
+                                   .filePath(QStringLiteral("uploads"));
+    m_maintenanceDao = std::make_unique<MaintenanceDao>(m_database);
+    m_maintenanceManager = std::make_unique<MaintenanceManager>(
+        *m_maintenanceDao,
+        uploadRoot,
+        [this]() {
+            return m_maintenanceConfigurationProvider
+                ? m_maintenanceConfigurationProvider()
+                : MaintenanceConfig();
+        },
+        [this]() { return isRunning(); },
+        [this](MaintenanceLogLevel level, const QString &message) {
+            emit maintenanceLogMessage(int(level), message);
+        },
+        this);
+    m_maintenanceManager->runStartupMaintenance();
+
     m_apiContext = std::make_unique<ApiContext>(m_database, m_tokenHelper);
     m_userOptionsService = std::make_unique<UserOptionsService>(m_database);
     m_userOptionsController = std::make_unique<UserOptionsController>(
         *m_apiContext, *m_userOptionsService);
-    const QString uploadRoot = QDir(
-        QFileInfo(m_database.databasePath()).absolutePath())
-                                   .filePath(QStringLiteral("uploads"));
     m_imageProcessor = std::make_unique<ImageProcessor>(uploadRoot);
     m_attachmentDao = std::make_unique<AttachmentDao>(m_database);
     m_attachmentService = std::make_unique<AttachmentService>(
@@ -152,6 +168,7 @@ bool HttpServer::initialize(QString *errorMessage)
 
     registerRoutes();
     m_initialized = true;
+    m_maintenanceManager->startDailyTimer();
     if (!bootstrapPassword.isEmpty()) {
         emit bootstrapAdminCreated(QStringLiteral("admin"), bootstrapPassword);
     }
@@ -181,6 +198,12 @@ void HttpServer::setConfigurationProvider(
     std::function<ServerConfig(QString *)> provider)
 {
     m_configurationProvider = std::move(provider);
+}
+
+void HttpServer::setMaintenanceConfigurationProvider(
+    std::function<MaintenanceConfig()> provider)
+{
+    m_maintenanceConfigurationProvider = std::move(provider);
 }
 
 QList<UserSummary> HttpServer::accountSummaries(QString *errorMessage) const
@@ -356,8 +379,20 @@ bool HttpServer::issueExists(qint64 issueId, QString *errorMessage) const
     return m_notificationManager->issueExists(issueId, errorMessage);
 }
 
+bool HttpServer::isLocalAdminRecipient(qint64 userId,
+                                       QString *errorMessage) const
+{
+    if (errorMessage) {
+        errorMessage->clear();
+    }
+    const auto admin = m_database.userByUsername(
+        QStringLiteral("admin"), errorMessage);
+    return admin && admin->id == userId;
+}
+
 bool HttpServer::startServer(const QString &bindAddress, quint16 port)
 {
+    m_shuttingDown = false;
     if (!m_initialized) {
         setState(State::Error, tr("HTTP server is not initialized."));
         return false;
@@ -427,6 +462,19 @@ void HttpServer::stopServer()
     m_bindAddress.clear();
     m_port = 0;
     setState(State::Stopped);
+}
+
+void HttpServer::shutdown()
+{
+    m_shuttingDown = true;
+    if (m_maintenanceManager) {
+        m_maintenanceManager->stopDailyTimer();
+    }
+    if (m_tcpServer) {
+        m_tcpServer->close();
+    }
+    m_bindAddress.clear();
+    m_port = 0;
 }
 
 void HttpServer::restartServer(const QString &bindAddress, quint16 port)
@@ -855,6 +903,9 @@ void HttpServer::setState(State state, const QString &detail)
 {
     m_state = state;
     emit stateChanged(state, detail);
+    if (state == State::Stopped && m_maintenanceManager && !m_shuttingDown) {
+        m_maintenanceManager->onServerStopped();
+    }
 }
 
 HttpServer::AuthorizationResult HttpServer::authorize(

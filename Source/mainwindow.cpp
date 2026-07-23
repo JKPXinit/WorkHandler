@@ -13,6 +13,8 @@
 #include "public.h"
 
 #include <QHostAddress>
+#include <QApplication>
+#include <QDesktopServices>
 #include <QTimer>
 
 MainWindow::MainWindow(QWidget *parent)
@@ -51,10 +53,47 @@ MainWindow::MainWindow(QWidget *parent)
         }
         return config;
     });
+    m_httpServer->setMaintenanceConfigurationProvider([this]() {
+        MaintenanceConfig config;
+        config.activeLogFilePath = myLogger::instance()->activeLogFilePath();
+        config.logFilePath = m_softwareconfig->logFilePath();
+        if (config.logFilePath.isEmpty()) {
+            config.logFilePath = config.activeLogFilePath.isEmpty()
+                ? myLogger::getDefaultLogFilePath()
+                : config.activeLogFilePath;
+        }
+        config.logRetentionDays = m_softwareconfig->logRetentionDays();
+        return config;
+    });
 
     m_UI = new uiManager(this);
 
     m_UI->setupUI();    // 显示 UI 界面
+
+    connect(m_UI, &uiManager::startServerRequested,
+            this, [this]() { startConfiguredServer(); });
+    connect(m_UI, &uiManager::stopServerRequested,
+            m_httpServer, &HttpServer::stopServer);
+    connect(m_UI, &uiManager::openWebPanelRequested,
+            this, [this]() { openWebPanel(); });
+    connect(m_UI, &uiManager::openIssueRequested,
+            this, &MainWindow::openWebPanel);
+    connect(m_UI, &uiManager::markAllNotificationsReadRequested,
+            this, [this]() {
+                qint64 deletedCount = 0;
+                QString errorMessage;
+                if (!m_httpServer->markAllLocalAdminNotificationsRead(
+                        &deletedCount, &errorMessage)) {
+                    LOG_WARNING(QStringLiteral(
+                        "Failed to mark local notifications read: %1")
+                                    .arg(errorMessage));
+                }
+                refreshTrayUnreadCount();
+            });
+    connect(m_UI, &uiManager::quitRequested, this, [this]() {
+        m_httpServer->shutdown();
+        QApplication::quit();
+    });
 
     // ShortcutManager 信号解耦连线
     connect(m_shortcutManager, &ShortcutManager::shortcutConfigSaved,
@@ -101,8 +140,71 @@ MainWindow::MainWindow(QWidget *parent)
                     break;
                 }
                 m_httpServerManagerDialog->setServerState(dialogState, detail);
+                TrayServerState trayState = TrayServerState::Stopped;
+                switch (state) {
+                case HttpServer::State::Stopped:
+                    trayState = TrayServerState::Stopped;
+                    break;
+                case HttpServer::State::Starting:
+                    trayState = TrayServerState::Starting;
+                    break;
+                case HttpServer::State::Running:
+                    trayState = TrayServerState::Running;
+                    break;
+                case HttpServer::State::Stopping:
+                    trayState = TrayServerState::Stopping;
+                    break;
+                case HttpServer::State::Error:
+                    trayState = TrayServerState::Error;
+                    break;
+                }
+                m_UI->setServerState(trayState);
+                if (state == HttpServer::State::Running
+                    && m_pendingWebUrl.isValid()) {
+                    const QUrl target = m_pendingWebUrl;
+                    m_pendingWebUrl.clear();
+                    QDesktopServices::openUrl(target);
+                } else if (state == HttpServer::State::Error
+                           && m_pendingWebUrl.isValid()) {
+                    LOG_WARNING(QStringLiteral(
+                        "Pending Web panel navigation was cancelled: %1")
+                                    .arg(detail));
+                    m_pendingWebUrl.clear();
+                }
                 LOG_INFO(QStringLiteral("HTTP server state changed: %1")
                              .arg(detail.isEmpty() ? QString::number(int(state)) : detail));
+            });
+    connect(m_httpServer, &HttpServer::notificationCountChanged,
+            this, [this](qint64) { refreshTrayUnreadCount(); });
+    connect(m_httpServer, &HttpServer::notificationCreated,
+            this,
+            [this](qint64, qint64 recipientId, qint64 issueId,
+                   const QString &, const QString &title,
+                   const QString &content) {
+                refreshTrayUnreadCount();
+                QString errorMessage;
+                if (m_httpServer->isLocalAdminRecipient(
+                        recipientId, &errorMessage)) {
+                    m_UI->showAdminNotification(issueId, title, content);
+                } else if (!errorMessage.isEmpty()) {
+                    LOG_WARNING(QStringLiteral(
+                        "Failed to identify local notification recipient: %1")
+                                    .arg(errorMessage));
+                }
+            });
+    connect(m_httpServer, &HttpServer::maintenanceLogMessage,
+            this, [](int level, const QString &message) {
+                switch (MaintenanceLogLevel(level)) {
+                case MaintenanceLogLevel::Info:
+                    LOG_INFO(message);
+                    break;
+                case MaintenanceLogLevel::Warning:
+                    LOG_WARNING(message);
+                    break;
+                case MaintenanceLogLevel::Error:
+                    LOG_ERROR(message);
+                    break;
+                }
             });
     connect(m_httpServer,
             &HttpServer::reachabilityTested,
@@ -150,6 +252,13 @@ MainWindow::MainWindow(QWidget *parent)
     if (m_httpServer->initialize(&httpServerError)) {
         ServerConfig config = m_httpServer->configuration(&httpServerError);
         m_httpServer->updateConfiguration(config, &httpServerError);
+        refreshTrayUnreadCount();
+
+        m_notificationCalibrationTimer = new QTimer(this);
+        m_notificationCalibrationTimer->setInterval(60 * 1000);
+        connect(m_notificationCalibrationTimer, &QTimer::timeout,
+                this, &MainWindow::refreshTrayUnreadCount);
+        m_notificationCalibrationTimer->start();
 
         if (httpServerError.isEmpty() && config.autoStart) {
             QTimer::singleShot(0, m_httpServer, [this, config]() {
@@ -164,6 +273,59 @@ MainWindow::MainWindow(QWidget *parent)
             HttpServerManagerDialog::ServerState::Error, httpServerError);
     }
 
+}
+
+void MainWindow::refreshTrayUnreadCount()
+{
+    if (!m_httpServer || !m_UI) {
+        return;
+    }
+    qint64 count = 0;
+    QString errorMessage;
+    if (!m_httpServer->localAdminUnreadCount(&count, &errorMessage)) {
+        LOG_WARNING(QStringLiteral("Failed to refresh tray unread count: %1")
+                        .arg(errorMessage));
+        return;
+    }
+    m_UI->setUnreadCount(count);
+}
+
+bool MainWindow::startConfiguredServer()
+{
+    QString errorMessage;
+    const ServerConfig config = m_httpServer->configuration(&errorMessage);
+    if (!errorMessage.isEmpty()) {
+        LOG_ERROR(QStringLiteral("Failed to read HTTP configuration: %1")
+                      .arg(errorMessage));
+        return false;
+    }
+    return m_httpServer->startServer(config.serverInterface,
+                                     config.serverPort);
+}
+
+void MainWindow::openWebPanel(qint64 issueId)
+{
+    const quint16 port = m_softwareconfig->httpServerPort();
+    QUrl target = TrayIconRenderer::rootUrl(port);
+    if (issueId > 0) {
+        QString errorMessage;
+        const bool exists = m_httpServer->issueExists(issueId, &errorMessage);
+        if (!errorMessage.isEmpty()) {
+            LOG_WARNING(QStringLiteral("Failed to verify Issue %1: %2")
+                            .arg(issueId).arg(errorMessage));
+        } else if (exists) {
+            target = TrayIconRenderer::issueUrl(port, issueId);
+        }
+    }
+
+    if (m_httpServer->isRunning()) {
+        QDesktopServices::openUrl(target);
+        return;
+    }
+    m_pendingWebUrl = target;
+    if (!startConfiguredServer()) {
+        m_pendingWebUrl.clear();
+    }
 }
 
 void MainWindow::initConfigUI() {
@@ -249,7 +411,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
 MainWindow::~MainWindow(){
     LOG_INFO("Application shutting down...");
     if (m_httpServer) {
-        m_httpServer->stopServer();
+        m_httpServer->shutdown();
     }
     m_softwareconfig->Write_config();
 

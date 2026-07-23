@@ -10,6 +10,7 @@
 #include <QWidget>
 #include <QString>
 #include <QSettings>
+#include <QWindow>
 
 #include "uiManager.h"
 #include "mainwindow.h"
@@ -409,10 +410,31 @@ void uiManager::initTray()
     m_trayMenu = new QMenu(parent);
 
     QAction *showAction = m_trayMenu->addAction(tr("Show"));
+    m_trayOpenWebAction = m_trayMenu->addAction(tr("Open Web Panel"));
+    m_trayServerAction = m_trayMenu->addAction(tr("Start Server"));
+    m_trayMarkAllReadAction = m_trayMenu->addAction(
+        tr("Mark All Notifications Read"));
+    m_trayMenu->addSeparator();
     QAction *quitAction = m_trayMenu->addAction(tr("Quit"));
 
-    connect(showAction, &QAction::triggered, m_mainWindow, &QWidget::show);
-    connect(quitAction, &QAction::triggered, qApp, &QCoreApplication::quit);
+    connect(showAction, &QAction::triggered, this, [this]() {
+        m_mainWindow->showNormal();
+        m_mainWindow->raise();
+        m_mainWindow->activateWindow();
+    });
+    connect(m_trayOpenWebAction, &QAction::triggered,
+            this, &uiManager::openWebPanelRequested);
+    connect(m_trayServerAction, &QAction::triggered, this, [this]() {
+        if (m_trayServerState == TrayServerState::Running) {
+            emit stopServerRequested();
+        } else {
+            emit startServerRequested();
+        }
+    });
+    connect(m_trayMarkAllReadAction, &QAction::triggered,
+            this, &uiManager::markAllNotificationsReadRequested);
+    connect(quitAction, &QAction::triggered,
+            this, &uiManager::quitRequested);
 
     m_trayIcon = new QSystemTrayIcon(parent);
     m_trayIcon->setIcon(QIcon(AppIcons::App));
@@ -420,19 +442,90 @@ void uiManager::initTray()
     m_trayIcon->setContextMenu(m_trayMenu);
 
     connect(m_trayIcon, &QSystemTrayIcon::activated, m_mainWindow, [this](QSystemTrayIcon::ActivationReason r){
-        if (r == QSystemTrayIcon::Trigger) m_mainWindow->show();
+        if (r == QSystemTrayIcon::Trigger) {
+            m_mainWindow->showNormal();
+            m_mainWindow->raise();
+            m_mainWindow->activateWindow();
+        }
+    });
+    connect(m_trayIcon, &QSystemTrayIcon::messageClicked, this, [this]() {
+        if (m_lastToastIssueId > 0) {
+            emit openIssueRequested(m_lastToastIssueId);
+        }
     });
 
+    refreshTrayPresentation();
     m_trayIcon->show();
+}
+
+void uiManager::setServerState(TrayServerState state)
+{
+    m_trayServerState = state;
+    refreshTrayPresentation();
+}
+
+void uiManager::setUnreadCount(qint64 unreadCount)
+{
+    m_trayUnreadCount = qMax<qint64>(0, unreadCount);
+    refreshTrayPresentation();
+}
+
+void uiManager::showAdminNotification(qint64 issueId,
+                                      const QString &title,
+                                      const QString &content)
+{
+    if (!m_trayIcon || !m_trayIcon->isVisible()) {
+        return;
+    }
+    m_lastToastIssueId = issueId;
+    m_trayIcon->showMessage(title, content,
+                            QSystemTrayIcon::Information, 5000);
+}
+
+void uiManager::refreshTrayPresentation()
+{
+    if (!m_trayIcon) {
+        return;
+    }
+    const qreal dpr = m_mainWindow->windowHandle()
+        ? m_mainWindow->windowHandle()->devicePixelRatio() : 1.0;
+    m_trayIcon->setIcon(QIcon(TrayIconRenderer::render(
+        QIcon(AppIcons::App), m_trayServerState, m_trayUnreadCount, 32, dpr)));
+
+    const TrayActionState actions = TrayIconRenderer::actionState(
+        m_trayServerState, m_trayUnreadCount);
+    m_trayOpenWebAction->setEnabled(actions.openWebEnabled);
+    m_trayServerAction->setEnabled(actions.serverActionEnabled);
+    m_trayMarkAllReadAction->setEnabled(actions.markAllReadEnabled);
+    switch (actions.serverAction) {
+    case TrayServerAction::Start:
+        m_trayServerAction->setText(tr("Start Server"));
+        break;
+    case TrayServerAction::Stop:
+        m_trayServerAction->setText(tr("Stop Server"));
+        break;
+    case TrayServerAction::Starting:
+        m_trayServerAction->setText(tr("Starting Server"));
+        break;
+    case TrayServerAction::Stopping:
+        m_trayServerAction->setText(tr("Stopping Server"));
+        break;
+    case TrayServerAction::Retry:
+        m_trayServerAction->setText(tr("Retry Server"));
+        break;
+    }
 }
 
 bool uiManager::onCloseEvent(QCloseEvent *)
 {
     if (m_trayIcon && m_trayIcon->isVisible()) {
         m_mainWindow->hide();
-        m_trayIcon->showMessage(QCoreApplication::applicationName(),
-                                tr("Running in background"),
-                                QSystemTrayIcon::Information, 2000);
+        if (!m_backgroundMessageShown) {
+            m_trayIcon->showMessage(QCoreApplication::applicationName(),
+                                    tr("Running in background"),
+                                    QSystemTrayIcon::Information, 2000);
+            m_backgroundMessageShown = true;
+        }
         return false; // 不真正退出
     }
     return true;      // 真正退出
