@@ -1,10 +1,14 @@
 ﻿#include "mainwindow.h"
 
+#include "public.h"
+
 #include <QApplication>
+#include <QIcon>
 
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
+    a.setWindowIcon(QIcon(AppIcons::App));
 
     // 应用元数据由 CMake 项目定义统一提供。
     QCoreApplication::setApplicationName(QStringLiteral(WORKHANDLER_APPLICATION_NAME));

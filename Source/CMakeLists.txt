@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(WorkHandler
-    VERSION 0.0.1
+    VERSION 0.1.0
     LANGUAGES CXX
 )
 
@@ -15,6 +15,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui HttpServer Network Sql Widgets LinguistTools)
+
+set(WORKHANDLER_ICON_PATH "${CMAKE_CURRENT_SOURCE_DIR}/icon/app.ico")
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/logo.rc"
+    "${CMAKE_CURRENT_BINARY_DIR}/WorkHandler.rc"
+    @ONLY
+    NEWLINE_STYLE CRLF
+)
 
 if(NOT WIN32)
     message(FATAL_ERROR "This CMake configuration currently targets the existing Windows x64 ADS binaries.")
@@ -82,6 +90,7 @@ set(PROJECT_SOURCES
     image.qrc
     language.qrc
     theme.qrc
+    "${CMAKE_CURRENT_BINARY_DIR}/WorkHandler.rc"
 )
 
 set(BACKEND_SOURCES

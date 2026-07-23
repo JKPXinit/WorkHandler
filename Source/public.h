@@ -20,7 +20,7 @@ namespace Practical_Function {
 }
 
 namespace AppIcons {
-    constexpr const char* App           = ":/prefix1/icon/template.png";
+    constexpr const char* App           = ":/prefix1/icon/app.png";
     constexpr const char* Options       = ":/prefix1/icon/settings.png";
     constexpr const char* Administrator = ":/prefix1/icon/Administrator.png";
     constexpr const char* Password      = ":/prefix1/icon/password.png";

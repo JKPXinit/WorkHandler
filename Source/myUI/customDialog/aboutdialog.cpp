@@ -224,7 +224,7 @@ QString aboutDialog::getAppVersion() const
 
 QString aboutDialog::getAppBuildDate() const
 {
-    return "2025-09-17";
+    return "2026-07-23";
 }
 
 QString aboutDialog::getQtVersion() const

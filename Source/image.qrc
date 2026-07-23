@@ -9,7 +9,7 @@
         <file>icon/search.png</file>
         <file>icon/settings.png</file>
         <file>icon/theme.png</file>
-        <file>icon/template.png</file>
+        <file>icon/app.png</file>
         <file>icon/system.png</file>
         <file>icon/shortcut.png</file>
     </qresource>
