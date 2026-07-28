@@ -157,7 +157,8 @@ bool DatabaseManager::initialize(QString *errorMessage,
             "related_id INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,"
             "sender_id INTEGER REFERENCES users(id) ON DELETE SET NULL,"
             "recipient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,"
-            "is_read INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"),
+            "is_read INTEGER NOT NULL DEFAULT 0, "
+            "created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"),
         QStringLiteral(
             "CREATE INDEX IF NOT EXISTS idx_notifications_unread "
             "ON notifications(recipient_id, is_read, created_at DESC, id DESC)"),
@@ -487,15 +488,18 @@ bool DatabaseManager::migrateAttachmentOriginalPath(QString *errorMessage)
 bool DatabaseManager::migrateNotifications(QString *errorMessage)
 {
     bool relatedIdNotNull = false;
+    bool isReadNotNull = false;
     QSqlQuery columnsQuery(m_database);
     if (!columnsQuery.exec(QStringLiteral("PRAGMA table_info(notifications)"))) {
         setError(errorMessage, columnsQuery.lastError().text());
         return false;
     }
     while (columnsQuery.next()) {
-        if (columnsQuery.value(1).toString() == QStringLiteral("related_id")) {
+        const QString column = columnsQuery.value(1).toString();
+        if (column == QStringLiteral("related_id")) {
             relatedIdNotNull = columnsQuery.value(3).toInt() != 0;
-            break;
+        } else if (column == QStringLiteral("is_read")) {
+            isReadNotNull = columnsQuery.value(3).toInt() != 0;
         }
     }
     columnsQuery.finish();
@@ -513,7 +517,7 @@ bool DatabaseManager::migrateNotifications(QString *errorMessage)
     }
     foreignKeyQuery.finish();
 
-    const bool targetSchema = relatedIdNotNull
+    const bool targetSchema = relatedIdNotNull && isReadNotNull
         && deleteActions.value(QStringLiteral("related_id"))
                == QStringLiteral("CASCADE")
         && deleteActions.value(QStringLiteral("sender_id"))
@@ -538,15 +542,18 @@ bool DatabaseManager::migrateNotifications(QString *errorMessage)
         QStringLiteral("id")
     };
     if (targetSchema) {
-        if (indexColumns == targetIndexColumns) {
-            return true;
+        if (indexColumns != targetIndexColumns
+            && (!execute(QStringLiteral(
+                    "DROP INDEX IF EXISTS idx_notifications_unread"),
+                         errorMessage)
+                || !execute(QStringLiteral(
+                    "CREATE INDEX idx_notifications_unread ON notifications("
+                    "recipient_id, is_read, created_at DESC, id DESC)"),
+                            errorMessage))) {
+            return false;
         }
         return execute(QStringLiteral(
-                   "DROP INDEX IF EXISTS idx_notifications_unread"),
-                       errorMessage)
-            && execute(QStringLiteral(
-                   "CREATE INDEX idx_notifications_unread ON notifications("
-                   "recipient_id, is_read, created_at DESC, id DESC)"),
+                   "DELETE FROM notifications WHERE is_read <> 0"),
                        errorMessage);
     }
 
@@ -574,7 +581,7 @@ bool DatabaseManager::migrateNotifications(QString *errorMessage)
             "related_id INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,"
             "sender_id INTEGER REFERENCES users(id) ON DELETE SET NULL,"
             "recipient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,"
-            "is_read INTEGER DEFAULT 0,"
+            "is_read INTEGER NOT NULL DEFAULT 0,"
             "created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"))
         || !query.exec(QStringLiteral(
             "INSERT INTO notifications("
@@ -586,7 +593,8 @@ bool DatabaseManager::migrateNotifications(QString *errorMessage)
             "FROM notifications_legacy n "
             "JOIN users recipient ON recipient.id = n.recipient_id "
             "JOIN issues issue ON issue.id = n.related_id "
-            "LEFT JOIN users sender ON sender.id = n.sender_id"))
+            "LEFT JOIN users sender ON sender.id = n.sender_id "
+            "WHERE COALESCE(n.is_read, 0) = 0"))
         || !query.exec(QStringLiteral("DROP TABLE notifications_legacy"))
         || !query.exec(QStringLiteral(
             "CREATE INDEX idx_notifications_unread ON notifications("

@@ -7,6 +7,8 @@
 #include <QGraphicsOpacityEffect>
 #include <QMessageBox>
 #include <QCoreApplication>
+#include <QGuiApplication>
+#include <QScreen>
 #include <QWidget>
 #include <QString>
 #include <QSettings>
@@ -23,6 +25,7 @@
 #include "thememanager.h"
 #include "languagemanager.h"
 #include "uiAdminoptions.h"
+#include "issuetoast.h"
 #include "shortcutmanager.h"
 #include "logviewerdialog.h"
 
@@ -448,12 +451,6 @@ void uiManager::initTray()
             m_mainWindow->activateWindow();
         }
     });
-    connect(m_trayIcon, &QSystemTrayIcon::messageClicked, this, [this]() {
-        if (m_lastToastIssueId > 0) {
-            emit openIssueRequested(m_lastToastIssueId);
-        }
-    });
-
     refreshTrayPresentation();
     m_trayIcon->show();
 }
@@ -477,9 +474,49 @@ void uiManager::showAdminNotification(qint64 issueId,
     if (!m_trayIcon || !m_trayIcon->isVisible()) {
         return;
     }
-    m_lastToastIssueId = issueId;
-    m_trayIcon->showMessage(title, content,
-                            QSystemTrayIcon::Information, 5000);
+    constexpr qsizetype MaximumQueuedToasts = 20;
+    while (m_pendingIssueToasts.size() >= MaximumQueuedToasts) {
+        m_pendingIssueToasts.dequeue();
+    }
+    m_pendingIssueToasts.enqueue({issueId, title, content});
+    showNextIssueToast();
+}
+
+void uiManager::showNextIssueToast()
+{
+    if (m_activeIssueToast || m_pendingIssueToasts.isEmpty()) {
+        return;
+    }
+
+    const PendingIssueToast pending = m_pendingIssueToasts.dequeue();
+    auto *toast = new IssueToast(pending.issueId, pending.title,
+                                 pending.content);
+    m_activeIssueToast = toast;
+    connect(toast, &IssueToast::activated,
+            this, &uiManager::openIssueRequested);
+    connect(toast, &IssueToast::dismissed,
+            toast, &QObject::deleteLater);
+    connect(toast, &QObject::destroyed, this, [this]() {
+        m_activeIssueToast.clear();
+        QTimer::singleShot(0, this, [this]() { showNextIssueToast(); });
+    });
+
+    QScreen *screen = nullptr;
+    const QRect trayGeometry = m_trayIcon ? m_trayIcon->geometry() : QRect();
+    if (!trayGeometry.isEmpty()) {
+        screen = QGuiApplication::screenAt(trayGeometry.center());
+    }
+    if (!screen && m_mainWindow) {
+        screen = m_mainWindow->screen();
+    }
+    if (!screen) {
+        screen = QGuiApplication::primaryScreen();
+    }
+    if (!screen) {
+        toast->close();
+        return;
+    }
+    toast->showAt(screen->availableGeometry());
 }
 
 void uiManager::refreshTrayPresentation()

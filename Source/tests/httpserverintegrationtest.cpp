@@ -52,6 +52,7 @@ private slots:
     void initTestCase();
     void passwordAndTokenHelpers();
     void legacyDatabaseMigration();
+    void targetNotificationSchemaPurgesReadRows();
     void healthAndCors();
     void authentication();
     void userOptionsAndBlockCrud();
@@ -240,6 +241,10 @@ void HttpServerIntegrationTest::legacyDatabaseMigration()
             "INSERT INTO notifications("
             "id, type, title, related_id, sender_id, recipient_id) "
             "VALUES(3, 'status_changed', 'Legacy orphan', 999, 1, 1)")));
+        QVERIFY(query.exec(QStringLiteral(
+            "INSERT INTO notifications("
+            "id, type, title, related_id, sender_id, recipient_id, is_read) "
+            "VALUES(4, 'status_changed', 'Legacy read', 1, 1, 1, 1)")));
         database.close();
     }
     QSqlDatabase::removeDatabase(connectionName);
@@ -313,6 +318,44 @@ void HttpServerIntegrationTest::legacyDatabaseMigration()
                           QStringLiteral("id")}));
     migratedDatabase.close();
     QSqlDatabase::removeDatabase(QStringLiteral("legacy_migration_check"));
+}
+
+void HttpServerIntegrationTest::targetNotificationSchemaPurgesReadRows()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString databasePath = temporary.filePath(QStringLiteral("target.db"));
+
+    {
+        DatabaseManager database(databasePath);
+        QString errorMessage;
+        QVERIFY2(database.initialize(&errorMessage), qPrintable(errorMessage));
+        QSqlQuery query(database.connection());
+        QVERIFY(query.exec(QStringLiteral(
+            "INSERT INTO blocks(id, title) VALUES(1, 'Target Block')")));
+        QVERIFY(query.exec(QStringLiteral(
+            "INSERT INTO issues(id, block_id, title, reporter_id) "
+            "VALUES(1, 1, 'Target Issue', 1)")));
+        QVERIFY(query.exec(QStringLiteral(
+            "INSERT INTO notifications("
+            "id, type, title, related_id, sender_id, recipient_id, is_read) "
+            "VALUES(1, 'issue_created', 'Unread', 1, 1, 1, 0)")));
+        QVERIFY(query.exec(QStringLiteral(
+            "INSERT INTO notifications("
+            "id, type, title, related_id, sender_id, recipient_id, is_read) "
+            "VALUES(2, 'status_changed', 'Read', 1, 1, 1, 1)")));
+    }
+
+    DatabaseManager database(databasePath);
+    QString errorMessage;
+    QVERIFY2(database.initialize(&errorMessage), qPrintable(errorMessage));
+    QSqlQuery query(database.connection());
+    QVERIFY(query.exec(QStringLiteral(
+        "SELECT id, is_read FROM notifications ORDER BY id")));
+    QVERIFY(query.next());
+    QCOMPARE(query.value(0).toLongLong(), qint64(1));
+    QCOMPARE(query.value(1).toInt(), 0);
+    QVERIFY(!query.next());
 }
 
 void HttpServerIntegrationTest::healthAndCors()

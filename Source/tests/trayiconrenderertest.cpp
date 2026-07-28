@@ -1,8 +1,10 @@
 #include "trayiconrenderer.h"
+#include "issuetoast.h"
 
 #include <QColor>
 #include <QImage>
 #include <QPainter>
+#include <QSignalSpy>
 #include <QTest>
 
 class TrayIconRendererTest : public QObject
@@ -14,6 +16,7 @@ private slots:
     void actionStates();
     void urlsUseConfiguredPort();
     void renderKeepsStableCanvas();
+    void toastKeepsIssueIdentity();
 };
 
 void TrayIconRendererTest::badgeLabels()
@@ -97,6 +100,28 @@ void TrayIconRendererTest::renderKeepsStableCanvas()
         }
     }
     QVERIFY(hasRedMarker);
+}
+
+void TrayIconRendererTest::toastKeepsIssueIdentity()
+{
+    IssueToast first(101, QStringLiteral("First"), QStringLiteral("Content"));
+    IssueToast second(202, QStringLiteral("Second"), QStringLiteral("Content"));
+    QSignalSpy firstSpy(&first, &IssueToast::activated);
+    QSignalSpy secondSpy(&second, &IssueToast::activated);
+
+    first.resize(320, 120);
+    second.resize(320, 120);
+    QTest::mouseClick(&first, Qt::LeftButton, Qt::NoModifier,
+                      first.rect().center());
+    QTest::mouseClick(&second, Qt::LeftButton, Qt::NoModifier,
+                      second.rect().center());
+
+    QCOMPARE(first.issueId(), qint64(101));
+    QCOMPARE(second.issueId(), qint64(202));
+    QCOMPARE(firstSpy.count(), 1);
+    QCOMPARE(secondSpy.count(), 1);
+    QCOMPARE(firstSpy.first().first().toLongLong(), qint64(101));
+    QCOMPARE(secondSpy.first().first().toLongLong(), qint64(202));
 }
 
 QTEST_MAIN(TrayIconRendererTest)

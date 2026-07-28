@@ -3,6 +3,8 @@
 
 #include <QMainWindow>
 #include <QMenuBar>
+#include <QPointer>
+#include <QQueue>
 #include <QStatusBar>
 #include <QObject>
 #include <QTranslator>
@@ -77,6 +79,13 @@ private slots:
     void initDockWindows();
 
 private:
+    struct PendingIssueToast
+    {
+        qint64 issueId {0};
+        QString title;
+        QString content;
+    };
+
     ThemeManager *m_themeManager;
     ui_AdminOptions *m_options;
 
@@ -118,11 +127,13 @@ private:
     QAction *m_trayMarkAllReadAction {nullptr};
     TrayServerState m_trayServerState {TrayServerState::Stopped};
     qint64 m_trayUnreadCount {0};
-    qint64 m_lastToastIssueId {0};
+    QQueue<PendingIssueToast> m_pendingIssueToasts;
+    QPointer<QWidget> m_activeIssueToast;
     bool m_backgroundMessageShown {false};
 
     void initIcon();
     void refreshTrayPresentation();
+    void showNextIssueToast();
 };
 
 #endif // _UIMANAGER_H

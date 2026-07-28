@@ -72,6 +72,8 @@ set(PROJECT_SOURCES
     myUI/ui/uiAnimation.h
     myUI/ui/trayiconrenderer.cpp
     myUI/ui/trayiconrenderer.h
+    myUI/ui/issuetoast.cpp
+    myUI/ui/issuetoast.h
     myUI/ui/thememanager.cpp
     myUI/ui/thememanager.h
     myUI/ui/languagemanager.cpp
@@ -256,6 +258,8 @@ if(BUILD_TESTING)
         tests/trayiconrenderertest.cpp
         myUI/ui/trayiconrenderer.cpp
         myUI/ui/trayiconrenderer.h
+        myUI/ui/issuetoast.cpp
+        myUI/ui/issuetoast.h
     )
     set_target_properties(workhandler_tray_tests PROPERTIES
         AUTOUIC OFF
@@ -268,6 +272,7 @@ if(BUILD_TESTING)
         Qt6::Core
         Qt6::Gui
         Qt6::Test
+        Qt6::Widgets
     )
     add_test(NAME workhandler_tray_tests
              COMMAND workhandler_tray_tests)
