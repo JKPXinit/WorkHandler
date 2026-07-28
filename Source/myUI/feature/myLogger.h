@@ -25,11 +25,11 @@ struct LogConfig {
     LogLevel minLevel;          // 最小日志级别
 
     // 日志轮转配置
-    bool enableRotation;        // 是否启用轮转（默认 false）
+    bool enableRotation;        // 是否启用轮转（默认 true）
     int  rotationMode;          // 0=按大小, 1=按时间
     int  maxFileSizeMB;         // 按大小时的阈值（MB，默认 10）
     int  rotationIntervalDays;  // 按时间时的间隔（天，默认 1）
-    int  maxBackupCount;        // 最多保留的备份文件数（默认 5）
+    int  maxBackupCount;        // 最多保留的备份文件数（默认 30）
 };
 
 class myLogger : public QObject

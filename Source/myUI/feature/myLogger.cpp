@@ -27,11 +27,11 @@ myLogger::myLogger(QObject *parent)
     m_config.enableConsoleLogging = true;
     m_config.logFilePath          = "";
     m_config.minLevel             = LogLevel_Debug;
-    m_config.enableRotation       = false;
-    m_config.rotationMode         = 0;
+    m_config.enableRotation       = true;
+    m_config.rotationMode         = 1;
     m_config.maxFileSizeMB        = 10;
     m_config.rotationIntervalDays = 1;
-    m_config.maxBackupCount       = 5;
+    m_config.maxBackupCount       = 30;
 }
 
 myLogger::~myLogger()

@@ -84,11 +84,11 @@ m_Options_t *SoftwareConfig::strXml_to_Options(QString strxml) {
     m_Options_t *OptionsTmp = new m_Options_t;
 
     // 轮转字段默认值（旧配置文件中可能不存在这些字段）
-    OptionsTmp->m_systemConfig.logRotationEnabled      = false;
-    OptionsTmp->m_systemConfig.logRotationMode         = 0;
+    OptionsTmp->m_systemConfig.logRotationEnabled      = true;
+    OptionsTmp->m_systemConfig.logRotationMode         = 1;
     OptionsTmp->m_systemConfig.logRotationMaxSizeMB    = 10;
     OptionsTmp->m_systemConfig.logRotationIntervalDays = 1;
-    OptionsTmp->m_systemConfig.logRotationMaxBackups   = 5;
+    OptionsTmp->m_systemConfig.logRotationMaxBackups   = 30;
     OptionsTmp->m_systemConfig.logRetentionDays        = 30;
     OptionsTmp->m_httpServerConfig.interfaceName.clear();
     OptionsTmp->m_httpServerConfig.selectedAddress.clear();
@@ -267,11 +267,11 @@ void SoftwareConfig::Default_Config() {
     m_Config->m_systemConfig.exitMode = 0;
     m_Config->m_systemConfig.logOutputMode = LogOutputFile;  // 默认文件输出
     m_Config->m_systemConfig.logFilePath = "";               // 默认使用自动路径
-    m_Config->m_systemConfig.logRotationEnabled      = false;
-    m_Config->m_systemConfig.logRotationMode         = 0;
+    m_Config->m_systemConfig.logRotationEnabled      = true;
+    m_Config->m_systemConfig.logRotationMode         = 1;
     m_Config->m_systemConfig.logRotationMaxSizeMB    = 10;
     m_Config->m_systemConfig.logRotationIntervalDays = 1;
-    m_Config->m_systemConfig.logRotationMaxBackups   = 5;
+    m_Config->m_systemConfig.logRotationMaxBackups   = 30;
     m_Config->m_systemConfig.logRetentionDays        = 30;
     m_Config->m_httpServerConfig.interfaceName.clear();
     m_Config->m_httpServerConfig.selectedAddress.clear();

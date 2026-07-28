@@ -3,6 +3,7 @@
 
 #include <QAbstractItemView>
 #include <QAbstractSocket>
+#include <QButtonGroup>
 #include <QRadioButton>
 #include <QApplication>
 #include <QCheckBox>
@@ -879,6 +880,9 @@ QWidget * ui_AdminOptions::createSystemPage()
     // 日志输出模式 RadioButton
     QRadioButton *logConsoleRadio = new QRadioButton(tr("Output to console"));
     QRadioButton *logFileRadio = new QRadioButton(tr("Output to file"));
+    QButtonGroup *logOutputGroup = new QButtonGroup(logGroup);
+    logOutputGroup->addButton(logConsoleRadio);
+    logOutputGroup->addButton(logFileRadio);
 
     // 读取当前配置
     bool isFileMode = (m_mainWindow->m_softwareconfig->logOutputMode() == LogOutputFile);
@@ -1037,6 +1041,9 @@ QWidget * ui_AdminOptions::createSystemPage()
     // 按时间轮转行
     QHBoxLayout *timeLayout = new QHBoxLayout();
     QRadioButton *rotByTimeRadio = new QRadioButton(tr("By time"), logGroup);
+    QButtonGroup *rotationModeGroup = new QButtonGroup(logGroup);
+    rotationModeGroup->addButton(rotBySizeRadio);
+    rotationModeGroup->addButton(rotByTimeRadio);
     QSpinBox *intervalSpinBox = new QSpinBox(logGroup);
     intervalSpinBox->setRange(1, 365);
     intervalSpinBox->setSuffix(tr(" days"));
