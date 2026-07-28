@@ -228,10 +228,13 @@ void MaintenanceTest::logRetentionAndVacuumWindow()
     config.logFilePath = activeLog;
     config.activeLogFilePath = activeLog;
     config.logRetentionDays = 30;
+    QStringList logs;
     MaintenanceManager manager(
         dao, uploadRoot, [config]() { return config; },
         [&serverRunning]() { return serverRunning; },
-        [](MaintenanceLogLevel, const QString &) {}, nullptr,
+        [&logs](MaintenanceLogLevel, const QString &message) {
+            logs.append(message);
+        }, nullptr,
         [now]() { return now; });
 
     manager.runDailyMaintenance();
@@ -241,19 +244,23 @@ void MaintenanceTest::logRetentionAndVacuumWindow()
     std::optional<QDateTime> stored;
     QVERIFY2(dao.lastVacuumUtc(&stored, &errorMessage), qPrintable(errorMessage));
     QVERIFY(stored.has_value());
-    QCOMPARE(stored->toUTC(), oldVacuum.toUTC());
+    QCOMPARE(stored->toUTC(), now.toUTC());
+    QVERIFY(std::any_of(logs.cbegin(), logs.cend(), [](const QString &message) {
+        return message.contains(QStringLiteral("HTTP request handling will pause"));
+    }));
 
-    serverRunning = false;
+    QVERIFY2(dao.setLastVacuumUtc(oldVacuum, &errorMessage),
+             qPrintable(errorMessage));
     QSqlDatabase connection = database.connection();
     QVERIFY(connection.transaction());
-    manager.onServerStopped();
+    manager.runDailyMaintenance();
     stored.reset();
     QVERIFY2(dao.lastVacuumUtc(&stored, &errorMessage), qPrintable(errorMessage));
     QVERIFY(stored.has_value());
     QCOMPARE(stored->toUTC(), oldVacuum.toUTC());
     QVERIFY(connection.rollback());
 
-    manager.onServerStopped();
+    manager.runDailyMaintenance();
     stored.reset();
     QVERIFY2(dao.lastVacuumUtc(&stored, &errorMessage), qPrintable(errorMessage));
     QVERIFY(stored.has_value());

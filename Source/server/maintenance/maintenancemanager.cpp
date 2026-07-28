@@ -416,10 +416,11 @@ void MaintenanceManager::runVacuumIfSafe(bool serverRunning)
         return;
     }
     if (serverRunning) {
-        m_vacuumPending = true;
+        // HTTP handlers and maintenance share this thread and SQLite connection,
+        // so the listener can stay bound while request handling briefly pauses.
         log(MaintenanceLogLevel::Info,
-            QStringLiteral("VACUUM is due and will run when the HTTP server stops."));
-        return;
+            QStringLiteral("VACUUM is due. HTTP request handling will pause "
+                           "until maintenance completes."));
     }
 
     QString errorMessage;
