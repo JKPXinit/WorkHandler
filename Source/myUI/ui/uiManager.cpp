@@ -393,7 +393,7 @@ void uiManager::onMenuBar_Help() {
 
 void uiManager::initSplash()
 {
-    QPixmap pixmap(AppIcons::Administrator);
+    QPixmap pixmap(AppIcons::App);
     m_splash = new QSplashScreen(pixmap);
     m_splash->show();
     m_splash->showMessage("Loading...", Qt::AlignBottom | Qt::AlignCenter, Qt::white);

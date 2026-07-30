@@ -69,7 +69,7 @@ QWidget* aboutDialog::createAboutTab()
 
     // 图标
     QLabel *iconLabel = new QLabel();
-    QPixmap pixmap(AppIcons::Administrator);
+    QPixmap pixmap(AppIcons::App);
     if (!pixmap.isNull()) {
         iconLabel->setPixmap(pixmap.scaled(80, 80, Qt::KeepAspectRatio, Qt::SmoothTransformation));
     }
@@ -224,7 +224,7 @@ QString aboutDialog::getAppVersion() const
 
 QString aboutDialog::getAppBuildDate() const
 {
-    return "2026-07-23";
+    return "2026-07-28";
 }
 
 QString aboutDialog::getQtVersion() const
