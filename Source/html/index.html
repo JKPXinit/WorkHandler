@@ -335,6 +335,9 @@ svg.icon { width: 18px; height: 18px; flex: 0 0 auto; fill: none; stroke: curren
 }
 
 .app-view { min-height: 100vh; background: var(--canvas); }
+.app-view.detail-mode .sub-search,
+.app-view.detail-mode #createIssueButton,
+.app-view.detail-mode #mobilePanelsButton { display: none !important; }
 .workspace {
   min-height: calc(100vh - var(--nav-height) - var(--subnav-height));
   display: grid;
@@ -342,7 +345,9 @@ svg.icon { width: 18px; height: 18px; flex: 0 0 auto; fill: none; stroke: curren
   max-width: var(--container);
   margin: 0 auto;
 }
-.workspace.detail-open { grid-template-columns: var(--sidebar-width) minmax(0, 1fr) var(--drawer-width); }
+.workspace.detail-open { display: block; }
+.workspace.detail-open .sidebar,
+.workspace.detail-open .issue-main { display: none; }
 .sidebar {
   min-width: 0;
   border-right: 1px solid var(--hairline);
@@ -472,9 +477,25 @@ svg.icon { width: 18px; height: 18px; flex: 0 0 auto; fill: none; stroke: curren
   text-align: left;
 }
 .issue-row:hover { background: var(--pearl); }
-.issue-title { min-width: 0; }
-.issue-title strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 600; }
-.issue-title span { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; }
+.issue-row:focus-visible { outline: 2px solid var(--blue-focus); outline-offset: -2px; }
+.issue-title { min-width: 0; display: grid; grid-template-columns: auto minmax(0,1fr); gap: 10px; align-items: start; }
+.issue-title-copy { min-width: 0; }
+.issue-title-copy strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 600; }
+.issue-title-copy span { display: block; margin-top: 3px; overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.task-id {
+  min-height: 26px;
+  padding: 4px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: var(--pearl);
+  color: var(--blue);
+  cursor: copy;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+}
+.task-id:hover { border-color: var(--blue); background: var(--canvas); }
 .issue-cell { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .chip {
   display: inline-flex;
@@ -503,25 +524,19 @@ svg.icon { width: 18px; height: 18px; flex: 0 0 auto; fill: none; stroke: curren
 .list-state h3 { margin: 0; color: var(--ink); font-size: 21px; font-weight: 600; }
 .list-state p { margin: 8px 0 0; font-size: 14px; }
 
-.issue-drawer {
-  min-width: 0;
-  border-left: 1px solid var(--hairline);
-  background: var(--canvas);
-}
-.drawer-inner { position: sticky; top: var(--subnav-height); height: calc(100vh - var(--subnav-height)); overflow-y: auto; }
-.drawer-head {
-  min-height: 64px;
+.issue-detail-view { min-width: 0; background: var(--canvas); }
+.detail-page-head {
+  min-height: 104px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 16px 10px 24px;
+  gap: 16px;
+  padding: 22px 32px;
   border-bottom: 1px solid var(--hairline);
-  background: rgba(255,255,255,0.94);
-  backdrop-filter: saturate(180%) blur(20px);
+  background: var(--canvas);
 }
-.drawer-head h2 { min-width: 0; flex: 1; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 17px; font-weight: 600; }
-.drawer-body { padding: 24px; }
-.detail-kicker { margin: 0 0 8px; color: var(--muted); font-size: 12px; }
+.detail-heading { min-width: 0; flex: 1; }
+.detail-heading-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.detail-kicker { margin: 0; color: var(--muted); font-size: 12px; }
 .detail-title {
   margin: 0;
   font-family: "SF Pro Display", system-ui, -apple-system, sans-serif;
@@ -530,10 +545,13 @@ svg.icon { width: 18px; height: 18px; flex: 0 0 auto; fill: none; stroke: curren
   line-height: 1.2;
   overflow-wrap: anywhere;
 }
-.detail-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.detail-head-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.detail-layout { display: grid; grid-template-columns: minmax(0,1fr) 320px; align-items: start; }
+.detail-conversation { min-width: 0; padding: 32px; border-right: 1px solid var(--hairline); }
+.detail-sidebar { min-width: 0; position: sticky; top: var(--subnav-height); padding: 8px 24px 32px; }
 .detail-section { padding: 24px 0; border-bottom: 1px solid var(--hairline); }
 .detail-section:last-child { border-bottom: 0; }
-.detail-section h3 { margin: 0 0 14px; font-size: 14px; font-weight: 600; }
+.detail-section h3 { margin: 0 0 14px; font-size: 15px; font-weight: 600; }
 .detail-description { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink-soft); font-size: 14px; line-height: 1.6; }
 .meta-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
 .meta-item span { display: block; color: var(--muted); font-size: 11px; }
@@ -577,9 +595,10 @@ svg.icon { width: 18px; height: 18px; flex: 0 0 auto; fill: none; stroke: curren
   font-size: 14px;
 }
 .upload-label input { display: none; }
-.comment-list { display: grid; gap: 16px; }
-.comment { display: grid; grid-template-columns: 32px minmax(0,1fr); gap: 10px; }
-.comment .avatar { width: 32px; height: 32px; }
+.comment-list { display: grid; gap: 0; }
+.comment { display: grid; grid-template-columns: 36px minmax(0,1fr); gap: 12px; padding: 18px 0; border-bottom: 1px solid var(--hairline); }
+.comment:first-child { padding-top: 0; }
+.comment .avatar { width: 36px; height: 36px; }
 .comment-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
 .comment-head span { color: var(--muted); white-space: nowrap; }
 .comment-body { margin: 4px 0 0; overflow-wrap: anywhere; color: var(--ink-soft); font-size: 13px; white-space: pre-wrap; }
@@ -647,23 +666,16 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
 .toast.show { opacity: 1; transform: translateY(0); }
 
 @media (max-width: 1068px) {
-  .workspace, .workspace.detail-open { grid-template-columns: 232px minmax(0,1fr); }
-  .issue-drawer {
-    position: fixed;
-    top: calc(var(--nav-height) + var(--subnav-height));
-    right: 0;
-    bottom: 0;
-    z-index: 55;
-    width: min(var(--drawer-width), calc(100% - 64px));
-  }
-  .drawer-inner { position: static; height: 100%; }
+  .workspace { grid-template-columns: 232px minmax(0,1fr); }
+  .detail-layout { grid-template-columns: minmax(0,1fr) 280px; }
+  .detail-page-head, .detail-conversation { padding-left: 24px; padding-right: 24px; }
   .issue-header, .issue-row { grid-template-columns: minmax(200px,1fr) 104px 82px 124px 56px; }
   .issue-header > :nth-child(5), .issue-row > :nth-child(5) { display: none; }
 }
 @media (max-width: 833px) {
   .global-nav-inner, .sub-nav-inner { width: min(var(--container), calc(100% - 32px)); }
   .global-link { display: none; }
-  .workspace, .workspace.detail-open { grid-template-columns: minmax(0,1fr); }
+  .workspace { grid-template-columns: minmax(0,1fr); }
   .sidebar {
     position: fixed;
     top: calc(var(--nav-height) + var(--subnav-height));
@@ -688,6 +700,9 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
   .sub-search { width: min(280px, 38vw); }
   .issue-header, .issue-row { grid-template-columns: minmax(180px,1fr) 104px 82px 56px; }
   .issue-header > :nth-child(4), .issue-row > :nth-child(4) { display: none; }
+  .detail-layout { grid-template-columns: minmax(0,1fr); }
+  .detail-conversation { border-right: 0; }
+  .detail-sidebar { position: static; border-top: 1px solid var(--hairline); }
 }
 @media (max-width: 640px) {
   .login-main { padding: 48px 16px; }
@@ -697,6 +712,7 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
   .login-brand h1 { font-size: 34px; line-height: 1.2; }
   .login-brand p { font-size: 21px; }
   .login-form { padding: 24px; }
+  #appDemoBadge { display: none; }
   .profile-button .profile-name { display: none; }
   .sub-count { display: none; }
   .sub-title { max-width: 132px; font-size: 17px; }
@@ -724,9 +740,10 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
   .issue-row > :nth-child(2) { grid-area: status; }
   .issue-row > :nth-child(3) { grid-area: priority; }
   .issue-row > :nth-child(n+4) { display: none; }
-  .issue-drawer { top: var(--nav-height); width: 100%; }
-  .drawer-inner { height: calc(100vh - var(--nav-height)); }
-  .drawer-body { padding: 20px 16px; }
+  .detail-page-head { align-items: flex-start; flex-wrap: wrap; padding: 18px 16px; }
+  .detail-heading { order: 2; flex-basis: calc(100% - 52px); }
+  .detail-head-actions { order: 3; width: 100%; justify-content: flex-start; }
+  .detail-conversation, .detail-sidebar { padding: 20px 16px; }
   .detail-title { font-size: 24px; }
   .attachment-grid { grid-template-columns: 1fr; }
   dialog { width: 100%; max-width: none; max-height: 100vh; height: 100vh; border: 0; border-radius: 0; }
@@ -761,6 +778,7 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
   <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 3v12M7 8l5-5 5 5M5 21h14"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
   <symbol id="i-panels" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6M9 12h12"/></symbol>
 </svg>
 
 <section class="login-view" id="loginView">
@@ -912,17 +930,25 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
       </section>
     </main>
 
-    <aside class="issue-drawer hidden" id="issueDrawer" aria-label="Issue 详情">
-      <div class="drawer-inner">
-        <header class="drawer-head">
-          <h2 id="drawerHeading">Issue 详情</h2>
-          <button class="icon-button small" id="closeDrawerButton" type="button" title="关闭详情" aria-label="关闭详情">
-            <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg>
-          </button>
-        </header>
-        <div class="drawer-body" id="drawerBody"></div>
+    <main class="issue-detail-view hidden" id="issueDetailView" aria-label="Issue 专注讨论">
+      <header class="detail-page-head">
+        <button class="icon-button" id="closeDetailButton" type="button" title="返回 Issue 列表" aria-label="返回 Issue 列表">
+          <svg class="icon" aria-hidden="true"><use href="#i-left"></use></svg>
+        </button>
+        <div class="detail-heading">
+          <div class="detail-heading-row">
+            <button class="task-id" id="detailTaskId" type="button" data-action="copy-task-id" data-task-id="" title="复制 TaskID">T-</button>
+            <p class="detail-kicker" id="detailContext">Issue 讨论</p>
+          </div>
+          <h1 class="detail-title" id="detailTitle">Issue 详情</h1>
+        </div>
+        <div class="detail-head-actions" id="detailHeadActions"></div>
+      </header>
+      <div class="detail-layout">
+        <article class="detail-conversation" id="detailConversation"></article>
+        <aside class="detail-sidebar" id="detailSidebar" aria-label="Issue 信息"></aside>
       </div>
-    </aside>
+    </main>
   </div>
 </section>
 
@@ -990,6 +1016,7 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     userOptions: [],
     selectedBlockId: null,
     selectedIssueId: null,
+    selectedTaskId: null,
     selectedIssue: null,
     comments: [],
     commentImages: [],
@@ -998,6 +1025,8 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     attachmentLoadVersion: 0,
     filters: { status: '', priority: '', assignee: '', sort: 'created_desc', q: '' },
     sidebarOpen: false,
+    returnHash: null,
+    returnScrollY: 0,
     confirmAction: null,
     modalMode: '',
     editingId: null,
@@ -1027,6 +1056,29 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
 
   function displayName(user) {
     return user && (user.display_name || user.username) || '未分配';
+  }
+
+  function formatTaskId(issueId) {
+    var numericId = Number(issueId);
+    return Number.isSafeInteger(numericId) && numericId > 0 ? 'T' + numericId : '';
+  }
+
+  function parseTaskId(identifier) {
+    var text = String(identifier === null || identifier === undefined ? '' : identifier);
+    var match = text.match(/^[Tt]?([1-9]\d*)$/);
+    if (!match) return null;
+    var numericId = Number(match[1]);
+    return Number.isSafeInteger(numericId) ? numericId : null;
+  }
+
+  function taskIdFor(issue) {
+    return issue && issue.task_id || formatTaskId(issue && issue.id !== undefined ? issue.id : issue);
+  }
+
+  function normalizeIssue(issue) {
+    if (!issue) return issue;
+    issue.task_id = taskIdFor(issue);
+    return issue;
   }
 
   function formatDate(value) {
@@ -1112,6 +1164,7 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
 
   function withIssueRelations(issue) {
     var copy = Object.assign({}, issue);
+    copy.task_id = formatTaskId(issue.id);
     copy.reporter = demo.users.find(function (user) { return user.id === issue.reporter_id; }) || null;
     copy.assignee = demo.users.find(function (user) { return user.id === issue.assignee_id; }) || null;
     copy.comment_count = demo.comments.filter(function (item) { return item.issue_id === issue.id; }).length;
@@ -1225,7 +1278,8 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
           if (priorityQuery) rows = rows.filter(function (item) { return item.priority === priorityQuery; });
           if (assigneeQuery) rows = rows.filter(function (item) { return item.assignee_id === assigneeQuery; });
           if (searchQuery) rows = rows.filter(function (item) {
-            return item.title.toLowerCase().indexOf(searchQuery) >= 0 || item.description.toLowerCase().indexOf(searchQuery) >= 0;
+            return formatTaskId(item.id).toLowerCase() === searchQuery ||
+              item.title.toLowerCase().indexOf(searchQuery) >= 0 || item.description.toLowerCase().indexOf(searchQuery) >= 0;
           });
           var priorityRank = { high: 3, medium: 2, low: 1 };
           rows.sort(function (a, b) {
@@ -1255,9 +1309,14 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
           resolve(success({ issue: withIssueRelations(createdIssue) }, 201));
           return;
         }
-        match = pathname.match(/^\/api\/issues\/(\d+)\/status$/);
+        match = pathname.match(/^\/api\/issues\/([^/]+)\/status$/);
         if (match && method === 'PUT') {
-          var statusIssue = demo.issues.find(function (item) { return item.id === Number(match[1]); });
+          var statusIssueId = parseTaskId(match[1]);
+          if (!statusIssueId) {
+            resolve(failure(400, 'invalid_task_id', 'TaskID 格式无效'));
+            return;
+          }
+          var statusIssue = demo.issues.find(function (item) { return item.id === statusIssueId; });
           if (!statusIssue) {
             resolve(failure(404, 'issue_not_found', 'Issue 不存在'));
             return;
@@ -1266,9 +1325,13 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
           resolve(success({ issue: withIssueRelations(statusIssue) }));
           return;
         }
-        match = pathname.match(/^\/api\/issues\/(\d+)\/comments$/);
+        match = pathname.match(/^\/api\/issues\/([^/]+)\/comments$/);
         if (match) {
-          var commentIssueId = Number(match[1]);
+          var commentIssueId = parseTaskId(match[1]);
+          if (!commentIssueId) {
+            resolve(failure(400, 'invalid_task_id', 'TaskID 格式无效'));
+            return;
+          }
           if (method === 'GET') {
             resolve(success({ comments: demo.comments.filter(function (item) { return item.issue_id === commentIssueId; }).map(function (item) {
               var copy = Object.assign({}, item);
@@ -1311,9 +1374,13 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
             : failure(404, 'attachment_not_found', '图片不存在'));
           return;
         }
-        match = pathname.match(/^\/api\/issues\/(\d+)$/);
+        match = pathname.match(/^\/api\/issues\/([^/]+)$/);
         if (match) {
-          var targetIssueId = Number(match[1]);
+          var targetIssueId = parseTaskId(match[1]);
+          if (!targetIssueId) {
+            resolve(failure(400, 'invalid_task_id', 'TaskID 格式无效'));
+            return;
+          }
           var issueIndex = demo.issues.findIndex(function (item) { return item.id === targetIssueId; });
           if (issueIndex < 0) {
             resolve(failure(404, 'issue_not_found', 'Issue 不存在'));
@@ -1405,11 +1472,12 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     state.issues = [];
     state.selectedBlockId = null;
     state.selectedIssueId = null;
+    state.selectedTaskId = null;
     sessionStorage.removeItem(storageKeys.token);
     $('appView').classList.add('hidden');
     $('loginView').classList.remove('hidden');
     $('profileMenu').classList.add('hidden');
-    closeDrawer(false);
+    closeDetail(false);
     if (message) showToast(message);
   }
 
@@ -1541,7 +1609,7 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
   async function selectBlock(id, updateHash) {
     state.selectedBlockId = id ? Number(id) : null;
     closeSidebar();
-    closeDrawer(false);
+    closeDetail(false);
     renderBlocks();
     if (updateHash !== false) {
       var nextHash = state.selectedBlockId ? '#/boards/' + state.selectedBlockId : '#/';
@@ -1561,7 +1629,9 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
       updatePanelHeading();
       return;
     }
-    state.issues = Array.isArray(result.data.issues) ? result.data.issues : [];
+    state.issues = Array.isArray(result.data.issues)
+      ? result.data.issues.map(normalizeIssue)
+      : [];
     renderIssues();
   }
 
@@ -1589,16 +1659,18 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     var html = '';
     state.issues.forEach(function (issue) {
       var assignee = issue.assignee || null;
-      html += '<button class="issue-row" type="button" data-action="open-issue" data-id="' + Number(issue.id) + '">';
-      html += '<span class="issue-title"><strong>' + escapeHtml(issue.title) + '</strong><span>#' + Number(issue.id) + ' · ' +
-        escapeHtml(issue.description || '无描述').slice(0, 72) + '</span></span>';
+      var taskId = taskIdFor(issue);
+      html += '<div class="issue-row" role="link" tabindex="0" data-action="open-issue" data-task-id="' + escapeHtml(taskId) + '">';
+      html += '<span class="issue-title"><button class="task-id" type="button" data-action="copy-task-id" data-task-id="' + escapeHtml(taskId) + '" title="复制 TaskID">' + escapeHtml(taskId) + '</button>';
+      html += '<span class="issue-title-copy"><strong>' + escapeHtml(issue.title) + '</strong><span>' +
+        escapeHtml(issue.description || '无描述').slice(0, 72) + '</span></span></span>';
       html += '<span class="issue-cell"><span class="chip' + (issue.status === 'in_progress' ? ' active' : '') + '">' +
         escapeHtml(labels.status[issue.status] || issue.status) + '</span></span>';
       html += '<span class="issue-cell"><span class="chip">' + escapeHtml(labels.priority[issue.priority] || issue.priority) + '</span></span>';
       html += '<span class="issue-cell">' + escapeHtml(displayName(assignee)) + '</span>';
       html += '<span class="issue-cell">' + escapeHtml(formatDate(issue.created_at)) + '</span>';
       html += '<span class="issue-cell attachment-cell">' + icon('paperclip') + Number(issue.attachment_count || 0) + '</span>';
-      html += '</button>';
+      html += '</div>';
     });
     $('issueRows').innerHTML = html;
   }
@@ -1621,29 +1693,57 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     return state.currentUser && state.currentUser.role !== 'guest';
   }
 
-  async function openIssue(id, updateHash) {
-    state.selectedIssueId = Number(id);
-    $('issueDrawer').classList.remove('hidden');
+  async function openIssue(identifier, updateHash) {
+    var numericId = parseTaskId(identifier);
+    if (!numericId) {
+      showToast('TaskID 格式无效');
+      return;
+    }
+    var requestedTaskId = formatTaskId(numericId);
+    if (updateHash !== false && !$('workspace').classList.contains('detail-open')) {
+      state.returnHash = window.location.hash || (state.selectedBlockId ? '#/boards/' + state.selectedBlockId : '#/');
+      state.returnScrollY = window.scrollY;
+    }
+    state.selectedIssueId = numericId;
+    state.selectedTaskId = requestedTaskId;
+    $('issueDetailView').classList.remove('hidden');
     $('workspace').classList.add('detail-open');
-    $('drawerBody').innerHTML = '<div class="list-state"><div class="list-state-inner">正在加载详情</div></div>';
+    $('appView').classList.add('detail-mode');
+    $('detailTitle').textContent = '正在加载 Issue';
+    $('detailTaskId').textContent = requestedTaskId;
+    $('detailTaskId').dataset.taskId = requestedTaskId;
+    $('detailHeadActions').innerHTML = '';
+    $('detailConversation').innerHTML = '<div class="list-state"><div class="list-state-inner">正在加载详情</div></div>';
+    $('detailSidebar').innerHTML = '';
     if (updateHash !== false) {
-      var nextHash = '#/issues/' + state.selectedIssueId;
+      var nextHash = '#/issues/' + requestedTaskId;
       if (window.location.hash !== nextHash) history.pushState(null, '', nextHash);
     }
     var results = await Promise.all([
-      request('/api/issues/' + state.selectedIssueId),
-      request('/api/issues/' + state.selectedIssueId + '/comments')
+      request('/api/issues/' + requestedTaskId),
+      request('/api/issues/' + requestedTaskId + '/comments')
     ]);
     if (!results[0].ok) {
       showToast(resultMessage(results[0], 'Issue 加载失败'));
-      closeDrawer(true);
+      closeDetail(true);
       return;
     }
-    state.selectedIssue = results[0].data.issue || null;
-    state.comments = results[1].ok && Array.isArray(results[1].data.comments) ? results[1].data.comments : [];
+    state.selectedIssue = normalizeIssue(results[0].data.issue || null);
+    state.selectedIssueId = Number(state.selectedIssue.id);
+    state.selectedTaskId = taskIdFor(state.selectedIssue);
+    state.comments = results[1].ok && Array.isArray(results[1].data.comments)
+      ? results[1].data.comments.slice().sort(function (left, right) {
+          var timeOrder = String(left.created_at || '').localeCompare(String(right.created_at || ''));
+          return timeOrder || Number(left.id || 0) - Number(right.id || 0);
+        })
+      : [];
     if (state.selectedIssue && Number(state.selectedIssue.block_id) !== Number(state.selectedBlockId)) {
       state.selectedBlockId = Number(state.selectedIssue.block_id);
       renderBlocks();
+    }
+    if (!state.returnHash) {
+      state.returnHash = state.selectedBlockId ? '#/boards/' + state.selectedBlockId : '#/';
+      state.returnScrollY = 0;
     }
     renderDetail();
   }
@@ -1755,44 +1855,54 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     var write = canWrite();
     var reporter = issue.reporter || null;
     var assignee = issue.assignee || null;
-    $('drawerHeading').textContent = '#' + issue.id;
-    var html = '<p class="detail-kicker">Issue #' + Number(issue.id) + '</p>';
-    html += '<h2 class="detail-title">' + escapeHtml(issue.title) + '</h2>';
-    html += '<div class="detail-actions">';
-    if (editable) html += '<button class="btn-ghost" type="button" data-action="edit-issue" data-id="' + Number(issue.id) + '">' + icon('edit') + '编辑</button>';
-    if (admin) html += '<button class="btn-ghost btn-danger" type="button" data-action="delete-issue" data-id="' + Number(issue.id) + '">' + icon('trash') + '删除</button>';
-    html += '</div>';
-    html += '<section class="detail-section"><h3>状态</h3><div class="status-flow">';
-    Object.keys(labels.status).forEach(function (status) {
-      html += '<button class="status-button' + (issue.status === status ? ' active' : '') + '" type="button" data-action="change-status" data-status="' +
-        escapeHtml(status) + '"' + (write ? '' : ' disabled') + '>' + escapeHtml(labels.status[status]) + '</button>';
-    });
-    html += '</div></section>';
-    html += '<section class="detail-section"><h3>详情</h3><div class="meta-grid">';
-    html += '<div class="meta-item"><span>优先级</span><strong>' + escapeHtml(labels.priority[issue.priority] || issue.priority) + '</strong></div>';
-    html += '<div class="meta-item"><span>负责人</span><strong>' + escapeHtml(displayName(assignee)) + '</strong></div>';
-    html += '<div class="meta-item"><span>创建人</span><strong>' + escapeHtml(displayName(reporter)) + '</strong></div>';
-    html += '<div class="meta-item"><span>创建时间</span><strong>' + escapeHtml(formatDate(issue.created_at)) + '</strong></div>';
-    html += '</div></section>';
-    html += '<section class="detail-section"><h3>描述</h3><p class="detail-description">' + escapeHtml(issue.description || '无描述') + '</p></section>';
-    html += '<section class="detail-section"><h3>评论</h3><div class="comment-list">';
+    var taskId = taskIdFor(issue);
+    $('detailTaskId').textContent = taskId;
+    $('detailTaskId').dataset.taskId = taskId;
+    $('detailTitle').textContent = issue.title;
+    $('detailContext').textContent = 'Issue 讨论 · ' + state.comments.length + ' 条评论';
+    $('currentPanelTitle').textContent = taskId;
+    $('currentIssueCount').textContent = 'Issue 讨论';
+
+    var actions = '';
+    if (editable) actions += '<button class="btn-ghost" type="button" data-action="edit-issue" data-id="' + Number(issue.id) + '">' + icon('edit') + '编辑</button>';
+    if (admin) actions += '<button class="btn-ghost btn-danger" type="button" data-action="delete-issue" data-id="' + Number(issue.id) + '">' + icon('trash') + '删除</button>';
+    $('detailHeadActions').innerHTML = actions;
+
+    var conversation = '<section class="detail-section"><h3>描述</h3><p class="detail-description">' + escapeHtml(issue.description || '无描述') + '</p></section>';
+    conversation += '<section class="detail-section"><h3>讨论</h3><div class="comment-list">';
     if (state.comments.length) {
       state.comments.forEach(function (comment) {
-        html += '<article class="comment"><span class="avatar">' + escapeHtml(initials(comment.user)) + '</span><div>';
-        html += '<div class="comment-head"><strong>' + escapeHtml(displayName(comment.user)) + '</strong><span>' + escapeHtml(formatDate(comment.created_at)) + '</span></div>';
-        html += '<div class="comment-body">' + commentContentHtml(comment) + '</div></div></article>';
+        conversation += '<article class="comment"><span class="avatar">' + escapeHtml(initials(comment.user)) + '</span><div>';
+        conversation += '<div class="comment-head"><strong>' + escapeHtml(displayName(comment.user)) + '</strong><span>' + escapeHtml(formatDate(comment.created_at)) + '</span></div>';
+        conversation += '<div class="comment-body">' + commentContentHtml(comment) + '</div></div></article>';
       });
     } else {
-      html += '<p class="detail-description">暂无评论</p>';
+      conversation += '<p class="detail-description">暂无评论</p>';
     }
-    html += '</div>';
+    conversation += '</div>';
     if (write) {
-      html += '<form class="comment-form" id="commentForm"><label class="sr-only" for="commentContent">发表评论</label>';
-      html += '<textarea id="commentContent" maxlength="4000" placeholder="发表评论"></textarea>';
-      html += '<div class="comment-composer-tools"><span class="comment-image-hint" id="commentImageHint">支持在光标处插入图片</span><label class="btn-ghost" for="commentImageInput">' + icon('upload') + '插入图片<input id="commentImageInput" type="file" accept=".png,.jpg,.jpeg,.webp" multiple hidden></label><button class="btn-ghost" type="submit">' + icon('message') + '发表评论</button></div></form>';
+      conversation += '<form class="comment-form" id="commentForm"><label class="sr-only" for="commentContent">发表评论</label>';
+      conversation += '<textarea id="commentContent" maxlength="4000" placeholder="发表评论"></textarea>';
+      conversation += '<div class="comment-composer-tools"><span class="comment-image-hint" id="commentImageHint">支持在光标处插入图片</span><label class="btn-ghost" for="commentImageInput">' + icon('upload') + '插入图片<input id="commentImageInput" type="file" accept=".png,.jpg,.jpeg,.webp" multiple hidden></label><button class="btn-ghost" type="submit">' + icon('message') + '发表评论</button></div></form>';
     }
-    html += '</section>';
-    $('drawerBody').innerHTML = html;
+    conversation += '</section>';
+    $('detailConversation').innerHTML = conversation;
+
+    var sidebar = '<section class="detail-section"><h3>状态</h3><div class="status-flow">';
+    Object.keys(labels.status).forEach(function (status) {
+      sidebar += '<button class="status-button' + (issue.status === status ? ' active' : '') + '" type="button" data-action="change-status" data-status="' +
+        escapeHtml(status) + '"' + (write ? '' : ' disabled') + '>' + escapeHtml(labels.status[status]) + '</button>';
+    });
+    sidebar += '</div></section>';
+    sidebar += '<section class="detail-section"><h3>信息</h3><div class="meta-grid">';
+    sidebar += '<div class="meta-item"><span>TaskID</span><strong>' + escapeHtml(taskId) + '</strong></div>';
+    sidebar += '<div class="meta-item"><span>优先级</span><strong>' + escapeHtml(labels.priority[issue.priority] || issue.priority) + '</strong></div>';
+    sidebar += '<div class="meta-item"><span>负责人</span><strong>' + escapeHtml(displayName(assignee)) + '</strong></div>';
+    sidebar += '<div class="meta-item"><span>创建人</span><strong>' + escapeHtml(displayName(reporter)) + '</strong></div>';
+    sidebar += '<div class="meta-item"><span>创建时间</span><strong>' + escapeHtml(formatDate(issue.created_at)) + '</strong></div>';
+    sidebar += '<div class="meta-item"><span>附件</span><strong>' + Number(issue.attachment_count || 0) + '</strong></div>';
+    sidebar += '</div></section>';
+    $('detailSidebar').innerHTML = sidebar;
     var commentForm = $('commentForm');
     if (commentForm) commentForm.addEventListener('submit', submitComment);
     var imageInput = $('commentImageInput');
@@ -1800,18 +1910,25 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     loadAttachmentImages();
   }
 
-  function closeDrawer(updateHash) {
+  function closeDetail(updateHash) {
     releaseAttachmentObjectUrls();
+    var nextHash = state.returnHash || (state.selectedBlockId ? '#/boards/' + state.selectedBlockId : '#/');
+    var scrollY = state.returnScrollY || 0;
     state.selectedIssueId = null;
+    state.selectedTaskId = null;
     state.selectedIssue = null;
     state.comments = [];
     state.commentImages = [];
-    $('issueDrawer').classList.add('hidden');
+    $('issueDetailView').classList.add('hidden');
     $('workspace').classList.remove('detail-open');
+    $('appView').classList.remove('detail-mode');
+    updatePanelHeading();
     if (updateHash) {
-      var nextHash = state.selectedBlockId ? '#/boards/' + state.selectedBlockId : '#/';
       history.pushState(null, '', nextHash);
+      window.setTimeout(function () { window.scrollTo(0, scrollY); }, 0);
     }
+    state.returnHash = null;
+    state.returnScrollY = 0;
   }
 
   function issueFormHtml(issue) {
@@ -1927,7 +2044,7 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
       assignee_id: $('issueAssignee').value ? Number($('issueAssignee').value) : null
     };
     var editing = state.modalMode === 'edit-issue';
-    var path = editing ? '/api/issues/' + state.editingId : '/api/issues';
+    var path = editing ? '/api/issues/' + formatTaskId(state.editingId) : '/api/issues';
     var result = await request(path, { method: editing ? 'PUT' : 'POST', body: payload });
     if (!result.ok) {
       $('formError').textContent = resultMessage(result, 'Issue 保存失败');
@@ -1938,7 +2055,7 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     state.selectedBlockId = Number(issue && issue.block_id || payload.block_id);
     await loadBlocks();
     await selectBlock(state.selectedBlockId, false);
-    if (issue) await openIssue(issue.id, true);
+    if (issue) await openIssue(taskIdFor(issue), true);
     showToast(editing ? 'Issue 已更新' : 'Issue 已创建');
   }
 
@@ -2015,13 +2132,14 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
 
   async function deleteIssue(id) {
     var issue = state.selectedIssue;
-    confirmAction('删除 Issue', '确认永久删除 <strong>' + escapeHtml(issue && issue.title || ('#' + id)) + '</strong>？评论和附件也会一并删除。', '删除 Issue', async function () {
-      var result = await request('/api/issues/' + id, { method: 'DELETE' });
+    var taskId = taskIdFor(issue || id);
+    confirmAction('删除 Issue', '确认永久删除 <strong>' + escapeHtml(taskId + ' · ' + (issue && issue.title || 'Issue')) + '</strong>？评论和附件也会一并删除。', '删除 Issue', async function () {
+      var result = await request('/api/issues/' + taskId, { method: 'DELETE' });
       if (!result.ok) {
         showToast(resultMessage(result, 'Issue 删除失败'));
         return;
       }
-      closeDrawer(true);
+      closeDetail(true);
       await loadBlocks();
       await loadIssues();
       showToast('Issue 已删除');
@@ -2063,13 +2181,14 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
 
   async function changeStatus(status) {
     if (!state.selectedIssue) return;
-    var result = await request('/api/issues/' + state.selectedIssue.id + '/status', { method: 'PUT', body: { status: status } });
+    var taskId = state.selectedTaskId;
+    var result = await request('/api/issues/' + taskId + '/status', { method: 'PUT', body: { status: status } });
     if (!result.ok) {
       showToast(resultMessage(result, '状态更新失败'));
       return;
     }
     await loadIssues();
-    await openIssue(state.selectedIssueId, false);
+    await openIssue(taskId, false);
     showToast('状态已更新');
   }
 
@@ -2104,19 +2223,19 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     setBusy(button, true, '发表中');
     var result;
     if (!files.length) {
-      result = await request('/api/issues/' + state.selectedIssueId + '/comments', { method: 'POST', body: { content: content } });
+      result = await request('/api/issues/' + state.selectedTaskId + '/comments', { method: 'POST', body: { content: content } });
     } else {
       var form = new FormData();
       form.append('content', content);
       files.forEach(function (file) { form.append('images', file); });
-      result = await request('/api/issues/' + state.selectedIssueId + '/comments', { method: 'POST', body: form });
+      result = await request('/api/issues/' + state.selectedTaskId + '/comments', { method: 'POST', body: form });
     }
     setBusy(button, false);
     if (!result.ok) {
       showToast(resultMessage(result, '评论发表失败'));
       return;
     }
-    await openIssue(state.selectedIssueId, false);
+    await openIssue(state.selectedTaskId, false);
     await loadIssues();
     showToast('评论已发表');
   }
@@ -2186,19 +2305,47 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     endSession('已退出登录');
   }
 
+  async function copyTaskId(taskId) {
+    if (!parseTaskId(taskId)) return;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(taskId);
+      } else {
+        var temporary = document.createElement('textarea');
+        temporary.value = taskId;
+        temporary.setAttribute('readonly', '');
+        temporary.style.position = 'fixed';
+        temporary.style.opacity = '0';
+        document.body.appendChild(temporary);
+        temporary.select();
+        document.execCommand('copy');
+        temporary.remove();
+      }
+      showToast('已复制 ' + taskId);
+    } catch (error) {
+      showToast('无法复制 TaskID');
+    }
+  }
+
   async function applyRoute() {
     var hash = window.location.hash || '#/';
-    var issueMatch = hash.match(/^#\/issues\/(\d+)$/);
+    var issueMatch = hash.match(/^#\/issues\/([^/]+)$/);
     var blockMatch = hash.match(/^#\/boards\/(\d+)$/);
     if (issueMatch) {
-      await openIssue(Number(issueMatch[1]), false);
-      if (state.selectedIssue) await loadIssues();
+      await openIssue(issueMatch[1], false);
+      if (state.selectedIssue) {
+        history.replaceState(null, '', '#/issues/' + state.selectedTaskId);
+        await loadIssues();
+        renderDetail();
+      }
       return;
     }
     if (blockMatch) {
       var blockId = Number(blockMatch[1]);
       if (state.blocks.some(function (block) { return Number(block.id) === blockId; })) {
+        var restoreScrollY = $('workspace').classList.contains('detail-open') ? state.returnScrollY : 0;
         await selectBlock(blockId, false);
+        if (restoreScrollY) window.setTimeout(function () { window.scrollTo(0, restoreScrollY); }, 0);
         return;
       }
     }
@@ -2212,7 +2359,8 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     var action = target.dataset.action;
     var id = Number(target.dataset.id);
     if (action === 'select-block') await selectBlock(id, true);
-    else if (action === 'open-issue') await openIssue(id, true);
+    else if (action === 'open-issue') await openIssue(target.dataset.taskId, true);
+    else if (action === 'copy-task-id') await copyTaskId(target.dataset.taskId);
     else if (action === 'edit-issue') openIssueForm(state.selectedIssue);
     else if (action === 'delete-issue') await deleteIssue(id);
     else if (action === 'change-status') await changeStatus(target.dataset.status);
@@ -2230,7 +2378,7 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     else if (action === 'close-confirm') closeConfirmDialog();
     else if (action === 'all-issues') {
       state.selectedBlockId = null;
-      closeDrawer(false);
+      closeDetail(false);
       history.pushState(null, '', '#/');
       await loadIssues();
       renderBlocks();
@@ -2244,7 +2392,7 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     $('imagePreviewDialog').addEventListener('close', closeAttachmentPreview);
     $('createIssueButton').addEventListener('click', function () { if (canWrite()) openIssueForm(null); });
     $('createPanelButton').addEventListener('click', function () { openBoardForm(null); });
-    $('closeDrawerButton').addEventListener('click', function () { closeDrawer(true); });
+    $('closeDetailButton').addEventListener('click', function () { closeDetail(true); });
     $('mobilePanelsButton').addEventListener('click', openSidebar);
     $('sidebarBackdrop').addEventListener('click', closeSidebar);
     $('profileButton').addEventListener('click', function (event) {
@@ -2261,9 +2409,16 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
       }
     });
     document.addEventListener('keydown', function (event) {
+      if (event.target.closest && event.target.closest('[data-action="copy-task-id"]')) return;
+      var issueRow = event.target.closest && event.target.closest('.issue-row[data-task-id]');
+      if (issueRow && (event.key === 'Enter' || event.key === ' ')) {
+        event.preventDefault();
+        openIssue(issueRow.dataset.taskId, true);
+        return;
+      }
       if (event.key === 'Escape' && !$('formDialog').open && !$('confirmDialog').open) {
         if (state.sidebarOpen) closeSidebar();
-        else if (state.selectedIssueId) closeDrawer(true);
+        else if (state.selectedIssueId) closeDetail(true);
       }
     });
     document.querySelectorAll('[data-filter-status]').forEach(function (button) {
@@ -2281,6 +2436,14 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
       clearTimeout(bindEvents.searchTimer);
       state.filters.q = this.value.trim();
       bindEvents.searchTimer = window.setTimeout(loadIssues, 280);
+    });
+    $('issueSearch').addEventListener('keydown', function (event) {
+      if (event.key !== 'Enter') return;
+      var issueId = parseTaskId(this.value.trim());
+      if (!issueId) return;
+      event.preventDefault();
+      clearTimeout(bindEvents.searchTimer);
+      openIssue(formatTaskId(issueId), true);
     });
     window.addEventListener('popstate', function () { if (state.currentUser) applyRoute(); });
     window.addEventListener('hashchange', function () { if (state.currentUser) applyRoute(); });
