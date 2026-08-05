@@ -58,7 +58,8 @@ WorkHandler 将桌面控制台、HTTP 服务、响应式 Web 面板和 SQLite �
 - 按创建时间、优先级或标题排序；
 - Issue 评论及评论内图片插入，单条评论最多 9 张图片；
 - 响应式布局，可在桌面浏览器和移动端浏览器中使用；
-- 基于 URL Hash 的 Issue 深链接，例如 `#/issues/42`。
+- 每个 Issue 自动获得不可变 TaskID（例如 `T42`），支持复制、搜索直达和专注讨论页；
+- 基于 URL Hash 的 Issue 深链接，例如 `#/issues/T42`，并兼容旧的数字链接。
 
 ### 桌面控制台
 
@@ -369,10 +370,10 @@ Authorization: Bearer <token>
 | GET/PUT/DELETE | `/api/blocks/:id` | 面板详情/更新/删除 | 已登录/Admin/Admin |
 | GET | `/api/issues` | Issue 列表与筛选 | 已登录 |
 | GET | `/api/blocks/:id/issues` | 指定面板的 Issue | 已登录 |
-| GET/PUT/DELETE | `/api/issues/:id` | Issue 详情/更新/删除 | 已登录/报告人或 Admin/Admin |
+| GET/PUT/DELETE | `/api/issues/:taskId` | Issue 详情/更新/删除 | 已登录/报告人或 Admin/Admin |
 | POST | `/api/issues` | 创建 Issue | Admin/User |
-| PUT | `/api/issues/:id/status` | 状态流转 | 报告人或 Admin |
-| GET/POST | `/api/issues/:id/comments` | 评论列表/发表评论及图片 | 已登录/Admin 或 User |
+| PUT | `/api/issues/:taskId/status` | 状态流转 | 报告人或 Admin |
+| GET/POST | `/api/issues/:taskId/comments` | 评论列表/发表评论及图片 | 已登录/Admin 或 User |
 | GET | `/api/attachments/:id` | 读取 WebP 图片 | 已登录 |
 | GET | `/api/attachments/:id?size=thumb` | 读取缩略图 | 已登录 |
 | GET | `/api/notifications` | 当前用户未读通知 | 已登录 |
@@ -382,6 +383,12 @@ Authorization: Bearer <token>
 | GET | `/api/server/config` | 读取服务配置 | Admin |
 
 用户注册和 HTTP 服务配置写入由桌面应用管理。`POST /api/users` 会返回 `405 Method Not Allowed`，服务也不提供远程重启接口。
+
+### TaskID
+
+TaskID 是 Issue 数据库主键的规范公开表示：`issues.id = 42` 对应 `T42`。Issue 响应同时返回整数 `id` 和字符串 `task_id`；通知响应保留 `related_id`，并返回 `related_task_id`。TaskID 不单独存入数据库，Issue 删除后的编号不会复用。
+
+Issue 详情、状态和评论端点接受 `T42`、`t42` 以及兼容旧客户端的 `42`。响应和 Web 路由始终输出大写 `T42`；`T0`、`T042` 等非法格式返回 `400 invalid_task_id`。
 
 ### Issue 查询参数
 
