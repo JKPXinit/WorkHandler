@@ -118,6 +118,6 @@ QUrl TrayIconRenderer::issueUrl(quint16 port, qint64 issueId)
     if (issueId <= 0) {
         return rootUrl(port);
     }
-    return QUrl(QStringLiteral("http://127.0.0.1:%1/#/issues/%2")
+    return QUrl(QStringLiteral("http://127.0.0.1:%1/#/issues/T%2")
                     .arg(port).arg(issueId));
 }

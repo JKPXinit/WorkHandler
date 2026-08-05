@@ -3,6 +3,7 @@
 #include <QCloseEvent>
 #include <QLabel>
 #include <QMouseEvent>
+#include <QRegularExpression>
 #include <QRect>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -11,6 +12,21 @@ namespace {
 constexpr int ToastDurationMilliseconds = 5000;
 constexpr int ToastMargin = 16;
 constexpr int ToastMaximumWidth = 380;
+
+QString taskTitle(qint64 issueId, const QString &title)
+{
+    if (issueId <= 0) {
+        return title;
+    }
+    const QString taskId = QStringLiteral("T%1").arg(issueId);
+    const QRegularExpression existingPrefix(
+        QStringLiteral("^%1(?:\\s|[·:.-])")
+            .arg(QRegularExpression::escape(taskId)),
+        QRegularExpression::CaseInsensitiveOption);
+    return existingPrefix.match(title).hasMatch()
+        ? title
+        : QStringLiteral("%1 · %2").arg(taskId, title);
+}
 }
 
 IssueToast::IssueToast(qint64 issueId,
@@ -45,7 +61,7 @@ IssueToast::IssueToast(qint64 issueId,
     layout->setContentsMargins(16, 12, 16, 12);
     layout->setSpacing(6);
 
-    auto *titleLabel = new QLabel(title, this);
+    auto *titleLabel = new QLabel(taskTitle(issueId, title), this);
     titleLabel->setObjectName(QStringLiteral("IssueToastTitle"));
     titleLabel->setTextFormat(Qt::PlainText);
     titleLabel->setWordWrap(true);

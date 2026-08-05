@@ -3,6 +3,7 @@
 
 #include <QColor>
 #include <QImage>
+#include <QLabel>
 #include <QPainter>
 #include <QSignalSpy>
 #include <QTest>
@@ -64,7 +65,7 @@ void TrayIconRendererTest::urlsUseConfiguredPort()
     QCOMPARE(TrayIconRenderer::rootUrl(9123).toString(),
              QStringLiteral("http://127.0.0.1:9123/"));
     QCOMPARE(TrayIconRenderer::issueUrl(9123, 42).toString(),
-             QStringLiteral("http://127.0.0.1:9123/#/issues/42"));
+             QStringLiteral("http://127.0.0.1:9123/#/issues/T42"));
     QCOMPARE(TrayIconRenderer::issueUrl(9123, 0),
              TrayIconRenderer::rootUrl(9123));
 }
@@ -105,7 +106,8 @@ void TrayIconRendererTest::renderKeepsStableCanvas()
 void TrayIconRendererTest::toastKeepsIssueIdentity()
 {
     IssueToast first(101, QStringLiteral("First"), QStringLiteral("Content"));
-    IssueToast second(202, QStringLiteral("Second"), QStringLiteral("Content"));
+    IssueToast second(202, QStringLiteral("T202 · Second"),
+                      QStringLiteral("Content"));
     QSignalSpy firstSpy(&first, &IssueToast::activated);
     QSignalSpy secondSpy(&second, &IssueToast::activated);
 
@@ -118,6 +120,10 @@ void TrayIconRendererTest::toastKeepsIssueIdentity()
 
     QCOMPARE(first.issueId(), qint64(101));
     QCOMPARE(second.issueId(), qint64(202));
+    QCOMPARE(first.findChild<QLabel *>(QStringLiteral("IssueToastTitle"))->text(),
+             QStringLiteral("T101 · First"));
+    QCOMPARE(second.findChild<QLabel *>(QStringLiteral("IssueToastTitle"))->text(),
+             QStringLiteral("T202 · Second"));
     QCOMPARE(firstSpy.count(), 1);
     QCOMPARE(secondSpy.count(), 1);
     QCOMPARE(firstSpy.first().first().toLongLong(), qint64(101));
