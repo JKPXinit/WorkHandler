@@ -24,14 +24,6 @@ ShortcutManager::~ShortcutManager()
 void ShortcutManager::initDefaultShortcuts()
 {
     // 定义所有默认快捷键
-    m_shortcuts[Shortcut_NewWindow] = {
-        Shortcut_NewWindow,
-        tr("New Window"),
-        QKeySequence(Qt::CTRL | Qt::Key_N),
-        QKeySequence(Qt::CTRL | Qt::Key_N),
-        tr("Open a new window")
-    };
-
     m_shortcuts[Shortcut_Exit] = {
         Shortcut_Exit,
         tr("Exit"),

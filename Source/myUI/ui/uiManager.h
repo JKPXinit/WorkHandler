@@ -71,7 +71,6 @@ public slots:
 
 private slots:
 
-    void onMenuBar_New();
     void onMenuBar_Options();
     void onMenuBar_Exit();
     void onMenuBar_Help();
@@ -101,7 +100,6 @@ private:
     QMenu *helpMenu;        // “帮助”菜单
 
     // 菜单 Action 指针（用于 retranslateUi）
-    QAction *m_newAction        {nullptr};
     QAction *m_exitAction       {nullptr};
     QAction *m_fullScreenAction {nullptr};
     QAction *m_lockManageAction {nullptr};
@@ -112,8 +110,6 @@ private:
     // Dock 窗口指针（用于 retranslateUi）
     ads::CDockWidget *m_logViewDock   {nullptr};
     ads::CDockWidget *m_httpServerManagerDock {nullptr};
-
-    bool newWindow_offest = true;
 
     void initSplash();
     void initTray();

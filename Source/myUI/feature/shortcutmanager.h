@@ -14,8 +14,7 @@ class MainWindow;
 
 // 快捷键 ID 枚举
 enum ShortcutId {
-    Shortcut_NewWindow = 0,     // 新建窗口
-    Shortcut_Exit,              // 退出程序
+    Shortcut_Exit = 1,          // 退出程序，保留持久化配置使用的 ID
     Shortcut_FullScreen,        // 全屏显示
     Shortcut_LockLayout,        // 锁定布局
     Shortcut_SaveLayout,        // 保存布局

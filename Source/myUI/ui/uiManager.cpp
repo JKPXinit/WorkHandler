@@ -150,14 +150,11 @@ void uiManager::initMenuBar () {
 
     // File 菜单
     fileMenu = menubar->addMenu(tr("File"));
-    m_newAction  = fileMenu->addAction(tr("Open new window"));
     m_exitAction = fileMenu->addAction(tr("Exit"));
 
     // 使用 ShortcutManager 注册快捷键
-    m_mainWindow->m_shortcutManager->registerShortcutToAction(Shortcut_NewWindow, m_newAction);
     m_mainWindow->m_shortcutManager->registerShortcutToAction(Shortcut_Exit, m_exitAction);
 
-    connect(m_newAction,  &QAction::triggered, this, &uiManager::onMenuBar_New);
     connect(m_exitAction, &QAction::triggered, this, &uiManager::onMenuBar_Exit);
 
     LOG_DEBUG("File menu created");
@@ -226,41 +223,6 @@ void uiManager::initMenuBar () {
     return ;
 }
 
-void uiManager::onMenuBar_New() {
-
-    LOG_INFO("Creating new window");
-
-    // 创建一个新的 MainWindow 对象
-    MainWindow *newWindow = new MainWindow();
-
-    if (newWindow_offest) {
-        // 获取当前窗口的位置
-        QPoint currentPos = parent->pos();
-
-        // 设置偏移量
-        int offsetX = 50;  // X方向偏移
-        int offsetY = 50;  // Y方向偏移
-
-        // 设置新窗口的位置为当前窗口的位置加上偏移量
-        newWindow->move(currentPos.x() + offsetX, currentPos.y() + offsetY);
-    }
-
-    // 在新窗口的状态栏中显示"New window"
-    QStatusBar *newWindowStatusbar = newWindow->statusBar(); // 获取新窗口的状态栏
-    if (newWindowStatusbar) {
-        newWindowStatusbar->showMessage(tr("New window"), 3000); // 显示3秒
-    }
-
-    // 显示新窗口
-    newWindow->show();
-
-    newWindow_offest = true;    // 默认每次新建窗口发生偏移
-
-    LOG_INFO("New window created successfully");
-
-    return ;
-}
-
 void uiManager::retranslateUi() {
     // 窗口标题
     parent->setWindowTitle(QCoreApplication::applicationName());
@@ -273,7 +235,6 @@ void uiManager::retranslateUi() {
     helpMenu->setTitle(tr("Help"));
 
     // File 菜单 actions
-    m_newAction->setText(tr("Open new window"));
     m_exitAction->setText(tr("Exit"));
 
     // Window 菜单 actions
