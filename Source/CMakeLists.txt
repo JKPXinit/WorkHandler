@@ -124,6 +124,8 @@ set(BACKEND_SOURCES
     server/issues/issuecontroller.h
     server/issues/issuedao.cpp
     server/issues/issuedao.h
+    server/issues/issueidentifier.cpp
+    server/issues/issueidentifier.h
     server/issues/issueservice.cpp
     server/issues/issueservice.h
     server/maintenance/maintenancedao.cpp

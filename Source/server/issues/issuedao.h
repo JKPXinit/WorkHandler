@@ -47,6 +47,7 @@ enum class IssueSort {
 
 struct IssueFilter
 {
+    std::optional<qint64> issueId;
     std::optional<qint64> blockId;
     std::optional<QString> status;
     std::optional<QString> priority;

@@ -2,6 +2,7 @@
 
 #include "attachments/attachmentservice.h"
 #include "databasemanager.h"
+#include "issues/issueidentifier.h"
 #include "notifications/notificationmanager.h"
 
 #include <QJsonValue>
@@ -172,10 +173,17 @@ IssueServiceResult IssueService::list(const IssueListInput &input) const
         filter.assigneeId = assigneeId;
     }
     if (input.search) {
-        filter.search = input.search->trimmed();
-        if (filter.search.size() > 200) {
+        const QString search = input.search->trimmed();
+        if (search.size() > 200) {
             return invalid(QStringLiteral("invalid_issue_search"),
                            QStringLiteral("Issue search must not exceed 200 characters."));
+        }
+        qint64 issueId = 0;
+        if (search.startsWith(QLatin1Char('T'), Qt::CaseInsensitive)
+            && IssueIdentifier::parse(search, &issueId)) {
+            filter.issueId = issueId;
+        } else {
+            filter.search = search;
         }
     }
     if (input.sort) {
