@@ -1,6 +1,7 @@
 #include "notifications/notificationdao.h"
 
 #include "databasemanager.h"
+#include "issues/issueidentifier.h"
 
 #include <QJsonValue>
 #include <QSqlError>
@@ -49,6 +50,8 @@ QJsonObject NotificationRecord::toJson() const
         {QStringLiteral("title"), title},
         {QStringLiteral("content"), content},
         {QStringLiteral("related_id"), relatedId},
+        {QStringLiteral("related_task_id"),
+         IssueIdentifier::format(relatedId)},
         {QStringLiteral("sender"),
          sender ? QJsonValue(sender->toJson())
                 : QJsonValue(QJsonValue::Null)},

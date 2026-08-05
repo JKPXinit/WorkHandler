@@ -1,6 +1,7 @@
 #include "issues/issuecontroller.h"
 
 #include "api/apicontext.h"
+#include "issues/issueidentifier.h"
 #include "issues/issueservice.h"
 
 #include <QHttpServer>
@@ -42,6 +43,19 @@ QHttpServerResponse listResponse(const IssueServiceResult &result)
     return ApiContext::successResponse({
         {QStringLiteral("issues"), issues}
     });
+}
+
+bool parseIssueIdentifier(const QString &identifier, qint64 *issueId)
+{
+    return IssueIdentifier::parse(identifier, issueId);
+}
+
+QHttpServerResponse invalidTaskIdResponse()
+{
+    return ApiContext::errorResponse(
+        StatusCode::BadRequest,
+        QStringLiteral("invalid_task_id"),
+        QStringLiteral("Issue identifier must be T followed by a positive integer or a legacy positive integer."));
 }
 }
 
@@ -86,11 +100,16 @@ void IssueController::registerRoutes(QHttpServer &server)
 
     server.route(
         QStringLiteral("/api/issues/<arg>"), Method::Get,
-        [this](qint64 id, const QHttpServerRequest &request) {
+        [this](const QString &identifier, const QHttpServerRequest &request) {
             const ApiContext::AuthorizationResult authorization =
                 m_apiContext.authorize(request, false);
             if (!authorization.authorized) {
                 return ApiContext::authorizationError(authorization);
+            }
+
+            qint64 id = 0;
+            if (!parseIssueIdentifier(identifier, &id)) {
+                return invalidTaskIdResponse();
             }
 
             const IssueServiceResult result = m_service.get(id);
@@ -128,11 +147,16 @@ void IssueController::registerRoutes(QHttpServer &server)
 
     server.route(
         QStringLiteral("/api/issues/<arg>"), Method::Put,
-        [this](qint64 id, const QHttpServerRequest &request) {
+        [this](const QString &identifier, const QHttpServerRequest &request) {
             const ApiContext::AuthorizationResult authorization =
                 m_apiContext.authorize(request, false);
             if (!authorization.authorized) {
                 return ApiContext::authorizationError(authorization);
+            }
+
+            qint64 id = 0;
+            if (!parseIssueIdentifier(identifier, &id)) {
+                return invalidTaskIdResponse();
             }
 
             QJsonObject body;
@@ -153,11 +177,16 @@ void IssueController::registerRoutes(QHttpServer &server)
 
     server.route(
         QStringLiteral("/api/issues/<arg>/status"), Method::Put,
-        [this](qint64 id, const QHttpServerRequest &request) {
+        [this](const QString &identifier, const QHttpServerRequest &request) {
             const ApiContext::AuthorizationResult authorization =
                 m_apiContext.authorize(request, false);
             if (!authorization.authorized) {
                 return ApiContext::authorizationError(authorization);
+            }
+
+            qint64 id = 0;
+            if (!parseIssueIdentifier(identifier, &id)) {
+                return invalidTaskIdResponse();
             }
 
             QJsonObject body;
@@ -178,11 +207,16 @@ void IssueController::registerRoutes(QHttpServer &server)
 
     server.route(
         QStringLiteral("/api/issues/<arg>"), Method::Delete,
-        [this](qint64 id, const QHttpServerRequest &request) {
+        [this](const QString &identifier, const QHttpServerRequest &request) {
             const ApiContext::AuthorizationResult authorization =
                 m_apiContext.authorize(request, false);
             if (!authorization.authorized) {
                 return ApiContext::authorizationError(authorization);
+            }
+
+            qint64 id = 0;
+            if (!parseIssueIdentifier(identifier, &id)) {
+                return invalidTaskIdResponse();
             }
 
             const IssueServiceResult result = m_service.remove(

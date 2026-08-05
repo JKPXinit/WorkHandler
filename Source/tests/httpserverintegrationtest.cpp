@@ -1,4 +1,5 @@
 #include "httpserver.h"
+#include "issues/issueidentifier.h"
 #include "passwordhasher.h"
 #include "tokenhelper.h"
 
@@ -50,6 +51,7 @@ private:
 
 private slots:
     void initTestCase();
+    void taskIdentifiers();
     void passwordAndTokenHelpers();
     void legacyDatabaseMigration();
     void targetNotificationSchemaPurgesReadRows();
@@ -96,6 +98,24 @@ private:
     QString m_token;
     quint16 m_port {0};
 };
+
+void HttpServerIntegrationTest::taskIdentifiers()
+{
+    QCOMPARE(IssueIdentifier::format(42), QStringLiteral("T42"));
+    QCOMPARE(IssueIdentifier::format(0), QString());
+
+    qint64 issueId = 0;
+    QVERIFY(IssueIdentifier::parse(QStringLiteral("T42"), &issueId));
+    QCOMPARE(issueId, qint64(42));
+    QVERIFY(IssueIdentifier::parse(QStringLiteral("t42"), &issueId));
+    QCOMPARE(issueId, qint64(42));
+    QVERIFY(IssueIdentifier::parse(QStringLiteral("42"), &issueId));
+    QCOMPARE(issueId, qint64(42));
+    QVERIFY(!IssueIdentifier::parse(QStringLiteral("T042"), &issueId));
+    QVERIFY(!IssueIdentifier::parse(QStringLiteral("T0"), &issueId));
+    QVERIFY(!IssueIdentifier::parse(QStringLiteral("T-1"), &issueId));
+    QVERIFY(!IssueIdentifier::parse(QStringLiteral("task42"), &issueId));
+}
 
 void HttpServerIntegrationTest::initTestCase()
 {
@@ -768,6 +788,9 @@ void HttpServerIntegrationTest::issueCrudFilteringAndPermissions()
                                        .value(QStringLiteral("issue")).toObject();
     const qint64 firstIssueId = firstIssue.value(QStringLiteral("id")).toInteger();
     QVERIFY(firstIssueId > 0);
+    const QString firstTaskId = QStringLiteral("T%1").arg(firstIssueId);
+    QCOMPARE(firstIssue.value(QStringLiteral("task_id")).toString(),
+             firstTaskId);
     QCOMPARE(firstIssue.value(QStringLiteral("title")).toString(),
              QStringLiteral("Alpha issue"));
     QCOMPARE(firstIssue.value(QStringLiteral("status")).toString(),
@@ -844,6 +867,14 @@ void HttpServerIntegrationTest::issueCrudFilteringAndPermissions()
         guestToken).json().value(QStringLiteral("data")).toObject()
             .value(QStringLiteral("issues")).toArray().size(),
         1);
+    const QJsonArray taskSearch = request(
+        "GET", QStringLiteral("/api/issues?q=%1").arg(firstTaskId), {},
+        guestToken).json().value(QStringLiteral("data")).toObject()
+            .value(QStringLiteral("issues")).toArray();
+    QCOMPARE(taskSearch.size(), 1);
+    QCOMPARE(taskSearch.first().toObject()
+                 .value(QStringLiteral("task_id")).toString(),
+             firstTaskId);
 
     const Reply prioritySorted = request(
         "GET", QStringLiteral("/api/issues?sort=priority_desc"), {},
@@ -876,6 +907,25 @@ void HttpServerIntegrationTest::issueCrudFilteringAndPermissions()
                  .value(QStringLiteral("issue")).toObject()
                  .value(QStringLiteral("assignee_id")).toInteger(),
              other.id);
+    QCOMPARE(request(
+        "GET", QStringLiteral("/api/issues/%1").arg(firstTaskId), {},
+        guestToken).status,
+        200);
+    QCOMPARE(request(
+        "GET", QStringLiteral("/api/issues/t%1").arg(firstIssueId), {},
+        guestToken).status,
+        200);
+    for (const QString &invalidIdentifier : {
+             QStringLiteral("T0"), QStringLiteral("T001"),
+             QStringLiteral("TX")}) {
+        const Reply invalidReply = request(
+            "GET", QStringLiteral("/api/issues/%1").arg(invalidIdentifier),
+            {}, guestToken);
+        QCOMPARE(invalidReply.status, 400);
+        QCOMPARE(invalidReply.json().value(QStringLiteral("error")).toObject()
+                     .value(QStringLiteral("code")).toString(),
+                 QStringLiteral("invalid_task_id"));
+    }
 
     const QJsonObject editPayload = {
         {QStringLiteral("title"), QStringLiteral("Alpha issue updated")},
@@ -892,7 +942,7 @@ void HttpServerIntegrationTest::issueCrudFilteringAndPermissions()
         editPayload, guestToken).status,
         403);
     const Reply updated = request(
-        "PUT", QStringLiteral("/api/issues/%1").arg(firstIssueId),
+        "PUT", QStringLiteral("/api/issues/%1").arg(firstTaskId),
         editPayload, reporterToken);
     QCOMPARE(updated.status, 200);
     const QJsonObject updatedIssue = updated.json()
@@ -923,7 +973,7 @@ void HttpServerIntegrationTest::issueCrudFilteringAndPermissions()
         guestToken).status,
         403);
     const Reply statusChanged = request(
-        "PUT", QStringLiteral("/api/issues/%1/status").arg(firstIssueId),
+        "PUT", QStringLiteral("/api/issues/%1/status").arg(firstTaskId),
         {{QStringLiteral("status"), QStringLiteral("resolved")}},
         reporterToken);
     QCOMPARE(statusChanged.status, 200);
@@ -1026,7 +1076,7 @@ void HttpServerIntegrationTest::issueCrudFilteringAndPermissions()
     QCOMPARE(request("DELETE", QStringLiteral("/api/issues/%1").arg(secondIssueId),
                      {}, m_token).status,
              200);
-    QCOMPARE(request("DELETE", QStringLiteral("/api/issues/%1").arg(thirdIssueId),
+    QCOMPARE(request("DELETE", QStringLiteral("/api/issues/T%1").arg(thirdIssueId),
                      {}, m_token).status,
              200);
     QCOMPARE(request("DELETE", QStringLiteral("/api/blocks/%1").arg(firstBlockId),
@@ -1115,7 +1165,10 @@ void HttpServerIntegrationTest::commentReadAndCreatePermissions()
     QVERIFY(issueId > 0);
 
     const QString commentsPath =
-        QStringLiteral("/api/issues/%1/comments").arg(issueId);
+        QStringLiteral("/api/issues/T%1/comments").arg(issueId);
+    QCOMPARE(request("GET", QStringLiteral("/api/issues/T001/comments"), {},
+                     guestToken).status,
+             400);
     QCOMPARE(request("GET", commentsPath).status, 401);
     QCOMPARE(request(
         "POST", commentsPath,
@@ -1355,6 +1408,9 @@ void HttpServerIntegrationTest::notificationApiAndBusinessEvents()
              QStringLiteral("issue_created"));
     QCOMPARE(adminNotification.value(QStringLiteral("related_id")).toInteger(),
              issueId);
+    QCOMPARE(adminNotification.value(
+                 QStringLiteral("related_task_id")).toString(),
+             QStringLiteral("T%1").arg(issueId));
     QVERIFY(!adminNotification.contains(QStringLiteral("recipient_id")));
     QCOMPARE(adminNotification.value(QStringLiteral("sender")).toObject()
                  .value(QStringLiteral("id")).toInteger(),

@@ -1,6 +1,7 @@
 #include "issues/issuedao.h"
 
 #include "databasemanager.h"
+#include "issues/issueidentifier.h"
 
 #include <QJsonValue>
 #include <QSqlError>
@@ -74,6 +75,7 @@ QJsonObject IssueRecord::toJson() const
 {
     QJsonObject object = {
         {QStringLiteral("id"), id},
+        {QStringLiteral("task_id"), IssueIdentifier::format(id)},
         {QStringLiteral("block_id"), blockId},
         {QStringLiteral("title"), title},
         {QStringLiteral("description"), description},
@@ -113,6 +115,10 @@ IssueDaoResult IssueDao::issues(const IssueFilter &filter,
 
     QStringList conditions;
     QList<QVariant> bindings;
+    if (filter.issueId) {
+        conditions.append(QStringLiteral("i.id = ?"));
+        bindings.append(*filter.issueId);
+    }
     if (filter.blockId) {
         conditions.append(QStringLiteral("i.block_id = ?"));
         bindings.append(*filter.blockId);

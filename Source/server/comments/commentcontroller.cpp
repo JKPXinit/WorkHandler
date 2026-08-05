@@ -3,6 +3,7 @@
 #include "api/apicontext.h"
 #include "api/multipartparser.h"
 #include "comments/commentservice.h"
+#include "issues/issueidentifier.h"
 
 #include <QHttpServer>
 #include <QHttpServerRequest>
@@ -12,6 +13,14 @@
 namespace {
 using StatusCode = QHttpServerResponse::StatusCode;
 constexpr qsizetype MaximumCommentBodySize = 30 * 1024 * 1024 + 256 * 1024;
+
+QHttpServerResponse invalidTaskIdResponse()
+{
+    return ApiContext::errorResponse(
+        StatusCode::BadRequest,
+        QStringLiteral("invalid_task_id"),
+        QStringLiteral("Issue identifier must be T followed by a positive integer or a legacy positive integer."));
+}
 }
 
 CommentController::CommentController(ApiContext &apiContext,
@@ -27,11 +36,16 @@ void CommentController::registerRoutes(QHttpServer &server)
 
     server.route(
         QStringLiteral("/api/issues/<arg>/comments"), Method::Get,
-        [this](qint64 issueId, const QHttpServerRequest &request) {
+        [this](const QString &identifier, const QHttpServerRequest &request) {
             const ApiContext::AuthorizationResult authorization =
                 m_apiContext.authorize(request, false);
             if (!authorization.authorized) {
                 return ApiContext::authorizationError(authorization);
+            }
+
+            qint64 issueId = 0;
+            if (!IssueIdentifier::parse(identifier, &issueId)) {
+                return invalidTaskIdResponse();
             }
 
             const CommentServiceResult result = m_service.list(issueId);
@@ -49,11 +63,16 @@ void CommentController::registerRoutes(QHttpServer &server)
 
     server.route(
         QStringLiteral("/api/issues/<arg>/comments"), Method::Post,
-        [this](qint64 issueId, const QHttpServerRequest &request) {
+        [this](const QString &identifier, const QHttpServerRequest &request) {
             const ApiContext::AuthorizationResult authorization =
                 m_apiContext.authorize(request, false);
             if (!authorization.authorized) {
                 return ApiContext::authorizationError(authorization);
+            }
+
+            qint64 issueId = 0;
+            if (!IssueIdentifier::parse(identifier, &issueId)) {
+                return invalidTaskIdResponse();
             }
 
             const QByteArray contentType = request.value("Content-Type").toLower();
