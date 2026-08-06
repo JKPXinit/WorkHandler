@@ -105,6 +105,10 @@ void MaintenanceTest::legacyOriginalPathMigration()
             "filename TEXT NOT NULL, storage_path TEXT NOT NULL, "
             "thumb_path TEXT, file_size INTEGER, "
             "created_at DATETIME DEFAULT CURRENT_TIMESTAMP)")));
+        QVERIFY(query.exec(QStringLiteral(
+            "INSERT INTO attachments(issue_id, comment_id, uploader_id, filename, "
+            "storage_path, thumb_path) VALUES(1, 1, 1, 'legacy.png', "
+            "'2026-07/legacy.webp', '2026-07/legacy_thumb.webp')")));
         database.close();
     }
     QSqlDatabase::removeDatabase(connectionName);
@@ -115,11 +119,19 @@ void MaintenanceTest::legacyOriginalPathMigration()
     QSqlQuery query(database.connection());
     QVERIFY(query.exec(QStringLiteral("PRAGMA table_info(attachments)")));
     bool found = false;
+    bool contentTypeFound = false;
     while (query.next()) {
         found = found
             || query.value(1).toString() == QStringLiteral("original_path");
+        contentTypeFound = contentTypeFound
+            || query.value(1).toString() == QStringLiteral("content_type");
     }
     QVERIFY(found);
+    QVERIFY(contentTypeFound);
+    QVERIFY(query.exec(QStringLiteral(
+        "SELECT content_type FROM attachments WHERE filename = 'legacy.png'")));
+    QVERIFY(query.next());
+    QCOMPARE(query.value(0).toString(), QStringLiteral("image/webp"));
 }
 
 void MaintenanceTest::attachmentRecoveryAndCleanup()
@@ -145,6 +157,14 @@ void MaintenanceTest::attachmentRecoveryAndCleanup()
     malicious.addBindValue(QStringLiteral("../outside.bin"));
     malicious.addBindValue(attachmentId);
     QVERIFY(malicious.exec());
+    QSqlQuery ordinary(database.connection());
+    ordinary.prepare(QStringLiteral(
+        "INSERT INTO attachments(issue_id, comment_id, uploader_id, filename, "
+        "content_type, storage_path) SELECT issue_id, comment_id, uploader_id, "
+        "'runtime.log', 'text/plain', ? FROM attachments WHERE id = ?"));
+    ordinary.addBindValue(QStringLiteral("2026-07/runtime.log"));
+    ordinary.addBindValue(attachmentId);
+    QVERIFY(ordinary.exec());
 
     const QDateTime now = QDateTime::fromString(
         QStringLiteral("2026-07-23T12:00:00.000Z"), Qt::ISODateWithMs);
@@ -152,6 +172,8 @@ void MaintenanceTest::attachmentRecoveryAndCleanup()
         storage + QStringLiteral(".deleting-crash"));
     const QString original = QDir(uploadRoot).filePath(
         QStringLiteral("2026-07/recover_original.bin"));
+    const QString referencedLog = QDir(uploadRoot).filePath(
+        QStringLiteral("2026-07/runtime.log"));
     const QString oldOrphan = QDir(uploadRoot).filePath(
         QStringLiteral("2026-07/old-orphan.bin"));
     const QString recentOrphan = QDir(uploadRoot).filePath(
@@ -161,6 +183,7 @@ void MaintenanceTest::attachmentRecoveryAndCleanup()
     const QString outside = temporary.filePath(QStringLiteral("outside.bin"));
     QVERIFY(writeFileAt(staged, now.addDays(-2)));
     QVERIFY(writeFileAt(original, now.addDays(-10)));
+    QVERIFY(writeFileAt(referencedLog, now.addDays(-20), QByteArrayLiteral("log data")));
     QVERIFY(writeFileAt(oldOrphan, now.addDays(-8)));
     QVERIFY(writeFileAt(recentOrphan, now.addDays(-6)));
     QVERIFY(writeFileAt(staleDeleting, now.addDays(-2)));
@@ -178,6 +201,7 @@ void MaintenanceTest::attachmentRecoveryAndCleanup()
 
     QVERIFY(QFileInfo::exists(QDir(uploadRoot).filePath(storage)));
     QVERIFY(QFileInfo::exists(original));
+    QVERIFY(QFileInfo::exists(referencedLog));
     QVERIFY(!QFileInfo::exists(oldOrphan));
     QVERIFY(QFileInfo::exists(recentOrphan));
     QVERIFY(!QFileInfo::exists(staleDeleting));

@@ -1524,6 +1524,20 @@ void HttpServerIntegrationTest::notificationApiAndBusinessEvents()
         commentsPath, QStringLiteral("![Image](upload:0)"),
         {{QStringLiteral("notification.png"), pngData}}, assigneeToken).status,
         201);
+    const QJsonArray commentNotifications = request(
+        "GET", QStringLiteral("/api/notifications"), {}, m_token)
+        .json().value(QStringLiteral("data")).toObject()
+        .value(QStringLiteral("notifications")).toArray();
+    bool foundAttachmentSummary = false;
+    for (const QJsonValue &value : commentNotifications) {
+        const QJsonObject notification = value.toObject();
+        if (notification.value(QStringLiteral("type")).toString()
+                == QStringLiteral("comment_added")) {
+            foundAttachmentSummary = notification.value(QStringLiteral("content"))
+                .toString().contains(QStringLiteral("1 attachment"));
+        }
+    }
+    QVERIFY(foundAttachmentSummary);
 
     QCOMPARE(createdSpy.count(), 8);
     QCOMPARE(unreadCount(m_token), qint64(3));
@@ -1718,6 +1732,39 @@ void HttpServerIntegrationTest::commentImagesAndCascadeCleanup()
     QVERIFY(corrupt.json().value(QStringLiteral("error")).toObject()
                 .value(QStringLiteral("message")).toString()
                 .contains(QStringLiteral("could not be decoded")));
+    const Reply unsupportedFile = requestCommentMultipart(
+        commentsPath, QStringLiteral("[Executable](upload:0)"),
+        {{QStringLiteral("diagnostic.exe"), QByteArrayLiteral("not executable")}},
+        memberToken);
+    QCOMPARE(unsupportedFile.status, 400);
+    QCOMPARE(unsupportedFile.json().value(QStringLiteral("error")).toObject()
+                 .value(QStringLiteral("code")).toString(),
+             QStringLiteral("invalid_attachment_type"));
+    QCOMPARE(requestCommentMultipart(
+        commentsPath,
+        QStringLiteral("[First](upload:0)\n[Duplicate](upload:0)"),
+        {{QStringLiteral("duplicate.log"), QByteArrayLiteral("duplicate")}},
+        memberToken).status,
+        400);
+    QList<QPair<QString, QByteArray>> tooManyFiles;
+    QStringList tooManyMarkers;
+    for (int index = 0; index < 10; ++index) {
+        tooManyFiles.append({QStringLiteral("log-%1.txt").arg(index),
+                             QByteArrayLiteral("data")});
+        tooManyMarkers.append(QStringLiteral("[Log](upload:%1)").arg(index));
+    }
+    QCOMPARE(requestCommentMultipart(
+        commentsPath, tooManyMarkers.join(QLatin1Char('\n')),
+        tooManyFiles, memberToken).status,
+        400);
+    const QByteArray oversizedLog(10 * 1024 * 1024 + 1, 'x');
+    const Reply oversized = requestCommentMultipart(
+        commentsPath, QStringLiteral("[Large log](upload:0)"),
+        {{QStringLiteral("oversized.log"), oversizedLog}}, memberToken);
+    QCOMPARE(oversized.status, 400);
+    QCOMPARE(oversized.json().value(QStringLiteral("error")).toObject()
+                 .value(QStringLiteral("code")).toString(),
+             QStringLiteral("invalid_attachment_size"));
     QCOMPARE(requestCommentMultipart(
         commentsPath,
         QStringLiteral("前置\n![第一张](upload:0)\n后置\n![第二张](upload:1)\n![大图](upload:2)\n![长图](upload:3)"),
@@ -2493,7 +2540,7 @@ HttpServerIntegrationTest::requestCommentMultipart(
     payload += "\r\n";
     for (const auto &file : files) {
         payload += "--" + boundary + "\r\n";
-        payload += "Content-Disposition: form-data; name=\"images\"; filename=\""
+        payload += "Content-Disposition: form-data; name=\"files\"; filename=\""
             + file.first.toUtf8() + "\"\r\n";
         payload += "Content-Type: image/png\r\n\r\n";
         payload += file.second;

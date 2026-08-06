@@ -19,12 +19,12 @@ QString commentSummary(const CommentRecord &comment)
 {
     QString text = comment.content;
     text.remove(QRegularExpression(
-        QStringLiteral("!\\[[^\\]\\r\\n]*\\]\\(attachment:[0-9]+\\)")));
+        QStringLiteral("!?\\[[^\\]\\r\\n]*\\]\\(attachment:[0-9]+\\)")));
     text.replace(QRegularExpression(QStringLiteral("[\\r\\n]+")),
                  QStringLiteral(" "));
     text = text.simplified();
     if (text.isEmpty() && !comment.attachments.isEmpty()) {
-        return QStringLiteral("%1 image%2")
+        return QStringLiteral("%1 attachment%2")
             .arg(comment.attachments.size())
             .arg(comment.attachments.size() == 1 ? QString() : QStringLiteral("s"));
     }
