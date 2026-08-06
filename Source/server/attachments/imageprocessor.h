@@ -22,6 +22,12 @@ struct ProcessedImage
     qint64 fileSize {0};
 };
 
+struct ProcessedFile
+{
+    QString storagePath;
+    qint64 fileSize {0};
+};
+
 struct StagedFile
 {
     QString originalPath;
@@ -43,6 +49,9 @@ public:
                  ProcessedImage *processed,
                  QString *errorMessage,
                  bool *storageError = nullptr) const;
+    bool storeFile(const MultipartFile &file,
+                   ProcessedFile *processed,
+                   QString *errorMessage) const;
     QString absolutePath(const QString &relativePath) const;
     bool remove(const QString &relativePath) const;
     bool stageRemoval(const QStringList &relativePaths,

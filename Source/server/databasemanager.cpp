@@ -143,6 +143,7 @@ bool DatabaseManager::initialize(QString *errorMessage,
             "issue_id INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,"
             "comment_id INTEGER NOT NULL REFERENCES comments(id) ON DELETE CASCADE,"
             "uploader_id INTEGER NOT NULL, filename TEXT NOT NULL,"
+            "content_type TEXT NOT NULL DEFAULT 'application/octet-stream',"
             "storage_path TEXT NOT NULL, thumb_path TEXT, original_path TEXT,"
             "file_size INTEGER,"
             "created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"),
@@ -380,7 +381,8 @@ bool DatabaseManager::migrateAttachmentsToComments(QString *errorMessage)
             "issue_id INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,"
             "comment_id INTEGER NOT NULL REFERENCES comments(id) ON DELETE CASCADE,"
             "uploader_id INTEGER NOT NULL,"
-            "filename TEXT NOT NULL, storage_path TEXT NOT NULL,"
+            "filename TEXT NOT NULL, content_type TEXT NOT NULL DEFAULT 'image/webp',"
+            "storage_path TEXT NOT NULL,"
             "thumb_path TEXT, original_path TEXT, file_size INTEGER,"
             "created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"))) {
         return rollback(schemaQuery.lastError().text());
@@ -410,14 +412,14 @@ bool DatabaseManager::migrateAttachmentsToComments(QString *errorMessage)
     QSqlQuery attachmentInsert(m_database);
     attachmentInsert.prepare(QStringLiteral(
         "INSERT INTO attachments(id, issue_id, comment_id, uploader_id, filename, "
-        "storage_path, thumb_path, file_size, created_at) "
-        "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)"));
+        "content_type, storage_path, thumb_path, file_size, created_at) "
+        "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
     for (const LegacyAttachment &attachment : std::as_const(attachments)) {
         attachmentInsert.clear();
         attachmentInsert.prepare(QStringLiteral(
             "INSERT INTO attachments(id, issue_id, comment_id, uploader_id, filename, "
-            "storage_path, thumb_path, file_size, created_at) "
-            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)"));
+            "content_type, storage_path, thumb_path, file_size, created_at) "
+            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
         attachmentInsert.addBindValue(attachment.id);
         attachmentInsert.addBindValue(attachment.issueId);
         attachmentInsert.addBindValue(commentIds.value(attachment.groupKey));
@@ -425,6 +427,7 @@ bool DatabaseManager::migrateAttachmentsToComments(QString *errorMessage)
                                           ? attachment.uploaderId
                                           : fallbackAdminId);
         attachmentInsert.addBindValue(attachment.filename);
+        attachmentInsert.addBindValue(QStringLiteral("image/webp"));
         attachmentInsert.addBindValue(attachment.storagePath);
         attachmentInsert.addBindValue(attachment.thumbnailPath);
         attachmentInsert.addBindValue(attachment.fileSize);
@@ -469,20 +472,33 @@ bool DatabaseManager::migrateAttachmentsToComments(QString *errorMessage)
 
 bool DatabaseManager::migrateAttachmentOriginalPath(QString *errorMessage)
 {
+    bool hasOriginalPath = false;
+    bool hasContentType = false;
     QSqlQuery query(m_database);
     if (!query.exec(QStringLiteral("PRAGMA table_info(attachments)"))) {
         setError(errorMessage, query.lastError().text());
         return false;
     }
     while (query.next()) {
-        if (query.value(1).toString() == QStringLiteral("original_path")) {
-            return true;
-        }
+        const QString column = query.value(1).toString();
+        hasOriginalPath = hasOriginalPath || column == QStringLiteral("original_path");
+        hasContentType = hasContentType || column == QStringLiteral("content_type");
     }
     query.finish();
+    if (!hasOriginalPath && !execute(QStringLiteral(
+            "ALTER TABLE attachments ADD COLUMN original_path TEXT"), errorMessage)) {
+        return false;
+    }
+    if (!hasContentType && !execute(QStringLiteral(
+            "ALTER TABLE attachments ADD COLUMN content_type TEXT NOT NULL DEFAULT 'application/octet-stream'"),
+            errorMessage)) {
+        return false;
+    }
     return execute(QStringLiteral(
-        "ALTER TABLE attachments ADD COLUMN original_path TEXT"),
-                   errorMessage);
+        "UPDATE attachments SET content_type = 'image/webp' "
+        "WHERE (thumb_path IS NOT NULL AND thumb_path <> '') "
+        "AND (content_type = 'application/octet-stream' OR content_type = '')"),
+        errorMessage);
 }
 
 bool DatabaseManager::migrateNotifications(QString *errorMessage)

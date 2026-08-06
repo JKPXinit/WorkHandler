@@ -3,6 +3,7 @@
 #include "databasemanager.h"
 
 #include <QFile>
+#include <QFileInfo>
 
 #include <utility>
 
@@ -25,6 +26,55 @@ QString storageMessage(const QString &detail)
     return detail.isEmpty() ? QStringLiteral("Attachment storage operation failed.")
                             : detail;
 }
+
+bool isSupportedFile(const MultipartFile &file)
+{
+    static const QSet<QString> extensions {
+        QStringLiteral("png"), QStringLiteral("jpg"), QStringLiteral("jpeg"),
+        QStringLiteral("webp"), QStringLiteral("bmp"), QStringLiteral("gif"),
+        QStringLiteral("tif"), QStringLiteral("tiff"), QStringLiteral("txt"),
+        QStringLiteral("log"),
+        QStringLiteral("json"), QStringLiteral("xml"), QStringLiteral("csv"),
+        QStringLiteral("md"), QStringLiteral("pdf"), QStringLiteral("zip")
+    };
+    return extensions.contains(QFileInfo(file.filename).suffix().toLower());
+}
+
+bool isImageFile(const MultipartFile &file)
+{
+    const QString suffix = QFileInfo(file.filename).suffix().toLower();
+    return suffix == QStringLiteral("png") || suffix == QStringLiteral("jpg")
+        || suffix == QStringLiteral("jpeg") || suffix == QStringLiteral("webp")
+        || suffix == QStringLiteral("bmp") || suffix == QStringLiteral("gif")
+        || suffix == QStringLiteral("tif") || suffix == QStringLiteral("tiff");
+}
+
+QString contentTypeFor(const MultipartFile &file)
+{
+    const QString suffix = QFileInfo(file.filename).suffix().toLower();
+    if (suffix == QStringLiteral("json")) {
+        return QStringLiteral("application/json");
+    }
+    if (suffix == QStringLiteral("xml")) {
+        return QStringLiteral("application/xml");
+    }
+    if (suffix == QStringLiteral("csv")) {
+        return QStringLiteral("text/csv");
+    }
+    if (suffix == QStringLiteral("md")) {
+        return QStringLiteral("text/markdown");
+    }
+    if (suffix == QStringLiteral("txt") || suffix == QStringLiteral("log")) {
+        return QStringLiteral("text/plain");
+    }
+    if (suffix == QStringLiteral("pdf")) {
+        return QStringLiteral("application/pdf");
+    }
+    if (suffix == QStringLiteral("zip")) {
+        return QStringLiteral("application/zip");
+    }
+    return QString::fromLatin1(file.contentType).section(QLatin1Char(';'), 0, 0).trimmed();
+}
 }
 
 bool AttachmentServiceResult::ok() const
@@ -46,20 +96,32 @@ AttachmentServiceResult AttachmentService::processCommentImages(
     qint64 uploaderId,
     const QList<MultipartFile> &files) const
 {
+    return processCommentAttachments(issueId, uploaderId, files);
+}
+
+AttachmentServiceResult AttachmentService::processCommentAttachments(
+    qint64 issueId,
+    qint64 uploaderId,
+    const QList<MultipartFile> &files) const
+{
     if (files.isEmpty() || files.size() > 9) {
-        return invalid(QStringLiteral("invalid_comment_image_count"),
-                       QStringLiteral("A comment must contain 1 to 9 images."));
+        return invalid(QStringLiteral("invalid_comment_attachment_count"),
+                       QStringLiteral("A comment must contain 1 to 9 attachments."));
     }
     qsizetype totalSize = 0;
     for (const MultipartFile &file : files) {
         if (file.data.isEmpty() || file.data.size() > MaximumFileSize) {
             return invalid(QStringLiteral("invalid_attachment_size"),
-                           QStringLiteral("Each image must not exceed 10 MiB."));
+                           QStringLiteral("Each attachment must not exceed 10 MiB."));
+        }
+        if (!isSupportedFile(file)) {
+            return invalid(QStringLiteral("invalid_attachment_type"),
+                           QStringLiteral("This attachment type is not supported."));
         }
         totalSize += file.data.size();
         if (totalSize > MaximumCommentFileSize) {
-            return invalid(QStringLiteral("invalid_comment_image_size"),
-                           QStringLiteral("Comment images must not exceed 30 MiB in total."));
+            return invalid(QStringLiteral("invalid_comment_attachment_size"),
+                           QStringLiteral("Comment attachments must not exceed 30 MiB in total."));
         }
     }
 
@@ -67,16 +129,20 @@ AttachmentServiceResult AttachmentService::processCommentImages(
     const ImageProcessingOptions options = m_optionsProvider
         ? m_optionsProvider() : ImageProcessingOptions();
     for (const MultipartFile &file : files) {
+        const bool imageFile = isImageFile(file);
         ProcessedImage image;
+        ProcessedFile storedFile;
         QString imageError;
         bool storageError = false;
-        if (!m_imageProcessor.process(
-                file, options, &image, &imageError, &storageError)) {
+        const bool processed = imageFile
+            ? m_imageProcessor.process(file, options, &image, &imageError, &storageError)
+            : m_imageProcessor.storeFile(file, &storedFile, &imageError);
+        if (!processed) {
             removeFiles(result.attachments);
             m_imageProcessor.remove(image.storagePath);
             m_imageProcessor.remove(image.thumbnailPath);
             m_imageProcessor.remove(image.originalPath);
-            return storageError
+            return (storageError || !imageFile)
                 ? AttachmentServiceResult{
                       AttachmentServiceError::Storage,
                       QStringLiteral("attachment_storage_error"),
@@ -88,10 +154,13 @@ AttachmentServiceResult AttachmentService::processCommentImages(
         attachment.issueId = issueId;
         attachment.uploaderId = uploaderId;
         attachment.filename = file.filename;
-        attachment.storagePath = image.storagePath;
+        attachment.contentType = imageFile
+            ? QStringLiteral("image/webp") : contentTypeFor(file);
+        attachment.image = imageFile;
+        attachment.storagePath = imageFile ? image.storagePath : storedFile.storagePath;
         attachment.thumbnailPath = image.thumbnailPath;
         attachment.originalPath = image.originalPath;
-        attachment.fileSize = image.fileSize;
+        attachment.fileSize = imageFile ? image.fileSize : storedFile.fileSize;
         result.attachments.append(attachment);
     }
     return result;
@@ -129,6 +198,7 @@ AttachmentServiceResult AttachmentService::read(qint64 id,
     }
 
     AttachmentServiceResult result;
+    result.attachment = *attachment;
     result.fileData = file.readAll();
     if (result.fileData.isEmpty()) {
         return {AttachmentServiceError::Storage,

@@ -29,7 +29,7 @@ AttachmentDaoResult failure(const QSqlError &error, bool allowConflict)
 QString attachmentProjection()
 {
     return QStringLiteral(
-        "SELECT id, issue_id, comment_id, uploader_id, filename, storage_path, "
+        "SELECT id, issue_id, comment_id, uploader_id, filename, content_type, storage_path, "
         "COALESCE(thumb_path, ''), COALESCE(original_path, ''), "
         "COALESCE(file_size, 0), created_at "
         "FROM attachments ");
@@ -44,6 +44,8 @@ QJsonObject AttachmentRecord::toJson() const
         {QStringLiteral("comment_id"), commentId},
         {QStringLiteral("uploader_id"), uploaderId},
         {QStringLiteral("filename"), filename},
+        {QStringLiteral("content_type"), contentType},
+        {QStringLiteral("is_image"), image},
         {QStringLiteral("file_size"), fileSize},
         {QStringLiteral("created_at"), createdAt}
     };
@@ -86,7 +88,7 @@ AttachmentDaoResult AttachmentDao::attachmentsForBlock(
     return queryAttachments(
         QStringLiteral(
             "SELECT a.id, a.issue_id, a.comment_id, a.uploader_id, a.filename, "
-            "a.storage_path, COALESCE(a.thumb_path, ''), "
+            "a.content_type, a.storage_path, COALESCE(a.thumb_path, ''), "
             "COALESCE(a.original_path, ''), COALESCE(a.file_size, 0), "
             "a.created_at "
             "FROM attachments a JOIN issues i ON i.id = a.issue_id "
@@ -143,10 +145,12 @@ AttachmentRecord AttachmentDao::readAttachment(const QSqlQuery &query)
     attachment.commentId = query.value(2).toLongLong();
     attachment.uploaderId = query.value(3).toLongLong();
     attachment.filename = query.value(4).toString();
-    attachment.storagePath = query.value(5).toString();
-    attachment.thumbnailPath = query.value(6).toString();
-    attachment.originalPath = query.value(7).toString();
-    attachment.fileSize = query.value(8).toLongLong();
-    attachment.createdAt = query.value(9).toString();
+    attachment.contentType = query.value(5).toString();
+    attachment.storagePath = query.value(6).toString();
+    attachment.thumbnailPath = query.value(7).toString();
+    attachment.originalPath = query.value(8).toString();
+    attachment.fileSize = query.value(9).toLongLong();
+    attachment.createdAt = query.value(10).toString();
+    attachment.image = attachment.contentType.startsWith(QStringLiteral("image/"));
     return attachment;
 }

@@ -175,6 +175,37 @@ bool ImageProcessor::process(const MultipartFile &file,
     return true;
 }
 
+bool ImageProcessor::storeFile(const MultipartFile &file,
+                               ProcessedFile *processed,
+                               QString *errorMessage) const
+{
+    if (processed) {
+        *processed = {};
+    }
+    if (errorMessage) {
+        errorMessage->clear();
+    }
+    if (file.data.isEmpty()) {
+        setError(errorMessage, QStringLiteral("Uploaded file is empty."));
+        return false;
+    }
+
+    const QString suffix = QFileInfo(file.filename).suffix().toLower();
+    const QString month = QDate::currentDate().toString(QStringLiteral("yyyy-MM"));
+    const QString identifier = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const QString relativePath = suffix.isEmpty()
+        ? QStringLiteral("%1/%2.bin").arg(month, identifier)
+        : QStringLiteral("%1/%2.%3").arg(month, identifier, suffix);
+    if (!writeFile(file.data, relativePath, errorMessage)) {
+        return false;
+    }
+    if (processed) {
+        processed->storagePath = relativePath;
+        processed->fileSize = file.data.size();
+    }
+    return true;
+}
+
 QString ImageProcessor::absolutePath(const QString &relativePath) const
 {
     if (relativePath.isEmpty()) {

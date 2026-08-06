@@ -28,6 +28,7 @@ struct AttachmentServiceResult
     QString code;
     QString message;
     QList<AttachmentRecord> attachments;
+    AttachmentRecord attachment;
     QByteArray fileData;
 
     bool ok() const;
@@ -45,6 +46,10 @@ public:
     AttachmentServiceResult read(qint64 id,
                                  bool thumbnail) const;
     AttachmentServiceResult processCommentImages(
+        qint64 issueId,
+        qint64 uploaderId,
+        const QList<MultipartFile> &files) const;
+    AttachmentServiceResult processCommentAttachments(
         qint64 issueId,
         qint64 uploaderId,
         const QList<MultipartFile> &files) const;

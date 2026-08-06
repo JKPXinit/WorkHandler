@@ -18,6 +18,8 @@ struct AttachmentRecord
     qint64 commentId {0};
     qint64 uploaderId {0};
     QString filename;
+    QString contentType;
+    bool image {false};
     QString storagePath;
     QString thumbnailPath;
     QString originalPath;

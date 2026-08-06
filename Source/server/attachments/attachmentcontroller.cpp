@@ -5,7 +5,11 @@
 
 #include <QHttpServer>
 #include <QHttpServerRequest>
+#include <QHttpHeaders>
+#include <QUrl>
 #include <QUrlQuery>
+
+#include <utility>
 
 namespace {
 using StatusCode = QHttpServerResponse::StatusCode;
@@ -44,8 +48,16 @@ void AttachmentController::registerRoutes(QHttpServer &server)
             if (!result.ok()) {
                 return errorResponse(result);
             }
-            QHttpServerResponse response(
-                QByteArrayLiteral("image/webp"), result.fileData, StatusCode::Ok);
+            const QByteArray contentType = result.attachment.contentType.isEmpty()
+                ? QByteArrayLiteral("application/octet-stream")
+                : result.attachment.contentType.toUtf8();
+            QHttpServerResponse response(contentType, result.fileData, StatusCode::Ok);
+            QHttpHeaders headers = response.headers();
+            headers.append(QHttpHeaders::WellKnownHeader::ContentDisposition,
+                           QStringLiteral("attachment; filename*=UTF-8''%1")
+                               .arg(QString::fromUtf8(QUrl::toPercentEncoding(
+                                   result.attachment.filename))));
+            response.setHeaders(std::move(headers));
             ApiContext::addCorsHeaders(&response);
             return response;
         });
