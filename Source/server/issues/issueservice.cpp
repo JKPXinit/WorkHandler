@@ -123,6 +123,18 @@ bool canEdit(const UserRecord &user, const IssueRecord &issue)
         || (user.role == QStringLiteral("user")
             && user.id == issue.reporterId);
 }
+
+bool isIssueAssignee(const UserRecord &user, const IssueRecord &issue)
+{
+    return user.role == QStringLiteral("user")
+        && issue.assigneeId
+        && *issue.assigneeId == user.id;
+}
+
+bool canChangeStatus(const UserRecord &user, const IssueRecord &issue)
+{
+    return canEdit(user, issue) || isIssueAssignee(user, issue);
+}
 }
 
 bool IssueServiceResult::ok() const
@@ -404,9 +416,9 @@ IssueServiceResult IssueService::changeStatus(
     if (!existingResult.ok()) {
         return existingResult;
     }
-    if (!canEdit(currentUser, existingResult.issue)) {
+    if (!canChangeStatus(currentUser, existingResult.issue)) {
         return forbidden(QStringLiteral("issue_status_forbidden"),
-                         QStringLiteral("Only the reporter or an administrator can change this issue status."));
+                         QStringLiteral("Only the reporter, assignee, or an administrator can change this issue status."));
     }
     if (values.size() != 1 || !values.contains(QStringLiteral("status"))
         || !values.value(QStringLiteral("status")).isString()
@@ -415,9 +427,16 @@ IssueServiceResult IssueService::changeStatus(
                        QStringLiteral("Issue status is invalid."));
     }
 
+    const QString status = values.value(QStringLiteral("status")).toString();
+    if (status == QStringLiteral("closed")
+        && !canEdit(currentUser, existingResult.issue)) {
+        return forbidden(QStringLiteral("issue_status_forbidden"),
+                         QStringLiteral("Only the reporter or an administrator can close this issue."));
+    }
+
     IssueServiceResult result;
     const IssueDaoResult daoResult = m_dao.updateStatus(
-        id, values.value(QStringLiteral("status")).toString(), &result.issue);
+        id, status, &result.issue);
     if (!daoResult.ok()) {
         return daoFailure(daoResult);
     }

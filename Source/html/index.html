@@ -1321,7 +1321,24 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
             resolve(failure(404, 'issue_not_found', 'Issue 不存在'));
             return;
           }
-          statusIssue.status = body.status;
+          var demoActor = demoUser();
+          var statusValue = body && body.status;
+          var demoReporter = demoActor.role === 'user' && Number(statusIssue.reporter_id) === Number(demoActor.id);
+          var demoAdmin = demoActor.role === 'admin';
+          var demoAssignee = demoActor.role === 'user' && Number(statusIssue.assignee_id) === Number(demoActor.id);
+          if (!labels.status[statusValue]) {
+            resolve(failure(400, 'invalid_issue_status', 'Issue 状态无效'));
+            return;
+          }
+          if (!(demoAdmin || demoReporter || demoAssignee)) {
+            resolve(failure(403, 'issue_status_forbidden', '只有创建人、负责人或管理员可以修改 Issue 状态'));
+            return;
+          }
+          if (statusValue === 'closed' && !(demoAdmin || demoReporter)) {
+            resolve(failure(403, 'issue_status_forbidden', '只有创建人或管理员可以关闭 Issue'));
+            return;
+          }
+          statusIssue.status = statusValue;
           resolve(success({ issue: withIssueRelations(statusIssue) }));
           return;
         }
@@ -1686,7 +1703,13 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
 
   function canEditIssue(issue) {
     if (!state.currentUser || !issue) return false;
-    return state.currentUser.role === 'admin' || Number(issue.reporter_id) === Number(state.currentUser.id);
+    return state.currentUser.role === 'admin' || (state.currentUser.role === 'user' && Number(issue.reporter_id) === Number(state.currentUser.id));
+  }
+
+  function canChangeIssueStatus(issue, status) {
+    if (!state.currentUser || !issue) return false;
+    if (canEditIssue(issue)) return true;
+    return state.currentUser.role === 'user' && Number(issue.assignee_id) === Number(state.currentUser.id) && status !== 'closed';
   }
 
   function canWrite() {
@@ -1891,7 +1914,7 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     var sidebar = '<section class="detail-section"><h3>状态</h3><div class="status-flow">';
     Object.keys(labels.status).forEach(function (status) {
       sidebar += '<button class="status-button' + (issue.status === status ? ' active' : '') + '" type="button" data-action="change-status" data-status="' +
-        escapeHtml(status) + '"' + (write ? '' : ' disabled') + '>' + escapeHtml(labels.status[status]) + '</button>';
+        escapeHtml(status) + '"' + (canChangeIssueStatus(issue, status) ? '' : ' disabled') + '>' + escapeHtml(labels.status[status]) + '</button>';
     });
     sidebar += '</div></section>';
     sidebar += '<section class="detail-section"><h3>信息</h3><div class="meta-grid">';

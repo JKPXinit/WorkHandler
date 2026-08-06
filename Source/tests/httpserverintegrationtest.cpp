@@ -808,6 +808,36 @@ void HttpServerIntegrationTest::issueCrudFilteringAndPermissions()
     QCOMPARE(firstIssue.value(QStringLiteral("attachment_count")).toInteger(),
              qint64(0));
 
+    const Reply assigneeInProgress = request(
+        "PUT", QStringLiteral("/api/issues/%1/status").arg(firstIssueId),
+        {{QStringLiteral("status"), QStringLiteral("in_progress")}},
+        otherToken);
+    QCOMPARE(assigneeInProgress.status, 200);
+    QCOMPARE(assigneeInProgress.json().value(QStringLiteral("data")).toObject()
+                 .value(QStringLiteral("issue")).toObject()
+                 .value(QStringLiteral("status")).toString(),
+             QStringLiteral("in_progress"));
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/issues/%1/status").arg(firstIssueId),
+        {{QStringLiteral("status"), QStringLiteral("resolved")}},
+        otherToken).status,
+        200);
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/issues/%1/status").arg(firstIssueId),
+        {{QStringLiteral("status"), QStringLiteral("closed")}},
+        reporterToken).status,
+        200);
+    const Reply assigneeReopened = request(
+        "PUT", QStringLiteral("/api/issues/%1/status").arg(firstIssueId),
+        {{QStringLiteral("status"), QStringLiteral("open")}},
+        otherToken);
+    QCOMPARE(assigneeReopened.status, 200);
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/issues/%1/status").arg(firstIssueId),
+        {{QStringLiteral("status"), QStringLiteral("closed")}},
+        otherToken).status,
+        403);
+
     const Reply secondCreated = request(
         "POST", QStringLiteral("/api/issues"),
         {{QStringLiteral("block_id"), secondBlockId},
@@ -834,6 +864,16 @@ void HttpServerIntegrationTest::issueCrudFilteringAndPermissions()
                                     .value(QStringLiteral("id")).toInteger();
     QVERIFY(secondIssueId > firstIssueId);
     QVERIFY(thirdIssueId > secondIssueId);
+
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/issues/%1").arg(thirdIssueId),
+        {{QStringLiteral("assignee_id"), guest.id}}, reporterToken).status,
+        200);
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/issues/%1/status").arg(thirdIssueId),
+        {{QStringLiteral("status"), QStringLiteral("in_progress")}},
+        guestToken).status,
+        403);
 
     const Reply blockFiltered = request(
         "GET", QStringLiteral("/api/issues?block_id=%1&sort=created_desc")
@@ -989,6 +1029,11 @@ void HttpServerIntegrationTest::issueCrudFilteringAndPermissions()
     QCOMPARE(request(
         "PUT", QStringLiteral("/api/issues/%1").arg(secondIssueId),
         {{QStringLiteral("priority"), QStringLiteral("high")}},
+        m_token).status,
+        200);
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/issues/%1/status").arg(secondIssueId),
+        {{QStringLiteral("status"), QStringLiteral("closed")}},
         m_token).status,
         200);
 
