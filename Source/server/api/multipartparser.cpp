@@ -252,7 +252,8 @@ bool MultipartParser::parseComment(const QHttpServerRequest &request,
             }
             foundContent = true;
             parsedContent = QString::fromUtf8(partData);
-        } else if (fieldName == QStringLiteral("images")) {
+        } else if (fieldName == QStringLiteral("files")
+                   || fieldName == QStringLiteral("images")) {
             MultipartFile file;
             file.filename = QFileInfo(dispositionValue(
                 disposition, QStringLiteral("filename"))).fileName();
@@ -267,7 +268,7 @@ bool MultipartParser::parseComment(const QHttpServerRequest &request,
             parsedFiles.append(std::move(file));
             if (parsedFiles.size() > maximumFiles) {
                 setError(errorMessage,
-                         QStringLiteral("A comment can contain at most 9 images."));
+                         QStringLiteral("A comment can contain at most 9 attachments."));
                 return false;
             }
         } else if (!fieldName.isEmpty()) {
@@ -279,7 +280,7 @@ bool MultipartParser::parseComment(const QHttpServerRequest &request,
 
     if (!foundContent || parsedFiles.isEmpty()) {
         setError(errorMessage,
-                 QStringLiteral("Comment content and at least one image are required."));
+                 QStringLiteral("Comment content and at least one attachment are required."));
         return false;
     }
     if (content) {

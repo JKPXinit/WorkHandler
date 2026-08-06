@@ -89,7 +89,7 @@ void CommentController::registerRoutes(QHttpServer &server)
                         StatusCode::BadRequest,
                         QStringLiteral("invalid_multipart"), parseError);
                 }
-                result = m_service.createWithImages(
+                result = m_service.createWithAttachments(
                     issueId, content, files, authorization.user);
             } else {
                 QJsonObject body;

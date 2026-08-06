@@ -42,7 +42,7 @@ public:
     CommentServiceResult create(qint64 issueId,
                                 const QJsonObject &values,
                                 const UserRecord &currentUser);
-    CommentServiceResult createWithImages(
+    CommentServiceResult createWithAttachments(
         qint64 issueId,
         const QString &content,
         const QList<MultipartFile> &files,

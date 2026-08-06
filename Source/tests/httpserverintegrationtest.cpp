@@ -1800,6 +1800,23 @@ void HttpServerIntegrationTest::commentImagesAndCascadeCleanup()
         QVERIFY(QFileInfo::exists(path));
     }
     QCOMPARE(request("GET", QStringLiteral("/api/attachments/%1").arg(attachmentId), {}, guestToken).status, 200);
+    const QByteArray logData = QByteArrayLiteral("startup\nerror: failed to open config\n");
+    const Reply logComment = requestCommentMultipart(
+        commentsPath, QStringLiteral("[运行日志](upload:0)"),
+        {{QStringLiteral("runtime.log"), logData}}, memberToken);
+    QCOMPARE(logComment.status, 201);
+    const QJsonObject logAttachment = logComment.json()
+        .value(QStringLiteral("data")).toObject()
+        .value(QStringLiteral("comment")).toObject()
+        .value(QStringLiteral("attachments")).toArray().at(0).toObject();
+    QCOMPARE(logAttachment.value(QStringLiteral("content_type")).toString(),
+             QStringLiteral("text/plain"));
+    QVERIFY(!logAttachment.value(QStringLiteral("is_image")).toBool());
+    const qint64 logAttachmentId = logAttachment.value(QStringLiteral("id")).toInteger();
+    const Reply downloadedLog = request(
+        "GET", QStringLiteral("/api/attachments/%1").arg(logAttachmentId), {}, guestToken);
+    QCOMPARE(downloadedLog.status, 200);
+    QCOMPARE(downloadedLog.body, logData);
     QCOMPARE(request("DELETE", QStringLiteral("/api/attachments/%1").arg(attachmentId), {}, m_token).status, 405);
     const qint64 largeAttachmentId = attachments.at(2).toObject()
                                          .value(QStringLiteral("id")).toInteger();

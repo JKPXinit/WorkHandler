@@ -178,19 +178,20 @@ CommentDaoResult CommentDao::createWithAttachments(
     QSqlQuery attachmentQuery(database);
     attachmentQuery.prepare(QStringLiteral(
         "INSERT INTO attachments(issue_id, comment_id, uploader_id, filename, "
-        "storage_path, thumb_path, original_path, file_size) "
-        "VALUES(?, ?, ?, ?, ?, ?, ?, ?)"));
+        "content_type, storage_path, thumb_path, original_path, file_size) "
+        "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)"));
     for (qsizetype index = 0; index < attachments.size(); ++index) {
         const AttachmentRecord &attachment = attachments.at(index);
         attachmentQuery.clear();
         attachmentQuery.prepare(QStringLiteral(
             "INSERT INTO attachments(issue_id, comment_id, uploader_id, filename, "
-            "storage_path, thumb_path, original_path, file_size) "
-            "VALUES(?, ?, ?, ?, ?, ?, ?, ?)"));
+            "content_type, storage_path, thumb_path, original_path, file_size) "
+            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)"));
         attachmentQuery.addBindValue(issueId);
         attachmentQuery.addBindValue(commentId);
         attachmentQuery.addBindValue(userId);
         attachmentQuery.addBindValue(attachment.filename);
+        attachmentQuery.addBindValue(attachment.contentType);
         attachmentQuery.addBindValue(attachment.storagePath);
         attachmentQuery.addBindValue(attachment.thumbnailPath);
         attachmentQuery.addBindValue(attachment.originalPath);
@@ -270,7 +271,7 @@ CommentDaoResult CommentDao::loadAttachments(CommentRecord *comment) const
     comment->attachments.clear();
     QSqlQuery query(m_database.connection());
     query.prepare(QStringLiteral(
-        "SELECT id, issue_id, comment_id, uploader_id, filename, storage_path, "
+        "SELECT id, issue_id, comment_id, uploader_id, filename, content_type, storage_path, "
         "COALESCE(thumb_path, ''), COALESCE(original_path, ''), "
         "COALESCE(file_size, 0), created_at "
         "FROM attachments WHERE comment_id = ? ORDER BY id ASC"));
@@ -285,11 +286,13 @@ CommentDaoResult CommentDao::loadAttachments(CommentRecord *comment) const
         attachment.commentId = query.value(2).toLongLong();
         attachment.uploaderId = query.value(3).toLongLong();
         attachment.filename = query.value(4).toString();
-        attachment.storagePath = query.value(5).toString();
-        attachment.thumbnailPath = query.value(6).toString();
-        attachment.originalPath = query.value(7).toString();
-        attachment.fileSize = query.value(8).toLongLong();
-        attachment.createdAt = query.value(9).toString();
+        attachment.contentType = query.value(5).toString();
+        attachment.storagePath = query.value(6).toString();
+        attachment.thumbnailPath = query.value(7).toString();
+        attachment.originalPath = query.value(8).toString();
+        attachment.fileSize = query.value(9).toLongLong();
+        attachment.createdAt = query.value(10).toString();
+        attachment.image = attachment.contentType.startsWith(QStringLiteral("image/"));
         comment->attachments.append(attachment);
     }
     return success();

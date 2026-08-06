@@ -54,7 +54,7 @@ CommentServiceResult CommentService::list(qint64 issueId) const
     return daoResult.ok() ? result : daoFailure(daoResult);
 }
 
-CommentServiceResult CommentService::createWithImages(
+CommentServiceResult CommentService::createWithAttachments(
     qint64 issueId,
     const QString &content,
     const QList<MultipartFile> &files,
@@ -68,18 +68,18 @@ CommentServiceResult CommentService::createWithImages(
         || content.contains(QRegularExpression(
             QStringLiteral("attachment:[0-9]+")))) {
         return invalid(QStringLiteral("invalid_comment_content"),
-                       QStringLiteral("Comment image content is invalid."));
+                       QStringLiteral("Comment attachment content is invalid."));
     }
 
     const QRegularExpression marker(
-        QStringLiteral("!\\[[^\\]\\r\\n]*\\]\\(upload:([0-9]+)\\)"));
+        QStringLiteral("(?:!?\\[[^\\]\\r\\n]*\\])?\\(upload:([0-9]+)\\)"));
     QSet<int> indexes;
     QRegularExpressionMatchIterator matches = marker.globalMatch(content);
     while (matches.hasNext()) {
         const int index = matches.next().captured(1).toInt();
         if (index < 0 || index >= files.size() || indexes.contains(index)) {
-            return invalid(QStringLiteral("invalid_comment_image_reference"),
-                           QStringLiteral("Each comment image must be referenced exactly once."));
+            return invalid(QStringLiteral("invalid_comment_attachment_reference"),
+                           QStringLiteral("Each comment attachment must be referenced exactly once."));
         }
         indexes.insert(index);
     }
@@ -87,8 +87,8 @@ CommentServiceResult CommentService::createWithImages(
     withoutMarkers.remove(marker);
     if (indexes.size() != files.size()
         || withoutMarkers.contains(QStringLiteral("upload:"))) {
-        return invalid(QStringLiteral("invalid_comment_image_reference"),
-                       QStringLiteral("Each comment image must be referenced exactly once."));
+        return invalid(QStringLiteral("invalid_comment_attachment_reference"),
+                       QStringLiteral("Each comment attachment must be referenced exactly once."));
     }
 
     const CommentServiceResult issueResult = validateIssue(issueId);
@@ -96,7 +96,7 @@ CommentServiceResult CommentService::createWithImages(
         return issueResult;
     }
     const AttachmentServiceResult imageResult =
-        m_attachmentService.processCommentImages(
+        m_attachmentService.processCommentAttachments(
             issueId, currentUser.id, files);
     if (!imageResult.ok()) {
         return {imageResult.error == AttachmentServiceError::InvalidInput
