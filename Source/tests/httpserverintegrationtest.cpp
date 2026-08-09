@@ -1548,6 +1548,20 @@ void HttpServerIntegrationTest::notificationApiAndBusinessEvents()
     QVERIFY2(m_server->localAdminUnreadCount(&localAdminCount, &errorMessage),
              qPrintable(errorMessage));
     QCOMPARE(localAdminCount, qint64(3));
+    QList<NotificationRecord> localNotifications;
+    QVERIFY2(m_server->localAdminUnreadNotifications(
+                 &localNotifications, &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(localNotifications.size(), 3);
+    QVERIFY(localNotifications.first().id > 0);
+    const qint64 locallyReadId = localNotifications.first().id;
+    QVERIFY2(m_server->markLocalAdminNotificationRead(
+                 locallyReadId, &errorMessage),
+             qPrintable(errorMessage));
+    QVERIFY2(m_server->localAdminUnreadNotifications(
+                 &localNotifications, &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(localNotifications.size(), 2);
     QVERIFY2(m_server->issueExists(issueId, &errorMessage),
              qPrintable(errorMessage));
 
@@ -1556,7 +1570,7 @@ void HttpServerIntegrationTest::notificationApiAndBusinessEvents()
     QCOMPARE(readAll.status, 200);
     QCOMPARE(readAll.json().value(QStringLiteral("data")).toObject()
                  .value(QStringLiteral("deleted_count")).toInteger(),
-             qint64(3));
+             qint64(2));
     QCOMPARE(request("PUT", QStringLiteral("/api/notifications/read-all"), {},
                      m_token).json().value(QStringLiteral("data")).toObject()
                  .value(QStringLiteral("deleted_count")).toInteger(),
