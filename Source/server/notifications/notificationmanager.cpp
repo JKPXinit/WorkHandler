@@ -223,6 +223,44 @@ bool NotificationManager::localAdminUnreadCount(
     return result.ok();
 }
 
+bool NotificationManager::localAdminUnreadNotifications(
+    QList<NotificationRecord> *notifications, QString *errorMessage) const
+{
+    const auto admin = localAdmin(errorMessage);
+    if (!admin) {
+        if (errorMessage && errorMessage->isEmpty()) {
+            *errorMessage = QStringLiteral("Fixed admin account was not found.");
+        }
+        return false;
+    }
+    const NotificationDaoResult result = unreadForRecipient(admin->id, notifications);
+    if (!result.ok() && errorMessage) {
+        *errorMessage = result.message;
+    }
+    return result.ok();
+}
+
+bool NotificationManager::markLocalAdminNotificationRead(
+    qint64 notificationId, QString *errorMessage)
+{
+    const auto admin = localAdmin(errorMessage);
+    if (!admin) {
+        if (errorMessage && errorMessage->isEmpty()) {
+            *errorMessage = QStringLiteral("Fixed admin account was not found.");
+        }
+        return false;
+    }
+    bool removed = false;
+    const NotificationDaoResult result = removeUnread(notificationId, admin->id,
+                                                      &removed);
+    if (!result.ok() && errorMessage) {
+        *errorMessage = result.message;
+    } else if (result.ok() && !removed && errorMessage) {
+        *errorMessage = QStringLiteral("Notification was not found.");
+    }
+    return result.ok() && removed;
+}
+
 bool NotificationManager::markAllLocalAdminNotificationsRead(
     qint64 *deletedCount, QString *errorMessage)
 {
