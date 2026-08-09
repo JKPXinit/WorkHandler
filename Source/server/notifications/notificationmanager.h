@@ -47,6 +47,11 @@ public:
 
     bool localAdminUnreadCount(qint64 *count,
                                QString *errorMessage) const;
+    bool localAdminUnreadNotifications(
+        QList<NotificationRecord> *notifications,
+        QString *errorMessage) const;
+    bool markLocalAdminNotificationRead(qint64 notificationId,
+                                        QString *errorMessage);
     bool markAllLocalAdminNotificationsRead(qint64 *deletedCount,
                                             QString *errorMessage);
     bool issueExists(qint64 issueId, QString *errorMessage) const;

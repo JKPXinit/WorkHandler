@@ -63,6 +63,8 @@ set(PROJECT_SOURCES
     myUI/customDialog/aboutdialog.h
     myUI/customDialog/httpservermanagerdialog.cpp
     myUI/customDialog/httpservermanagerdialog.h
+    myUI/customDialog/notificationdialog.cpp
+    myUI/customDialog/notificationdialog.h
 
     myUI/ui/uiManager.cpp
     myUI/ui/uiManager.h

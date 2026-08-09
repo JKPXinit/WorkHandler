@@ -355,6 +355,32 @@ bool HttpServer::localAdminUnreadCount(qint64 *count,
     return m_notificationManager->localAdminUnreadCount(count, errorMessage);
 }
 
+bool HttpServer::localAdminUnreadNotifications(
+    QList<NotificationRecord> *notifications, QString *errorMessage) const
+{
+    if (!m_notificationManager) {
+        if (errorMessage) {
+            *errorMessage = tr("Notification service is not initialized.");
+        }
+        return false;
+    }
+    return m_notificationManager->localAdminUnreadNotifications(
+        notifications, errorMessage);
+}
+
+bool HttpServer::markLocalAdminNotificationRead(
+    qint64 notificationId, QString *errorMessage)
+{
+    if (!m_notificationManager) {
+        if (errorMessage) {
+            *errorMessage = tr("Notification service is not initialized.");
+        }
+        return false;
+    }
+    return m_notificationManager->markLocalAdminNotificationRead(
+        notificationId, errorMessage);
+}
+
 bool HttpServer::markAllLocalAdminNotificationsRead(
     qint64 *deletedCount, QString *errorMessage)
 {

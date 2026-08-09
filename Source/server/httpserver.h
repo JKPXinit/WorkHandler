@@ -5,6 +5,7 @@
 #include "databasemanager.h"
 #include "maintenance/maintenancemanager.h"
 #include "tokenhelper.h"
+#include "notifications/notificationdao.h"
 
 #include <QHttpServer>
 #include <QJsonObject>
@@ -84,6 +85,11 @@ public:
                              QString *errorMessage = nullptr);
     bool localAdminUnreadCount(qint64 *count,
                                QString *errorMessage = nullptr) const;
+    bool localAdminUnreadNotifications(
+        QList<NotificationRecord> *notifications,
+        QString *errorMessage = nullptr) const;
+    bool markLocalAdminNotificationRead(qint64 notificationId,
+                                        QString *errorMessage = nullptr);
     bool markAllLocalAdminNotificationsRead(
         qint64 *deletedCount,
         QString *errorMessage = nullptr);
