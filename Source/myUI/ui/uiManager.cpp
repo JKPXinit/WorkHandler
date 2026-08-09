@@ -20,6 +20,7 @@
 #include "myLogger.h"
 #include "logviewerdialog.h"
 #include "httpservermanagerdialog.h"
+#include "notificationdialog.h"
 #include "aboutdialog.h"
 #include "softwareconfig.h"
 #include "thememanager.h"
@@ -126,6 +127,22 @@ void uiManager::initDockWindows() {
     m_mainWindow->m_DockManager->addDockWidget(ads::LeftDockWidgetArea,
                                                 m_httpServerManagerDock);
     displayMenu->addAction(m_httpServerManagerDock->toggleViewAction());
+
+    m_notificationDock = new ads::CDockWidget(tr("Notifications"), parent);
+    m_notificationDock->setObjectName(QStringLiteral("NotificationDock"));
+    m_mainWindow->m_notificationDialog = new NotificationDialog(m_mainWindow);
+    QDialog *notificationView =
+        m_mainWindow->m_notificationDialog->setupNotificationDialog();
+    m_notificationDock->setWidget(notificationView);
+    m_mainWindow->m_DockManager->addDockWidget(ads::RightDockWidgetArea,
+                                                m_notificationDock);
+    displayMenu->addAction(m_notificationDock->toggleViewAction());
+    connect(m_notificationDock, &ads::CDockWidget::visibilityChanged,
+            this, [this](bool visible) {
+                if (visible) {
+                    refreshNotifications();
+                }
+            });
 
     m_logViewDock = new ads::CDockWidget(tr("Log viewer") ,parent);
     m_logViewDock->setObjectName("LogViewDock");
@@ -245,6 +262,10 @@ void uiManager::retranslateUi() {
     // Options 菜单 actions
     m_optionsAction->setText(tr("Settings"));
 
+    if (m_trayNotificationsAction) {
+        m_trayNotificationsAction->setText(tr("Show Notifications"));
+    }
+
     // Help 菜单 actions
     m_aboutAction->setText(tr("About"));
 
@@ -252,6 +273,9 @@ void uiManager::retranslateUi() {
     if (m_logViewDock)   m_logViewDock->setWindowTitle(tr("Log viewer"));
     if (m_httpServerManagerDock) {
         m_httpServerManagerDock->setWindowTitle(tr("HTTP Server"));
+    }
+    if (m_notificationDock) {
+        m_notificationDock->setWindowTitle(tr("Notifications"));
     }
 
     LOG_INFO("UI retranslated");
@@ -374,6 +398,7 @@ void uiManager::initTray()
     m_trayMenu = new QMenu(parent);
 
     QAction *showAction = m_trayMenu->addAction(tr("Show"));
+    m_trayNotificationsAction = m_trayMenu->addAction(tr("Show Notifications"));
     m_trayOpenWebAction = m_trayMenu->addAction(tr("Open Web Panel"));
     m_trayServerAction = m_trayMenu->addAction(tr("Start Server"));
     m_trayMarkAllReadAction = m_trayMenu->addAction(
@@ -385,6 +410,16 @@ void uiManager::initTray()
         m_mainWindow->showNormal();
         m_mainWindow->raise();
         m_mainWindow->activateWindow();
+    });
+    connect(m_trayNotificationsAction, &QAction::triggered, this, [this]() {
+        m_mainWindow->showNormal();
+        m_mainWindow->raise();
+        m_mainWindow->activateWindow();
+        if (m_notificationDock) {
+            m_notificationDock->show();
+            m_notificationDock->raise();
+        }
+        refreshNotifications();
     });
     connect(m_trayOpenWebAction, &QAction::triggered,
             this, &uiManager::openWebPanelRequested);
@@ -441,6 +476,13 @@ void uiManager::showAdminNotification(qint64 issueId,
     }
     m_pendingIssueToasts.enqueue({issueId, title, content});
     showNextIssueToast();
+}
+
+void uiManager::refreshNotifications()
+{
+    if (m_mainWindow && m_mainWindow->m_notificationDialog) {
+        m_mainWindow->m_notificationDialog->refreshNotifications();
+    }
 }
 
 void uiManager::showNextIssueToast()

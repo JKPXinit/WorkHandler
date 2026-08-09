@@ -9,6 +9,7 @@
 #include "myLogger.h"
 #include "shortcutmanager.h"
 #include "httpservermanagerdialog.h"
+#include "notificationdialog.h"
 #include "httpserver.h"
 #include "public.h"
 
@@ -115,6 +116,10 @@ MainWindow::MainWindow(QWidget *parent)
             &HttpServerManagerDialog::reachabilityTestRequested,
             m_httpServer,
             &HttpServer::testReachability);
+    connect(m_notificationDialog, &NotificationDialog::openIssueRequested,
+            this, &MainWindow::openWebPanel);
+    connect(m_notificationDialog, &NotificationDialog::unreadCountChanged,
+            m_UI, &uiManager::setUnreadCount);
 
     connect(m_httpServer,
             &HttpServer::stateChanged,
@@ -183,8 +188,12 @@ MainWindow::MainWindow(QWidget *parent)
                    const QString &content) {
                 refreshTrayUnreadCount();
                 QString errorMessage;
-                if (m_httpServer->isLocalAdminRecipient(
-                        recipientId, &errorMessage)) {
+                const bool isLocalAdmin = m_httpServer->isLocalAdminRecipient(
+                    recipientId, &errorMessage);
+                if (isLocalAdmin) {
+                    m_UI->refreshNotifications();
+                }
+                if (isLocalAdmin) {
                     m_UI->showAdminNotification(issueId, title, content);
                 } else if (!errorMessage.isEmpty()) {
                     LOG_WARNING(QStringLiteral(
@@ -253,6 +262,7 @@ MainWindow::MainWindow(QWidget *parent)
         ServerConfig config = m_httpServer->configuration(&httpServerError);
         m_httpServer->updateConfiguration(config, &httpServerError);
         refreshTrayUnreadCount();
+        m_UI->refreshNotifications();
 
         m_notificationCalibrationTimer = new QTimer(this);
         m_notificationCalibrationTimer->setInterval(60 * 1000);

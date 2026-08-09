@@ -20,6 +20,7 @@ class ThemeManager;
 class ui_AdminOptions;
 class logViewerDialog;
 class HttpServerManagerDialog;
+class NotificationDialog;
 class QSystemTrayIcon;
 class QSplashScreen;
 namespace ads { class CDockWidget; }
@@ -68,6 +69,7 @@ public slots:
     void showAdminNotification(qint64 issueId,
                                const QString &title,
                                const QString &content);
+    void refreshNotifications();
 
 private slots:
 
@@ -110,6 +112,7 @@ private:
     // Dock 窗口指针（用于 retranslateUi）
     ads::CDockWidget *m_logViewDock   {nullptr};
     ads::CDockWidget *m_httpServerManagerDock {nullptr};
+    ads::CDockWidget *m_notificationDock {nullptr};
 
     void initSplash();
     void initTray();
@@ -121,6 +124,7 @@ private:
     QAction *m_trayOpenWebAction {nullptr};
     QAction *m_trayServerAction {nullptr};
     QAction *m_trayMarkAllReadAction {nullptr};
+    QAction *m_trayNotificationsAction {nullptr};
     TrayServerState m_trayServerState {TrayServerState::Stopped};
     qint64 m_trayUnreadCount {0};
     QQueue<PendingIssueToast> m_pendingIssueToasts;

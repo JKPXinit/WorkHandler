@@ -14,6 +14,7 @@ class ShortcutManager;
 class logViewerDialog;
 class aboutDialog;
 class HttpServerManagerDialog;
+class NotificationDialog;
 class HttpServer;
 class QTimer;
 
@@ -37,6 +38,7 @@ public:
     logViewerDialog *m_logViewerDialog;
     aboutDialog *m_aboutDialog;
     HttpServerManagerDialog *m_httpServerManagerDialog {nullptr};
+    NotificationDialog *m_notificationDialog {nullptr};
     HttpServer *m_httpServer {nullptr};
     ShortcutManager *m_shortcutManager;
 
