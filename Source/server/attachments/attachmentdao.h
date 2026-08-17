@@ -15,7 +15,7 @@ struct AttachmentRecord
 {
     qint64 id {0};
     qint64 issueId {0};
-    qint64 commentId {0};
+    std::optional<qint64> commentId;
     qint64 uploaderId {0};
     QString filename;
     QString contentType;
@@ -53,6 +53,8 @@ public:
         qint64 blockId, QList<AttachmentRecord> *attachments) const;
     AttachmentDaoResult attachments(qint64 issueId,
                                     QList<AttachmentRecord> *attachments) const;
+    AttachmentDaoResult issueAttachments(
+        qint64 issueId, QList<AttachmentRecord> *attachments) const;
     AttachmentDaoResult attachmentById(
         qint64 id, std::optional<AttachmentRecord> *attachment) const;
 

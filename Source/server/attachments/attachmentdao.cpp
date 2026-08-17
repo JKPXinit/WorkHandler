@@ -41,7 +41,8 @@ QJsonObject AttachmentRecord::toJson() const
     return {
         {QStringLiteral("id"), id},
         {QStringLiteral("issue_id"), issueId},
-        {QStringLiteral("comment_id"), commentId},
+        {QStringLiteral("comment_id"),
+         commentId ? QJsonValue(*commentId) : QJsonValue(QJsonValue::Null)},
         {QStringLiteral("uploader_id"), uploaderId},
         {QStringLiteral("filename"), filename},
         {QStringLiteral("content_type"), contentType},
@@ -79,6 +80,17 @@ AttachmentDaoResult AttachmentDao::attachments(
         attachmentProjection()
             + QStringLiteral(
                 "WHERE issue_id = ? ORDER BY created_at ASC, id ASC"),
+        issueId, attachments);
+}
+
+AttachmentDaoResult AttachmentDao::issueAttachments(
+    qint64 issueId, QList<AttachmentRecord> *attachments) const
+{
+    return queryAttachments(
+        attachmentProjection()
+            + QStringLiteral(
+                "WHERE issue_id = ? AND comment_id IS NULL "
+                "ORDER BY created_at ASC, id ASC"),
         issueId, attachments);
 }
 
@@ -142,7 +154,9 @@ AttachmentRecord AttachmentDao::readAttachment(const QSqlQuery &query)
     AttachmentRecord attachment;
     attachment.id = query.value(0).toLongLong();
     attachment.issueId = query.value(1).toLongLong();
-    attachment.commentId = query.value(2).toLongLong();
+    if (!query.value(2).isNull()) {
+        attachment.commentId = query.value(2).toLongLong();
+    }
     attachment.uploaderId = query.value(3).toLongLong();
     attachment.filename = query.value(4).toString();
     attachment.contentType = query.value(5).toString();
