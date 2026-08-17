@@ -9,7 +9,7 @@
 
 namespace {
 constexpr qsizetype MaximumFileSize = 10 * 1024 * 1024;
-constexpr qsizetype MaximumCommentFileSize = 30 * 1024 * 1024;
+constexpr qsizetype MaximumAttachmentTotalSize = 30 * 1024 * 1024;
 
 AttachmentServiceResult invalid(const QString &code, const QString &message)
 {
@@ -169,8 +169,8 @@ AttachmentServiceResult AttachmentService::processCommentAttachments(
     const QList<MultipartFile> &files) const
 {
     if (files.isEmpty() || files.size() > 9) {
-        return invalid(QStringLiteral("invalid_comment_attachment_count"),
-                       QStringLiteral("A comment must contain 1 to 9 attachments."));
+        return invalid(QStringLiteral("invalid_attachment_count"),
+                       QStringLiteral("An upload must contain 1 to 9 attachments."));
     }
     qsizetype totalSize = 0;
     for (const MultipartFile &file : files) {
@@ -183,9 +183,9 @@ AttachmentServiceResult AttachmentService::processCommentAttachments(
                            QStringLiteral("This attachment type is not supported."));
         }
         totalSize += file.data.size();
-        if (totalSize > MaximumCommentFileSize) {
-            return invalid(QStringLiteral("invalid_comment_attachment_size"),
-                           QStringLiteral("Comment attachments must not exceed 30 MiB in total."));
+        if (totalSize > MaximumAttachmentTotalSize) {
+            return invalid(QStringLiteral("invalid_attachment_total_size"),
+                           QStringLiteral("Attachments must not exceed 30 MiB in total."));
         }
     }
 
@@ -230,6 +230,22 @@ AttachmentServiceResult AttachmentService::processCommentAttachments(
     return result;
 }
 
+AttachmentServiceResult AttachmentService::processIssueAttachments(
+    qint64 issueId,
+    qint64 uploaderId,
+    const QList<MultipartFile> &files) const
+{
+    return processCommentAttachments(issueId, uploaderId, files);
+}
+
+AttachmentServiceResult AttachmentService::issueAttachments(qint64 issueId) const
+{
+    AttachmentServiceResult result;
+    const AttachmentDaoResult daoResult = m_dao.issueAttachments(
+        issueId, &result.attachments);
+    return daoResult.ok() ? result : daoFailure(daoResult);
+}
+
 void AttachmentService::removeFiles(
     const QList<AttachmentRecord> &attachments) const
 {
@@ -238,6 +254,13 @@ void AttachmentService::removeFiles(
             m_imageProcessor.remove(path);
         }
     }
+}
+
+AttachmentServiceResult AttachmentService::stageRemoval(
+    const QList<AttachmentRecord> &attachments,
+    StagedFileRemoval *staged) const
+{
+    return stageAttachments(attachments, staged);
 }
 
 AttachmentServiceResult AttachmentService::read(qint64 id,
