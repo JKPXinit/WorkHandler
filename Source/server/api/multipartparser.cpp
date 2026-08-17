@@ -2,7 +2,10 @@
 
 #include <QFileInfo>
 #include <QHttpServerRequest>
+#include <QJsonArray>
+#include <QJsonDocument>
 #include <QRegularExpression>
+#include <QSet>
 
 #include <utility>
 
@@ -288,6 +291,165 @@ bool MultipartParser::parseComment(const QHttpServerRequest &request,
     }
     if (files) {
         *files = std::move(parsedFiles);
+    }
+    return true;
+}
+
+bool MultipartParser::parseIssue(const QHttpServerRequest &request,
+                                 qsizetype maximumBodySize,
+                                 int maximumFiles,
+                                 QJsonObject *values,
+                                 QList<MultipartFile> *files,
+                                 QList<qint64> *removeAttachmentIds,
+                                 QString *errorMessage)
+{
+    if (values) {
+        *values = {};
+    }
+    if (files) {
+        files->clear();
+    }
+    if (removeAttachmentIds) {
+        removeAttachmentIds->clear();
+    }
+    if (errorMessage) {
+        errorMessage->clear();
+    }
+
+    const QByteArray body = request.body();
+    if (body.isEmpty() || body.size() > maximumBodySize) {
+        setError(errorMessage,
+                 body.isEmpty()
+                     ? QStringLiteral("Multipart request body is empty.")
+                     : QStringLiteral("Issue attachments exceed the request size limit."));
+        return false;
+    }
+    const QByteArray boundary = boundaryFromContentType(request.value("Content-Type"));
+    if (boundary.isEmpty() || boundary.size() > 200
+        || boundary.contains('\r') || boundary.contains('\n')) {
+        setError(errorMessage, QStringLiteral("Multipart boundary is invalid."));
+        return false;
+    }
+
+    const QByteArray delimiter = QByteArrayLiteral("--") + boundary;
+    qsizetype position = 0;
+    bool foundIssue = false;
+    QJsonObject parsedValues;
+    QList<MultipartFile> parsedFiles;
+    while (true) {
+        const qsizetype boundaryStart = body.indexOf(delimiter, position);
+        if (boundaryStart < 0) {
+            break;
+        }
+        qsizetype partStart = boundaryStart + delimiter.size();
+        if (body.mid(partStart, 2) == QByteArrayLiteral("--")) {
+            break;
+        }
+        if (body.mid(partStart, 2) != QByteArrayLiteral("\r\n")) {
+            setError(errorMessage, QStringLiteral("Multipart body is malformed."));
+            return false;
+        }
+        partStart += 2;
+        const qsizetype headerEnd = body.indexOf(QByteArrayLiteral("\r\n\r\n"), partStart);
+        const qsizetype nextBoundary = headerEnd < 0 ? -1 : body.indexOf(
+            QByteArrayLiteral("\r\n") + delimiter, headerEnd + 4);
+        if (headerEnd < 0 || nextBoundary < 0) {
+            setError(errorMessage, QStringLiteral("Multipart body is incomplete."));
+            return false;
+        }
+
+        QString disposition;
+        QByteArray partContentType;
+        const QList<QByteArray> headerLines = body.mid(
+            partStart, headerEnd - partStart).split('\n');
+        for (QByteArray line : headerLines) {
+            line = line.trimmed();
+            const qsizetype colon = line.indexOf(':');
+            if (colon <= 0) {
+                continue;
+            }
+            const QByteArray name = line.left(colon).trimmed().toLower();
+            const QByteArray value = line.mid(colon + 1).trimmed();
+            if (name == QByteArrayLiteral("content-disposition")) {
+                disposition = QString::fromUtf8(value);
+            } else if (name == QByteArrayLiteral("content-type")) {
+                partContentType = value.toLower();
+            }
+        }
+
+        const QString fieldName = dispositionValue(disposition, QStringLiteral("name"));
+        const QByteArray partData = body.mid(headerEnd + 4, nextBoundary - (headerEnd + 4));
+        if (fieldName == QStringLiteral("issue")) {
+            if (foundIssue) {
+                setError(errorMessage, QStringLiteral("Exactly one issue field is required."));
+                return false;
+            }
+            QJsonParseError parseError;
+            const QJsonDocument document = QJsonDocument::fromJson(partData, &parseError);
+            if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+                setError(errorMessage, QStringLiteral("Issue field must contain a JSON object."));
+                return false;
+            }
+            foundIssue = true;
+            parsedValues = document.object();
+        } else if (fieldName == QStringLiteral("files")) {
+            MultipartFile file;
+            file.filename = QFileInfo(dispositionValue(
+                disposition, QStringLiteral("filename"))).fileName();
+            file.contentType = partContentType;
+            file.data = partData;
+            if (file.filename.isEmpty() || file.data.isEmpty()
+                || file.filename.size() > 255 || file.filename.contains(QChar::Null)) {
+                setError(errorMessage, QStringLiteral("Issue attachment is invalid."));
+                return false;
+            }
+            parsedFiles.append(std::move(file));
+            if (parsedFiles.size() > maximumFiles) {
+                setError(errorMessage, QStringLiteral("An issue can contain at most 9 attachments."));
+                return false;
+            }
+        } else if (!fieldName.isEmpty()) {
+            setError(errorMessage, QStringLiteral("Multipart field is not supported."));
+            return false;
+        }
+        position = nextBoundary + 2;
+    }
+
+    if (!foundIssue) {
+        setError(errorMessage, QStringLiteral("Exactly one issue field is required."));
+        return false;
+    }
+    QList<qint64> parsedRemoveIds;
+    if (parsedValues.contains(QStringLiteral("remove_attachment_ids"))) {
+        const QJsonValue removeValue = parsedValues.take(QStringLiteral("remove_attachment_ids"));
+        if (!removeValue.isArray()) {
+            setError(errorMessage, QStringLiteral("Attachment removal ids must be an array."));
+            return false;
+        }
+        QSet<qint64> knownIds;
+        for (const QJsonValue &value : removeValue.toArray()) {
+            const qint64 id = value.toInteger();
+            if (!value.isDouble() || id <= 0 || double(id) != value.toDouble()
+                || knownIds.contains(id)) {
+                setError(errorMessage, QStringLiteral("Attachment removal ids are invalid."));
+                return false;
+            }
+            knownIds.insert(id);
+            parsedRemoveIds.append(id);
+        }
+    }
+    if (parsedFiles.isEmpty() && parsedRemoveIds.isEmpty()) {
+        setError(errorMessage, QStringLiteral("At least one attachment change is required."));
+        return false;
+    }
+    if (values) {
+        *values = parsedValues;
+    }
+    if (files) {
+        *files = std::move(parsedFiles);
+    }
+    if (removeAttachmentIds) {
+        *removeAttachmentIds = std::move(parsedRemoveIds);
     }
     return true;
 }

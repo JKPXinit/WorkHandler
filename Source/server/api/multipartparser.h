@@ -2,6 +2,7 @@
 #define MULTIPARTPARSER_H
 
 #include <QByteArray>
+#include <QJsonObject>
 #include <QList>
 #include <QString>
 
@@ -28,6 +29,13 @@ public:
                              QString *content,
                              QList<MultipartFile> *files,
                              QString *errorMessage);
+    static bool parseIssue(const QHttpServerRequest &request,
+                           qsizetype maximumBodySize,
+                           int maximumFiles,
+                           QJsonObject *values,
+                           QList<MultipartFile> *files,
+                           QList<qint64> *removeAttachmentIds,
+                           QString *errorMessage);
 };
 
 #endif // MULTIPARTPARSER_H
