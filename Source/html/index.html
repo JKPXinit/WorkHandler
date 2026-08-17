@@ -607,9 +607,9 @@ svg.icon { width: 18px; height: 18px; flex: 0 0 auto; fill: none; stroke: curren
 .comment-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
 .comment-head span { color: var(--muted); white-space: nowrap; }
 .comment-body { margin: 4px 0 0; overflow-wrap: anywhere; color: var(--ink-soft); font-size: 13px; white-space: pre-wrap; }
-.comment-body .comment-image { display: inline-block; max-width: 100%; margin: 8px 8px 2px 0; vertical-align: top; border: 0; background: transparent; cursor: zoom-in; }
+.comment-body .comment-image { display: block; width: fit-content; max-width: 100%; margin: 8px 0 2px; border: 0; background: transparent; cursor: zoom-in; }
 .comment-body .comment-image img { display: block; width: min(180px, 100%); aspect-ratio: 4/3; object-fit: cover; border: 1px solid var(--hairline); background: var(--parchment); }
-.comment-file { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; margin: 8px 8px 2px 0; padding: 8px 10px; border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--pearl); color: var(--ink-soft); vertical-align: middle; text-decoration: none; }
+.comment-file { display: flex; align-items: center; gap: 8px; width: fit-content; max-width: 100%; margin: 8px 0 2px; padding: 8px 10px; border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--pearl); color: var(--ink-soft); text-decoration: none; }
 .comment-file:hover { border-color: var(--blue); color: var(--blue); }
 .comment-file-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .comment-file-size { color: var(--muted); font-size: 11px; white-space: nowrap; }
