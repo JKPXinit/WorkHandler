@@ -307,6 +307,11 @@ svg.icon { width: 18px; height: 18px; flex: 0 0 auto; fill: none; stroke: curren
   font-size: 17px;
 }
 .field textarea { min-height: 132px; resize: vertical; line-height: 1.47; }
+.issue-attachment-label { display: block; margin-bottom: 7px; font-size: 14px; font-weight: 600; }
+.issue-attachment-tools { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.issue-attachment-tools .btn-ghost { display: inline-flex; margin: 0; font-size: 13px; font-weight: 500; }
+.issue-attachment-tools input { display: none; }
+.issue-attachment-list { margin-top: 8px; }
 .login-form .field input { border-color: var(--dark-line); background: var(--tile-dark); color: var(--on-dark); }
 .field-error { min-height: 20px; margin-top: 6px; color: #ffb4ab; font-size: 12px; }
 .login-actions { margin-top: 24px; display: flex; align-items: center; gap: 14px; }
@@ -1030,7 +1035,11 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     selectedTaskId: null,
     selectedIssue: null,
     comments: [],
+    issueAttachments: [],
     commentImages: [],
+    issueFiles: [],
+    issueExistingAttachments: [],
+    removedIssueAttachmentIds: [],
     attachmentObjectUrls: [],
     attachmentPreviewUrls: [],
     attachmentLoadVersion: 0,
@@ -1043,6 +1052,12 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     editingId: null,
     demoRole: 'admin'
   };
+
+  var attachmentAccept = '.png,.jpg,.jpeg,.webp,.txt,.log,.json,.xml,.csv,.md,.pdf,.zip,.bin,.doc,.docx,.docm,.dot,.dotx,.dotm,.xls,.xlsx,.xlsm,.xlt,.xltx,.xltm,.ppt,.pptx,.pptm,.pot,.potx,.potm';
+  var attachmentFilenamePattern = /\.(png|jpe?g|webp|txt|log|json|xml|csv|md|pdf|zip|bin|doc|docx|docm|dot|dotx|dotm|xls|xlsx|xlsm|xlt|xltx|xltm|ppt|pptx|pptm|pot|potx|potm)$/i;
+  var maximumAttachmentCount = 9;
+  var maximumAttachmentFileSize = 10 * 1024 * 1024;
+  var maximumAttachmentTotalSize = 30 * 1024 * 1024;
 
   var labels = {
     status: { open: '待处理', in_progress: '进行中', resolved: '已解决', closed: '已关闭' },
@@ -1183,6 +1198,34 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     return copy;
   }
 
+  function demoIssueForm(body) {
+    if (!(body instanceof FormData)) return { values: body || {}, files: [], removeIds: [] };
+    var values = {};
+    try { values = JSON.parse(String(body.get('issue') || '{}')); }
+    catch (error) { values = {}; }
+    var removeIds = Array.isArray(values.remove_attachment_ids) ? values.remove_attachment_ids.map(Number) : [];
+    delete values.remove_attachment_ids;
+    return { values: values, files: body.getAll('files'), removeIds: removeIds };
+  }
+
+  function addDemoIssueAttachments(issueId, files) {
+    var nextId = demo.attachments.reduce(function (max, item) { return Math.max(max, item.id); }, 0) + 1;
+    files.forEach(function (file, index) {
+      demo.attachments.push({
+        id: nextId + index,
+        issue_id: issueId,
+        comment_id: null,
+        uploader_id: demoUser().id,
+        filename: file.name || 'attachment.bin',
+        content_type: file.type || 'application/octet-stream',
+        is_image: /^image\//.test(file.type || '') || /\.(png|jpe?g|webp)$/i.test(file.name || ''),
+        file_size: file.size || 0,
+        created_at: new Date().toISOString(),
+        preview_url: URL.createObjectURL(file)
+      });
+    });
+  }
+
   function demoRequest(path, options) {
     options = options || {};
     var method = String(options.method || 'GET').toUpperCase();
@@ -1303,20 +1346,23 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
           return;
         }
         if (pathname === '/api/issues' && method === 'POST') {
+          var createForm = demoIssueForm(body);
+          var createValues = createForm.values;
           var current = demoUser();
           var issueId = demo.issues.reduce(function (max, issue) { return Math.max(max, issue.id); }, 100) + 1;
           var createdIssue = {
             id: issueId,
-            block_id: Number(body.block_id),
-            title: body.title,
-            description: body.description || '',
+            block_id: Number(createValues.block_id),
+            title: createValues.title,
+            description: createValues.description || '',
             status: 'open',
-            priority: body.priority || 'medium',
+            priority: createValues.priority || 'medium',
             reporter_id: current.id,
-            assignee_id: body.assignee_id ? Number(body.assignee_id) : null,
+            assignee_id: createValues.assignee_id ? Number(createValues.assignee_id) : null,
             created_at: new Date().toISOString()
           };
           demo.issues.push(createdIssue);
+          addDemoIssueAttachments(issueId, createForm.files);
           resolve(success({ issue: withIssueRelations(createdIssue) }, 201));
           return;
         }
@@ -1404,6 +1450,19 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
             : failure(404, 'attachment_not_found', '图片不存在'));
           return;
         }
+        match = pathname.match(/^\/api\/issues\/([^/]+)\/attachments$/);
+        if (match && method === 'GET') {
+          var attachmentIssueId = parseTaskId(match[1]);
+          var attachmentIssue = demo.issues.find(function (item) { return item.id === attachmentIssueId; });
+          if (!attachmentIssue) {
+            resolve(failure(404, 'issue_not_found', 'Issue 不存在'));
+            return;
+          }
+          resolve(success({ attachments: demo.attachments.filter(function (attachment) {
+            return attachment.issue_id === attachmentIssueId && attachment.comment_id === null;
+          }) }));
+          return;
+        }
         match = pathname.match(/^\/api\/issues\/([^/]+)$/);
         if (match) {
           var targetIssueId = parseTaskId(match[1]);
@@ -1421,9 +1480,15 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
             return;
           }
           if (method === 'PUT') {
-            demo.issues[issueIndex] = Object.assign({}, demo.issues[issueIndex], body, {
-              block_id: Number(body.block_id || demo.issues[issueIndex].block_id),
-              assignee_id: body.assignee_id ? Number(body.assignee_id) : null
+            var editForm = demoIssueForm(body);
+            var editValues = editForm.values;
+            demo.attachments = demo.attachments.filter(function (attachment) {
+              return attachment.issue_id !== targetIssueId || editForm.removeIds.indexOf(Number(attachment.id)) < 0;
+            });
+            addDemoIssueAttachments(targetIssueId, editForm.files);
+            demo.issues[issueIndex] = Object.assign({}, demo.issues[issueIndex], editValues, {
+              block_id: Number(editValues.block_id || demo.issues[issueIndex].block_id),
+              assignee_id: editValues.assignee_id ? Number(editValues.assignee_id) : null
             });
             resolve(success({ issue: withIssueRelations(demo.issues[issueIndex]) }));
             return;
@@ -1757,7 +1822,8 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     }
     var results = await Promise.all([
       request('/api/issues/' + requestedTaskId),
-      request('/api/issues/' + requestedTaskId + '/comments')
+      request('/api/issues/' + requestedTaskId + '/comments'),
+      request('/api/issues/' + requestedTaskId + '/attachments')
     ]);
     if (!results[0].ok) {
       showToast(resultMessage(results[0], 'Issue 加载失败'));
@@ -1773,6 +1839,8 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
           return timeOrder || Number(left.id || 0) - Number(right.id || 0);
         })
       : [];
+    state.issueAttachments = results[2].ok && Array.isArray(results[2].data.attachments)
+      ? results[2].data.attachments : [];
     if (state.selectedIssue && Number(state.selectedIssue.block_id) !== Number(state.selectedBlockId)) {
       state.selectedBlockId = Number(state.selectedIssue.block_id);
       renderBlocks();
@@ -1801,6 +1869,22 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     if (size < 1024) return size + ' B';
     if (size < 1024 * 1024) return (size / 1024).toFixed(1) + ' KB';
     return (size / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function isSupportedUploadFile(file) {
+    var type = String(file && file.type || '').toLowerCase();
+    return /^image\/(png|jpeg|webp)$/.test(type) ||
+      attachmentFilenamePattern.test(file && file.name || '');
+  }
+
+  function isUploadImage(file) {
+    return /^image\/(png|jpeg|webp)$/.test(String(file && file.type || '').toLowerCase()) ||
+      /\.(png|jpe?g|webp)$/i.test(file && file.name || '');
+  }
+
+  function uploadMarker(file, index) {
+    var safeName = String(file && file.name || '').replace(/[\[\]]/g, '');
+    return (isUploadImage(file) ? '![' : '[') + safeName + '](upload:' + index + ')';
   }
 
   function commentContentHtml(comment) {
@@ -1833,6 +1917,23 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     }
     html += escapeHtml(content.slice(cursor));
     return html.replace(/\r?\n/g, '<br>');
+  }
+
+  function descriptionAttachmentsHtml() {
+    if (!state.issueAttachments.length) return '';
+    var html = '<div class="comment-body description-attachments">';
+    state.issueAttachments.forEach(function (attachment) {
+      if (attachmentIsImage(attachment)) {
+        var source = attachmentUrl(attachment);
+        html += '<button class="comment-image" type="button" data-action="preview-image" data-attachment-id="' + Number(attachment.id) + '" data-image-alt="' + escapeHtml(attachment.filename) + '">' +
+          '<img alt="' + escapeHtml(attachment.filename) + '" data-attachment-image="' + Number(attachment.id) + '"' + (source ? ' src="' + escapeHtml(source) + '"' : '') + '></button>';
+      } else {
+        html += '<a class="comment-file" href="#" data-action="download-attachment" data-attachment-id="' + Number(attachment.id) + '" data-file-name="' + escapeHtml(attachment.filename) + '">' +
+          icon('paperclip') + '<span class="comment-file-name">' + escapeHtml(attachment.filename) + '</span>' +
+          '<span class="comment-file-size">' + formatFileSize(attachment.file_size) + '</span>' + icon('download') + '</a>';
+      }
+    });
+    return html + '</div>';
   }
 
   function releaseAttachmentObjectUrls() {
@@ -1980,7 +2081,7 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     if (admin) actions += '<button class="btn-ghost btn-danger" type="button" data-action="delete-issue" data-id="' + Number(issue.id) + '">' + icon('trash') + '删除</button>';
     $('detailHeadActions').innerHTML = actions;
 
-    var conversation = '<section class="detail-section"><h3>描述</h3><p class="detail-description">' + escapeHtml(issue.description || '无描述') + '</p></section>';
+    var conversation = '<section class="detail-section"><h3>描述</h3><p class="detail-description">' + escapeHtml(issue.description || '无描述') + '</p>' + descriptionAttachmentsHtml() + '</section>';
     conversation += '<section class="detail-section"><h3>讨论</h3><div class="comment-list">';
     if (state.comments.length) {
       state.comments.forEach(function (comment) {
@@ -2001,7 +2102,7 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     $('detailConversation').innerHTML = conversation;
     var commentInput = $('commentImageInput');
     if (commentInput) {
-      commentInput.accept = '.png,.jpg,.jpeg,.webp,.txt,.log,.json,.xml,.csv,.md,.pdf,.zip,.bin,.doc,.docx,.docm,.dot,.dotx,.dotm,.xls,.xlsx,.xlsm,.xlt,.xltx,.xltm,.ppt,.pptx,.pptm,.pot,.potx,.potm';
+      commentInput.accept = attachmentAccept;
       var uploadLabel = commentInput.closest('label');
       if (uploadLabel) {
         uploadLabel.innerHTML = icon('upload') + '上传附件';
@@ -2088,6 +2189,7 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     state.selectedTaskId = null;
     state.selectedIssue = null;
     state.comments = [];
+    state.issueAttachments = [];
     state.commentImages = [];
     $('issueDetailView').classList.add('hidden');
     $('workspace').classList.remove('detail-open');
@@ -2099,6 +2201,73 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     }
     state.returnHash = null;
     state.returnScrollY = 0;
+  }
+
+  function renderIssueFileList() {
+    var list = $('issueFileList');
+    if (!list) return;
+    var files = state.issueFiles || [];
+    var removedIds = state.removedIssueAttachmentIds || [];
+    var existing = (state.issueExistingAttachments || []).filter(function (attachment) {
+      return removedIds.indexOf(Number(attachment.id)) < 0;
+    });
+    var html = existing.map(function (attachment) {
+      return '<div class="comment-file-row"><span class="comment-file-name">' + icon('paperclip') + escapeHtml(attachment.filename) + '</span>' +
+        '<span class="comment-file-size">' + formatFileSize(attachment.file_size) + '</span>' +
+        '<button class="comment-file-remove" type="button" data-action="remove-existing-issue-attachment" data-attachment-id="' + Number(attachment.id) + '" aria-label="移除附件">' + icon('x') + '</button></div>';
+    }).join('');
+    html += files.map(function (file, index) {
+      return '<div class="comment-file-row"><span class="comment-file-name">' + icon('paperclip') + escapeHtml(file.name) + '</span>' +
+        '<span class="comment-file-size">' + formatFileSize(file.size) + '</span>' +
+        '<button class="comment-file-remove" type="button" data-action="remove-issue-file" data-file-index="' + index + '" aria-label="移除附件">' + icon('x') + '</button></div>';
+    }).join('');
+    list.innerHTML = html;
+    var hint = $('issueAttachmentHint');
+    if (hint) hint.textContent = existing.length + files.length + ' / ' + maximumAttachmentCount;
+  }
+
+  function removeIssueFile(index) {
+    var files = state.issueFiles || [];
+    if (index < 0 || index >= files.length) return;
+    files.splice(index, 1);
+    renderIssueFileList();
+  }
+
+  function removeExistingIssueAttachment(id) {
+    if (!(state.issueExistingAttachments || []).some(function (attachment) { return Number(attachment.id) === id; })) return;
+    if (state.removedIssueAttachmentIds.indexOf(id) < 0) state.removedIssueAttachmentIds.push(id);
+    renderIssueFileList();
+  }
+
+  function insertIssueAttachments(event) {
+    var input = event.target;
+    var selectedFiles = Array.from(input.files || []);
+    var files = selectedFiles.filter(isSupportedUploadFile);
+    if (files.length !== selectedFiles.length) showToast('存在不支持的附件类型');
+    var sizedFiles = files.filter(function (file) {
+      return file.size > 0 && file.size <= maximumAttachmentFileSize;
+    });
+    if (sizedFiles.length !== files.length) showToast('附件不能为空且单个文件不能超过 10 MiB');
+    input.value = '';
+    if (!sizedFiles.length) return;
+    var current = state.issueFiles || [];
+    var removedIds = state.removedIssueAttachmentIds || [];
+    var existing = (state.issueExistingAttachments || []).filter(function (attachment) {
+      return removedIds.indexOf(Number(attachment.id)) < 0;
+    });
+    if (existing.length + current.length + sizedFiles.length > maximumAttachmentCount) {
+      showToast('每个 Issue 最多添加 9 个附件');
+      return;
+    }
+    var nextFiles = current.concat(sizedFiles);
+    var totalSize = existing.reduce(function (sum, attachment) { return sum + Number(attachment.file_size || 0); }, 0) +
+      nextFiles.reduce(function (sum, file) { return sum + file.size; }, 0);
+    if (totalSize > maximumAttachmentTotalSize) {
+      showToast('Issue 附件总大小不能超过 30 MiB');
+      return;
+    }
+    state.issueFiles = nextFiles;
+    renderIssueFileList();
   }
 
   function issueFormHtml(issue) {
@@ -2122,6 +2291,10 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
       html += '<option value="' + Number(user.id) + '"' + (Number(issue.assignee_id) === Number(user.id) ? ' selected' : '') + '>' + escapeHtml(displayName(user)) + '</option>';
     });
     html += '</select></div>';
+    html += '<div class="field field-wide"><span class="issue-attachment-label">附件</span><div class="issue-attachment-tools">';
+    html += '<label class="btn-ghost" for="issueAttachmentInput">' + icon('upload') + '添加附件<input id="issueAttachmentInput" type="file" accept="' + attachmentAccept + '" multiple></label>';
+    html += '<span class="comment-image-hint" id="issueAttachmentHint">0 / ' + maximumAttachmentCount + '</span></div>';
+    html += '<div class="comment-file-list issue-attachment-list" id="issueFileList"></div></div>';
     html += '</div><div class="field-error" id="formError" role="alert"></div>';
     return html;
   }
@@ -2129,9 +2302,15 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
   function openIssueForm(issue) {
     state.modalMode = issue ? 'edit-issue' : 'create-issue';
     state.editingId = issue ? Number(issue.id) : null;
+    state.issueFiles = [];
+    state.issueExistingAttachments = issue ? state.issueAttachments.slice() : [];
+    state.removedIssueAttachmentIds = [];
     $('formDialogTitle').textContent = issue ? '编辑 Issue' : '新建 Issue';
     $('formSubmitButton').textContent = issue ? '保存修改' : '创建 Issue';
     $('formDialogBody').innerHTML = issueFormHtml(issue);
+    var attachmentInput = $('issueAttachmentInput');
+    if (attachmentInput) attachmentInput.addEventListener('change', insertIssueAttachments);
+    renderIssueFileList();
     $('formDialog').showModal();
     window.setTimeout(function () { $('issueTitle').focus(); }, 0);
   }
@@ -2183,6 +2362,9 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     if ($('formDialog').open) $('formDialog').close();
     state.modalMode = '';
     state.editingId = null;
+    state.issueFiles = [];
+    state.issueExistingAttachments = [];
+    state.removedIssueAttachmentIds = [];
   }
 
   async function submitDynamicForm(event) {
@@ -2214,8 +2396,17 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
       assignee_id: $('issueAssignee').value ? Number($('issueAssignee').value) : null
     };
     var editing = state.modalMode === 'edit-issue';
+    var issueFiles = (state.issueFiles || []).slice();
+    var removedAttachmentIds = editing ? (state.removedIssueAttachmentIds || []).slice() : [];
     var path = editing ? '/api/issues/' + formatTaskId(state.editingId) : '/api/issues';
-    var result = await request(path, { method: editing ? 'PUT' : 'POST', body: payload });
+    var requestBody = payload;
+    if (issueFiles.length || removedAttachmentIds.length) {
+      if (removedAttachmentIds.length) payload.remove_attachment_ids = removedAttachmentIds;
+      requestBody = new FormData();
+      requestBody.append('issue', JSON.stringify(payload));
+      issueFiles.forEach(function (file) { requestBody.append('files', file); });
+    }
+    var result = await request(path, { method: editing ? 'PUT' : 'POST', body: requestBody });
     if (!result.ok) {
       $('formError').textContent = resultMessage(result, 'Issue 保存失败');
       return;
@@ -2413,17 +2604,13 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
   function insertCommentImages(event) {
     var input = event.target;
     var selectedFiles = Array.from(input.files || []);
-    var files = selectedFiles.filter(function (file) {
-      var type = String(file.type || '').toLowerCase();
-      return /^image\/(png|jpeg|webp)$/.test(type) ||
-        /\.(png|jpe?g|webp|txt|log|json|xml|csv|md|pdf|zip|bin|doc|docx|docm|dot|dotx|dotm|xls|xlsx|xlsm|xlt|xltx|xltm|ppt|pptx|pptm|pot|potx|potm)$/i.test(file.name || '');
-    });
+    var files = selectedFiles.filter(isSupportedUploadFile);
     if (files.length !== selectedFiles.length) {
       showToast('存在不支持的附件类型');
     }
     if (!files.length) return;
     var current = state.commentImages || [];
-    if (current.length + files.length > 9) {
+    if (current.length + files.length > maximumAttachmentCount) {
       showToast('每条评论最多添加 9 个附件');
       input.value = '';
       return;
@@ -2434,11 +2621,7 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     var prefix = textarea.value.slice(0, start);
     var suffix = textarea.value.slice(end);
     var markers = files.map(function (file, index) {
-      var uploadIndex = current.length + index;
-      var safeName = file.name.replace(/[\[\]]/g, '');
-      var isImage = /^image\/(png|jpeg|webp)$/.test(String(file.type || '').toLowerCase()) ||
-        /\.(png|jpe?g|webp)$/i.test(file.name || '');
-      return (isImage ? '![' : '[') + safeName + '](upload:' + uploadIndex + ')';
+      return uploadMarker(file, current.length + index);
     }).join('\n');
     textarea.value = prefix + markers + suffix;
     state.commentImages = current.concat(files);
@@ -2539,6 +2722,16 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     if (action === 'remove-comment-file') {
       event.preventDefault();
       removeCommentFile(Number(target.dataset.fileIndex));
+      return;
+    }
+    if (action === 'remove-issue-file') {
+      event.preventDefault();
+      removeIssueFile(Number(target.dataset.fileIndex));
+      return;
+    }
+    if (action === 'remove-existing-issue-attachment') {
+      event.preventDefault();
+      removeExistingIssueAttachment(Number(target.dataset.attachmentId));
       return;
     }
     if (action === 'select-block') await selectBlock(id, true);
