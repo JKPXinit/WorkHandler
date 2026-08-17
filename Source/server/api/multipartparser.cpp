@@ -183,7 +183,7 @@ bool MultipartParser::parseComment(const QHttpServerRequest &request,
         setError(errorMessage,
                  body.isEmpty()
                      ? QStringLiteral("Multipart request body is empty.")
-                     : QStringLiteral("Comment images exceed the request size limit."));
+                     : QStringLiteral("Comment attachments exceed the request size limit."));
         return false;
     }
     const QByteArray boundary = boundaryFromContentType(
@@ -262,7 +262,7 @@ bool MultipartParser::parseComment(const QHttpServerRequest &request,
             if (file.filename.isEmpty() || file.data.isEmpty()
                 || file.filename.size() > 255
                 || file.filename.contains(QChar::Null)) {
-                setError(errorMessage, QStringLiteral("Comment image is invalid."));
+                setError(errorMessage, QStringLiteral("Comment attachment is invalid."));
                 return false;
             }
             parsedFiles.append(std::move(file));
