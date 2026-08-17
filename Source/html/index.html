@@ -1995,13 +1995,13 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     if (write) {
       conversation += '<form class="comment-form" id="commentForm"><label class="sr-only" for="commentContent">发表评论</label>';
       conversation += '<textarea id="commentContent" maxlength="4000" placeholder="发表评论"></textarea>';
-      conversation += '<div class="comment-composer-tools"><span class="comment-image-hint" id="commentImageHint">支持在光标处插入图片</span><label class="btn-ghost" for="commentImageInput">' + icon('upload') + '插入图片<input id="commentImageInput" type="file" accept=".png,.jpg,.jpeg,.webp" multiple hidden></label><button class="btn-ghost" type="submit">' + icon('message') + '发表评论</button></div></form>';
+      conversation += '<div class="comment-composer-tools"><span class="comment-image-hint" id="commentImageHint">支持在光标处插入图片</span><label class="btn-ghost" for="commentImageInput">' + icon('upload') + '插入图片<input id="commentImageInput" type="file" accept=".png,.jpg,.jpeg,.webp,.txt,.log,.json,.xml,.csv,.md,.pdf,.zip,.bin,.doc,.docx,.docm,.dot,.dotx,.dotm,.xls,.xlsx,.xlsm,.xlt,.xltx,.xltm,.ppt,.pptx,.pptm,.pot,.potx,.potm" multiple hidden></label><button class="btn-ghost" type="submit">' + icon('message') + '发表评论</button></div></form>';
     }
     conversation += '</section>';
     $('detailConversation').innerHTML = conversation;
     var commentInput = $('commentImageInput');
     if (commentInput) {
-      commentInput.accept = '.png,.jpg,.jpeg,.webp,.txt,.log,.json,.xml,.csv,.md,.pdf,.zip';
+      commentInput.accept = '.png,.jpg,.jpeg,.webp,.txt,.log,.json,.xml,.csv,.md,.pdf,.zip,.bin,.doc,.docx,.docm,.dot,.dotx,.dotm,.xls,.xlsx,.xlsm,.xlt,.xltx,.xltm,.ppt,.pptx,.pptm,.pot,.potx,.potm';
       var uploadLabel = commentInput.closest('label');
       if (uploadLabel) {
         uploadLabel.innerHTML = icon('upload') + '上传附件';
@@ -2067,7 +2067,7 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
       html += '<form class="comment-form" id="commentForm"><label class="sr-only" for="commentContent">发表评论</label>';
       html += '<textarea id="commentContent" maxlength="4000" placeholder="发表评论"></textarea>';
       html += '<div class="comment-file-list" id="commentFileList"></div>';
-      html += '<div class="comment-composer-tools"><span class="comment-image-hint" id="commentImageHint">支持图片、日志和常见附件</span><label class="btn-ghost" for="commentImageInput">' + icon('upload') + '添加附件<input id="commentImageInput" type="file" accept=".png,.jpg,.jpeg,.webp,.txt,.log,.json,.xml,.csv,.md,.pdf,.zip" multiple hidden></label><button class="btn-ghost" type="submit">' + icon('message') + '发表评论</button></div></form>';
+      html += '<div class="comment-composer-tools"><span class="comment-image-hint" id="commentImageHint">支持图片、日志和常见附件</span><label class="btn-ghost" for="commentImageInput">' + icon('upload') + '添加附件<input id="commentImageInput" type="file" accept=".png,.jpg,.jpeg,.webp,.txt,.log,.json,.xml,.csv,.md,.pdf,.zip,.bin,.doc,.docx,.docm,.dot,.dotx,.dotm,.xls,.xlsx,.xlsm,.xlt,.xltx,.xltm,.ppt,.pptx,.pptm,.pot,.potx,.potm" multiple hidden></label><button class="btn-ghost" type="submit">' + icon('message') + '发表评论</button></div></form>';
     }
     html += '</section>';
     $('drawerBody').innerHTML = html;
@@ -2416,7 +2416,7 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     var files = selectedFiles.filter(function (file) {
       var type = String(file.type || '').toLowerCase();
       return /^image\/(png|jpeg|webp)$/.test(type) ||
-        /\.(png|jpe?g|webp|txt|log|json|xml|csv|md|pdf|zip)$/i.test(file.name || '');
+        /\.(png|jpe?g|webp|txt|log|json|xml|csv|md|pdf|zip|bin|doc|docx|docm|dot|dotx|dotm|xls|xlsx|xlsm|xlt|xltx|xltm|ppt|pptx|pptm|pot|potx|potm)$/i.test(file.name || '');
     });
     if (files.length !== selectedFiles.length) {
       showToast('存在不支持的附件类型');

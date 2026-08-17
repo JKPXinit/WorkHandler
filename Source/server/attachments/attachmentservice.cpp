@@ -35,7 +35,17 @@ bool isSupportedFile(const MultipartFile &file)
         QStringLiteral("tif"), QStringLiteral("tiff"), QStringLiteral("txt"),
         QStringLiteral("log"),
         QStringLiteral("json"), QStringLiteral("xml"), QStringLiteral("csv"),
-        QStringLiteral("md"), QStringLiteral("pdf"), QStringLiteral("zip")
+        QStringLiteral("md"), QStringLiteral("pdf"), QStringLiteral("zip"),
+        QStringLiteral("bin"),
+        QStringLiteral("doc"), QStringLiteral("docx"),
+        QStringLiteral("docm"), QStringLiteral("dot"),
+        QStringLiteral("dotx"), QStringLiteral("dotm"),
+        QStringLiteral("xls"), QStringLiteral("xlsx"),
+        QStringLiteral("xlsm"), QStringLiteral("xlt"),
+        QStringLiteral("xltx"), QStringLiteral("xltm"),
+        QStringLiteral("ppt"), QStringLiteral("pptx"),
+        QStringLiteral("pptm"), QStringLiteral("pot"),
+        QStringLiteral("potx"), QStringLiteral("potm")
     };
     return extensions.contains(QFileInfo(file.filename).suffix().toLower());
 }
@@ -72,6 +82,60 @@ QString contentTypeFor(const MultipartFile &file)
     }
     if (suffix == QStringLiteral("zip")) {
         return QStringLiteral("application/zip");
+    }
+    if (suffix == QStringLiteral("bin")) {
+        return QStringLiteral("application/octet-stream");
+    }
+    if (suffix == QStringLiteral("doc") || suffix == QStringLiteral("dot")) {
+        return QStringLiteral("application/msword");
+    }
+    if (suffix == QStringLiteral("docx")) {
+        return QStringLiteral(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    }
+    if (suffix == QStringLiteral("docm")) {
+        return QStringLiteral("application/vnd.ms-word.document.macroEnabled.12");
+    }
+    if (suffix == QStringLiteral("dotx")) {
+        return QStringLiteral(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.template");
+    }
+    if (suffix == QStringLiteral("dotm")) {
+        return QStringLiteral("application/vnd.ms-word.template.macroEnabled.12");
+    }
+    if (suffix == QStringLiteral("xls") || suffix == QStringLiteral("xlt")) {
+        return QStringLiteral("application/vnd.ms-excel");
+    }
+    if (suffix == QStringLiteral("xlsx")) {
+        return QStringLiteral(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    }
+    if (suffix == QStringLiteral("xlsm")) {
+        return QStringLiteral("application/vnd.ms-excel.sheet.macroEnabled.12");
+    }
+    if (suffix == QStringLiteral("xltx")) {
+        return QStringLiteral(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.template");
+    }
+    if (suffix == QStringLiteral("xltm")) {
+        return QStringLiteral("application/vnd.ms-excel.template.macroEnabled.12");
+    }
+    if (suffix == QStringLiteral("ppt") || suffix == QStringLiteral("pot")) {
+        return QStringLiteral("application/vnd.ms-powerpoint");
+    }
+    if (suffix == QStringLiteral("pptx")) {
+        return QStringLiteral(
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+    }
+    if (suffix == QStringLiteral("pptm")) {
+        return QStringLiteral("application/vnd.ms-powerpoint.presentation.macroEnabled.12");
+    }
+    if (suffix == QStringLiteral("potx")) {
+        return QStringLiteral(
+            "application/vnd.openxmlformats-officedocument.presentationml.template");
+    }
+    if (suffix == QStringLiteral("potm")) {
+        return QStringLiteral("application/vnd.ms-powerpoint.template.macroEnabled.12");
     }
     return QString::fromLatin1(file.contentType).section(QLatin1Char(';'), 0, 0).trimmed();
 }
@@ -194,7 +258,7 @@ AttachmentServiceResult AttachmentService::read(qint64 id,
     QFile file(absolutePath);
     if (absolutePath.isEmpty() || !file.open(QIODevice::ReadOnly)) {
         return notFound(QStringLiteral("attachment_file_not_found"),
-                        QStringLiteral("Attachment image file was not found."));
+                        QStringLiteral("Attachment file was not found."));
     }
 
     AttachmentServiceResult result;
@@ -203,7 +267,7 @@ AttachmentServiceResult AttachmentService::read(qint64 id,
     if (result.fileData.isEmpty()) {
         return {AttachmentServiceError::Storage,
                 QStringLiteral("attachment_read_failed"),
-                QStringLiteral("Attachment image file could not be read.")};
+                QStringLiteral("Attachment file could not be read.")};
     }
     return result;
 }
