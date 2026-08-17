@@ -53,7 +53,15 @@ public:
         qint64 issueId,
         qint64 uploaderId,
         const QList<MultipartFile> &files) const;
+    AttachmentServiceResult processIssueAttachments(
+        qint64 issueId,
+        qint64 uploaderId,
+        const QList<MultipartFile> &files) const;
+    AttachmentServiceResult issueAttachments(qint64 issueId) const;
     void removeFiles(const QList<AttachmentRecord> &attachments) const;
+    AttachmentServiceResult stageRemoval(
+        const QList<AttachmentRecord> &attachments,
+        StagedFileRemoval *staged) const;
 
     AttachmentServiceResult stageIssueRemoval(
         qint64 issueId, StagedFileRemoval *staged) const;

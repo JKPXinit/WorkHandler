@@ -54,6 +54,7 @@ private slots:
     void taskIdentifiers();
     void passwordAndTokenHelpers();
     void legacyDatabaseMigration();
+    void attachmentCommentMigration();
     void targetNotificationSchemaPurgesReadRows();
     void healthAndCors();
     void authentication();
@@ -88,6 +89,12 @@ private:
     Reply requestCommentMultipart(
         const QString &path,
         const QString &content,
+        const QList<QPair<QString, QByteArray>> &files,
+        const QString &token = QString());
+    Reply requestIssueMultipart(
+        const QByteArray &method,
+        const QString &path,
+        const QJsonObject &issue,
         const QList<QPair<QString, QByteArray>> &files,
         const QString &token = QString());
 
@@ -338,6 +345,106 @@ void HttpServerIntegrationTest::legacyDatabaseMigration()
                           QStringLiteral("id")}));
     migratedDatabase.close();
     QSqlDatabase::removeDatabase(QStringLiteral("legacy_migration_check"));
+}
+
+void HttpServerIntegrationTest::attachmentCommentMigration()
+{
+    const auto createLegacyDatabase = [](const QString &path,
+                                         const QString &connectionName,
+                                         bool hasRequiredCommentId) {
+        QSqlDatabase database = QSqlDatabase::addDatabase(
+            QStringLiteral("QSQLITE"), connectionName);
+        database.setDatabaseName(path);
+        if (!database.open()) {
+            return false;
+        }
+        QSqlQuery query(database);
+        bool ok = query.exec(QStringLiteral(
+            "CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "username TEXT NOT NULL UNIQUE, password TEXT NOT NULL, "
+            "role TEXT NOT NULL, display_name TEXT, "
+            "created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"))
+            && query.exec(QStringLiteral(
+                "INSERT INTO users(id, username, password, role) "
+                "VALUES(1, 'admin', 'password', 'admin')"))
+            && query.exec(QStringLiteral(
+                "CREATE TABLE blocks (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "title TEXT NOT NULL)"))
+            && query.exec(QStringLiteral(
+                "INSERT INTO blocks(id, title) VALUES(1, 'Legacy')"))
+            && query.exec(QStringLiteral(
+                "CREATE TABLE issues (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "block_id INTEGER NOT NULL, title TEXT NOT NULL, "
+                "reporter_id INTEGER NOT NULL)"))
+            && query.exec(QStringLiteral(
+                "INSERT INTO issues(id, block_id, title, reporter_id) "
+                "VALUES(1, 1, 'Legacy issue', 1)"))
+            && query.exec(QStringLiteral(
+                "CREATE TABLE comments (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "issue_id INTEGER NOT NULL, user_id INTEGER NOT NULL, "
+                "content TEXT NOT NULL)"))
+            && query.exec(QStringLiteral(
+                "INSERT INTO comments(id, issue_id, user_id, content) "
+                "VALUES(1, 1, 1, 'Legacy comment')"));
+        if (ok && hasRequiredCommentId) {
+            ok = query.exec(QStringLiteral(
+                "CREATE TABLE attachments ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, issue_id INTEGER NOT NULL, "
+                "comment_id INTEGER NOT NULL, uploader_id INTEGER NOT NULL, "
+                "filename TEXT NOT NULL, content_type TEXT NOT NULL DEFAULT 'image/webp', "
+                "storage_path TEXT NOT NULL, thumb_path TEXT, original_path TEXT, "
+                "file_size INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"))
+                && query.exec(QStringLiteral(
+                    "INSERT INTO attachments(id, issue_id, comment_id, uploader_id, "
+                    "filename, storage_path) VALUES(1, 1, 1, 1, 'comment.png', 'comment.webp')"));
+        } else if (ok) {
+            ok = query.exec(QStringLiteral(
+                "CREATE TABLE attachments ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, issue_id INTEGER NOT NULL, "
+                "uploader_id INTEGER NOT NULL, filename TEXT NOT NULL, "
+                "storage_path TEXT NOT NULL, thumb_path TEXT, file_size INTEGER, "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"))
+                && query.exec(QStringLiteral(
+                    "INSERT INTO attachments(id, issue_id, uploader_id, filename, "
+                    "storage_path) VALUES(1, 1, 1, 'description.png', 'description.webp')"));
+        }
+        database.close();
+        return ok;
+    };
+
+    for (bool hasRequiredCommentId : {true, false}) {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString databasePath = directory.filePath(QStringLiteral("attachments.db"));
+        const QString setupConnection = hasRequiredCommentId
+            ? QStringLiteral("required_comment_attachment_setup")
+            : QStringLiteral("missing_comment_attachment_setup");
+        QVERIFY(createLegacyDatabase(
+            databasePath, setupConnection, hasRequiredCommentId));
+        QSqlDatabase::removeDatabase(setupConnection);
+
+        DatabaseManager database(databasePath);
+        QString errorMessage;
+        QVERIFY2(database.initialize(&errorMessage), qPrintable(errorMessage));
+        QSqlQuery query(database.connection());
+        QVERIFY(query.exec(QStringLiteral("PRAGMA table_info(attachments)")));
+        bool foundCommentId = false;
+        while (query.next()) {
+            if (query.value(1).toString() == QStringLiteral("comment_id")) {
+                foundCommentId = true;
+                QCOMPARE(query.value(3).toInt(), 0);
+            }
+        }
+        QVERIFY(foundCommentId);
+        QVERIFY(query.exec(QStringLiteral(
+            "SELECT comment_id FROM attachments WHERE id = 1")));
+        QVERIFY(query.next());
+        if (hasRequiredCommentId) {
+            QCOMPARE(query.value(0).toLongLong(), qint64(1));
+        } else {
+            QVERIFY(query.value(0).isNull());
+        }
+    }
 }
 
 void HttpServerIntegrationTest::targetNotificationSchemaPurgesReadRows()
@@ -1649,7 +1756,203 @@ void HttpServerIntegrationTest::notificationApiAndBusinessEvents()
 
 void HttpServerIntegrationTest::attachmentUploadReadAndDeletePermissions()
 {
-    QSKIP("Legacy Issue-level attachment test is replaced by comment image coverage.");
+    QString errorMessage;
+    UserSummary reporter;
+    UserSummary guest;
+    QVERIFY2(m_server->createManagedUser(
+                 QStringLiteral("description_attachment_reporter"),
+                 &reporter, &errorMessage),
+             qPrintable(errorMessage));
+    QVERIFY2(m_server->createManagedUser(
+                 QStringLiteral("description_attachment_guest"),
+                 &guest, &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/users/%1").arg(guest.id),
+        {{QStringLiteral("username"), guest.username},
+         {QStringLiteral("role"), QStringLiteral("guest")}},
+        m_token).status,
+        200);
+
+    const auto login = [this](const QString &username) {
+        return request(
+            "POST", QStringLiteral("/api/auth/login"),
+            {{QStringLiteral("username"), username},
+             {QStringLiteral("password"), QStringLiteral("123456")}});
+    };
+    const QString reporterToken = login(reporter.username).json()
+                                      .value(QStringLiteral("data")).toObject()
+                                      .value(QStringLiteral("token")).toString();
+    const QString guestToken = login(guest.username).json()
+                                   .value(QStringLiteral("data")).toObject()
+                                   .value(QStringLiteral("token")).toString();
+    QVERIFY(!reporterToken.isEmpty());
+    QVERIFY(!guestToken.isEmpty());
+
+    const Reply blockCreated = request(
+        "POST", QStringLiteral("/api/blocks"),
+        {{QStringLiteral("title"), QStringLiteral("Description Attachments")}},
+        m_token);
+    QCOMPARE(blockCreated.status, 201);
+    const qint64 blockId = blockCreated.json()
+                               .value(QStringLiteral("data")).toObject()
+                               .value(QStringLiteral("block")).toObject()
+                               .value(QStringLiteral("id")).toInteger();
+
+    QImage image(80, 60, QImage::Format_ARGB32);
+    image.fill(qRgb(42, 118, 201));
+    QByteArray imageData;
+    QBuffer imageBuffer(&imageData);
+    QVERIFY(imageBuffer.open(QIODevice::WriteOnly));
+    QVERIFY(image.save(&imageBuffer, "PNG"));
+    const QByteArray binaryData = QByteArray::fromHex("00ff1020aabbcc");
+    const QByteArray documentData = QByteArrayLiteral("docx-description-data");
+    const QList<QPair<QString, QByteArray>> createFiles {
+        {QStringLiteral("preview.png"), imageData},
+        {QStringLiteral("firmware.bin"), binaryData},
+        {QStringLiteral("specification.docx"), documentData}
+    };
+    const QJsonObject createValues {
+        {QStringLiteral("block_id"), blockId},
+        {QStringLiteral("title"), QStringLiteral("Issue description files")},
+        {QStringLiteral("description"), QStringLiteral("Files belong to this description.")}
+    };
+    QCOMPARE(requestIssueMultipart(
+        "POST", QStringLiteral("/api/issues"), createValues,
+        createFiles, guestToken).status,
+        403);
+    const Reply created = requestIssueMultipart(
+        "POST", QStringLiteral("/api/issues"), createValues,
+        createFiles, reporterToken);
+    QCOMPARE(created.status, 201);
+    const QJsonObject issue = created.json()
+                                  .value(QStringLiteral("data")).toObject()
+                                  .value(QStringLiteral("issue")).toObject();
+    const qint64 issueId = issue.value(QStringLiteral("id")).toInteger();
+    QCOMPARE(issue.value(QStringLiteral("comment_count")).toInteger(), qint64(0));
+    QCOMPARE(issue.value(QStringLiteral("attachment_count")).toInteger(), qint64(3));
+    const QString commentsPath = QStringLiteral("/api/issues/%1/comments").arg(issueId);
+    QCOMPARE(request("GET", commentsPath, {}, guestToken).json()
+                 .value(QStringLiteral("data")).toObject()
+                 .value(QStringLiteral("comments")).toArray().size(),
+             0);
+
+    const QString attachmentsPath =
+        QStringLiteral("/api/issues/%1/attachments").arg(issueId);
+    const Reply listed = request("GET", attachmentsPath, {}, guestToken);
+    QCOMPARE(listed.status, 200);
+    const QJsonArray attachments = listed.json()
+                                       .value(QStringLiteral("data")).toObject()
+                                       .value(QStringLiteral("attachments")).toArray();
+    QCOMPARE(attachments.size(), 3);
+    qint64 binaryId = 0;
+    qint64 documentId = 0;
+    for (const QJsonValue &value : attachments) {
+        const QJsonObject attachment = value.toObject();
+        QVERIFY(attachment.value(QStringLiteral("comment_id")).isNull());
+        if (attachment.value(QStringLiteral("filename")).toString()
+            == QStringLiteral("firmware.bin")) {
+            binaryId = attachment.value(QStringLiteral("id")).toInteger();
+        } else if (attachment.value(QStringLiteral("filename")).toString()
+                   == QStringLiteral("specification.docx")) {
+            documentId = attachment.value(QStringLiteral("id")).toInteger();
+        }
+    }
+    QVERIFY(binaryId > 0);
+    QVERIFY(documentId > 0);
+    const Reply downloadedBinary = request(
+        "GET", QStringLiteral("/api/attachments/%1").arg(binaryId), {}, guestToken);
+    QCOMPARE(downloadedBinary.body, binaryData);
+    QCOMPARE(downloadedBinary.contentType, QByteArrayLiteral("application/octet-stream"));
+    const Reply downloadedDocument = request(
+        "GET", QStringLiteral("/api/attachments/%1").arg(documentId), {}, guestToken);
+    QCOMPARE(downloadedDocument.body, documentData);
+    QCOMPARE(downloadedDocument.contentType,
+             QByteArrayLiteral("application/vnd.openxmlformats-officedocument.wordprocessingml.document"));
+
+    const Reply otherIssueCreated = requestIssueMultipart(
+        "POST", QStringLiteral("/api/issues"),
+        {{QStringLiteral("block_id"), blockId},
+         {QStringLiteral("title"), QStringLiteral("Other description files")}},
+        {{QStringLiteral("other.txt"), QByteArrayLiteral("other")}},
+        reporterToken);
+    QCOMPARE(otherIssueCreated.status, 201);
+    const qint64 otherIssueId = otherIssueCreated.json()
+                                    .value(QStringLiteral("data")).toObject()
+                                    .value(QStringLiteral("issue")).toObject()
+                                    .value(QStringLiteral("id")).toInteger();
+    const qint64 otherAttachmentId = request(
+        "GET", QStringLiteral("/api/issues/%1/attachments").arg(otherIssueId),
+        {}, reporterToken).json()
+        .value(QStringLiteral("data")).toObject()
+        .value(QStringLiteral("attachments")).toArray().at(0).toObject()
+        .value(QStringLiteral("id")).toInteger();
+    QJsonArray otherRemovalIds;
+    otherRemovalIds.append(otherAttachmentId);
+    QCOMPARE(requestIssueMultipart(
+        "PUT", QStringLiteral("/api/issues/%1").arg(issueId),
+        {{QStringLiteral("title"), QStringLiteral("Invalid removal")},
+         {QStringLiteral("remove_attachment_ids"), otherRemovalIds}},
+        {}, reporterToken).status,
+        400);
+    QCOMPARE(requestIssueMultipart(
+        "PUT", QStringLiteral("/api/issues/%1").arg(issueId),
+        {{QStringLiteral("title"), QStringLiteral("Guest edit")}},
+        {{QStringLiteral("guest.bin"), QByteArrayLiteral("guest")}},
+        guestToken).status,
+        403);
+
+    const QByteArray spreadsheetData = QByteArrayLiteral("xlsx-description-data");
+    QJsonArray binaryRemovalIds;
+    binaryRemovalIds.append(binaryId);
+    const Reply updated = requestIssueMultipart(
+        "PUT", QStringLiteral("/api/issues/%1").arg(issueId),
+        {{QStringLiteral("description"), QStringLiteral("Updated description.")},
+         {QStringLiteral("remove_attachment_ids"), binaryRemovalIds}},
+        {{QStringLiteral("replacement.xlsx"), spreadsheetData}},
+        reporterToken);
+    QCOMPARE(updated.status, 200);
+    QCOMPARE(updated.json().value(QStringLiteral("data")).toObject()
+                 .value(QStringLiteral("issue")).toObject()
+                 .value(QStringLiteral("description")).toString(),
+             QStringLiteral("Updated description."));
+    const QJsonArray updatedAttachments = request(
+        "GET", attachmentsPath, {}, guestToken).json()
+        .value(QStringLiteral("data")).toObject()
+        .value(QStringLiteral("attachments")).toArray();
+    QCOMPARE(updatedAttachments.size(), 3);
+    bool replacementFound = false;
+    for (const QJsonValue &value : updatedAttachments) {
+        const QJsonObject attachment = value.toObject();
+        QVERIFY(attachment.value(QStringLiteral("id")).toInteger() != binaryId);
+        replacementFound = replacementFound
+            || attachment.value(QStringLiteral("filename")).toString()
+                   == QStringLiteral("replacement.xlsx");
+    }
+    QVERIFY(replacementFound);
+    QCOMPARE(request("GET", QStringLiteral("/api/attachments/%1").arg(binaryId),
+                     {}, reporterToken).status,
+             404);
+
+    const Reply commentCreated = requestCommentMultipart(
+        commentsPath, QStringLiteral("[Comment file](upload:0)"),
+        {{QStringLiteral("comment.txt"), QByteArrayLiteral("comment-data")}},
+        reporterToken);
+    QCOMPARE(commentCreated.status, 201);
+    QCOMPARE(request("GET", attachmentsPath, {}, guestToken).json()
+                 .value(QStringLiteral("data")).toObject()
+                 .value(QStringLiteral("attachments")).toArray().size(),
+             3);
+
+    QCOMPARE(request("DELETE", QStringLiteral("/api/blocks/%1").arg(blockId),
+                     {}, m_token).status,
+             200);
+    QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(reporter.id),
+                     {}, m_token).status,
+             200);
+    QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(guest.id),
+                     {}, m_token).status,
+             200);
 }
 
 void HttpServerIntegrationTest::commentImagesAndCascadeCleanup()
@@ -2617,6 +2920,36 @@ HttpServerIntegrationTest::requestCommentMultipart(
     payload += "--" + boundary + "--\r\n";
     return requestRaw(
         QByteArrayLiteral("POST"), path, payload, token,
+        QByteArrayLiteral("multipart/form-data; boundary=") + boundary);
+}
+
+HttpServerIntegrationTest::Reply
+HttpServerIntegrationTest::requestIssueMultipart(
+    const QByteArray &method,
+    const QString &path,
+    const QJsonObject &issue,
+    const QList<QPair<QString, QByteArray>> &files,
+    const QString &token)
+{
+    const QByteArray boundary = QByteArrayLiteral(
+        "WorkHandlerIssueBoundary7MA4YWxkTrZu0gW");
+    QByteArray payload;
+    payload += "--" + boundary + "\r\n";
+    payload += "Content-Disposition: form-data; name=\"issue\"\r\n";
+    payload += "Content-Type: application/json; charset=utf-8\r\n\r\n";
+    payload += QJsonDocument(issue).toJson(QJsonDocument::Compact);
+    payload += "\r\n";
+    for (const auto &file : files) {
+        payload += "--" + boundary + "\r\n";
+        payload += "Content-Disposition: form-data; name=\"files\"; filename=\""
+            + file.first.toUtf8() + "\"\r\n";
+        payload += "Content-Type: application/octet-stream\r\n\r\n";
+        payload += file.second;
+        payload += "\r\n";
+    }
+    payload += "--" + boundary + "--\r\n";
+    return requestRaw(
+        method, path, payload, token,
         QByteArrayLiteral("multipart/form-data; boundary=") + boundary);
 }
 

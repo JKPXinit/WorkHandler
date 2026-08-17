@@ -1,6 +1,7 @@
 #include "issues/issuecontroller.h"
 
 #include "api/apicontext.h"
+#include "api/multipartparser.h"
 #include "issues/issueidentifier.h"
 #include "issues/issueservice.h"
 
@@ -12,6 +13,7 @@
 
 namespace {
 using StatusCode = QHttpServerResponse::StatusCode;
+constexpr qsizetype MaximumIssueBodySize = 30 * 1024 * 1024 + 256 * 1024;
 
 std::optional<QString> queryItem(const QUrlQuery &query,
                                  const QString &name)
@@ -42,6 +44,17 @@ QHttpServerResponse listResponse(const IssueServiceResult &result)
     }
     return ApiContext::successResponse({
         {QStringLiteral("issues"), issues}
+    });
+}
+
+QHttpServerResponse attachmentListResponse(const IssueServiceResult &result)
+{
+    QJsonArray attachments;
+    for (const AttachmentRecord &attachment : result.attachments) {
+        attachments.append(attachment.toJson());
+    }
+    return ApiContext::successResponse({
+        {QStringLiteral("attachments"), attachments}
     });
 }
 
@@ -121,6 +134,23 @@ void IssueController::registerRoutes(QHttpServer &server)
         });
 
     server.route(
+        QStringLiteral("/api/issues/<arg>/attachments"), Method::Get,
+        [this](const QString &identifier, const QHttpServerRequest &request) {
+            const ApiContext::AuthorizationResult authorization =
+                m_apiContext.authorize(request, false);
+            if (!authorization.authorized) {
+                return ApiContext::authorizationError(authorization);
+            }
+
+            qint64 id = 0;
+            if (!parseIssueIdentifier(identifier, &id)) {
+                return invalidTaskIdResponse();
+            }
+            const IssueServiceResult result = m_service.descriptionAttachments(id);
+            return result.ok() ? attachmentListResponse(result) : errorResponse(result);
+        });
+
+    server.route(
         QStringLiteral("/api/issues"), Method::Post,
         [this](const QHttpServerRequest &request) {
             const ApiContext::AuthorizationResult authorization =
@@ -129,15 +159,36 @@ void IssueController::registerRoutes(QHttpServer &server)
                 return ApiContext::authorizationError(authorization);
             }
 
-            QJsonObject body;
-            QString parseError;
-            if (!ApiContext::parseJsonObject(request, &body, &parseError)) {
-                return ApiContext::errorResponse(
-                    StatusCode::BadRequest,
-                    QStringLiteral("invalid_json"), parseError);
+            const QByteArray contentType = request.value("Content-Type").toLower();
+            IssueServiceResult result;
+            if (contentType.startsWith(QByteArrayLiteral("multipart/form-data"))) {
+                QJsonObject body;
+                QList<MultipartFile> files;
+                QList<qint64> removeAttachmentIds;
+                QString parseError;
+                if (!MultipartParser::parseIssue(
+                        request, MaximumIssueBodySize, 9, &body, &files,
+                        &removeAttachmentIds, &parseError)
+                    || files.isEmpty() || !removeAttachmentIds.isEmpty()) {
+                    return ApiContext::errorResponse(
+                        StatusCode::BadRequest,
+                        QStringLiteral("invalid_multipart"),
+                        parseError.isEmpty()
+                            ? QStringLiteral("Issue creation multipart data is invalid.")
+                            : parseError);
+                }
+                result = m_service.createWithAttachments(
+                    body, files, authorization.user);
+            } else {
+                QJsonObject body;
+                QString parseError;
+                if (!ApiContext::parseJsonObject(request, &body, &parseError)) {
+                    return ApiContext::errorResponse(
+                        StatusCode::BadRequest,
+                        QStringLiteral("invalid_json"), parseError);
+                }
+                result = m_service.create(body, authorization.user);
             }
-            const IssueServiceResult result = m_service.create(
-                body, authorization.user);
             return result.ok()
                 ? ApiContext::successResponse(
                       {{QStringLiteral("issue"), result.issue.toJson()}},
@@ -159,15 +210,32 @@ void IssueController::registerRoutes(QHttpServer &server)
                 return invalidTaskIdResponse();
             }
 
-            QJsonObject body;
-            QString parseError;
-            if (!ApiContext::parseJsonObject(request, &body, &parseError)) {
-                return ApiContext::errorResponse(
-                    StatusCode::BadRequest,
-                    QStringLiteral("invalid_json"), parseError);
+            const QByteArray contentType = request.value("Content-Type").toLower();
+            IssueServiceResult result;
+            if (contentType.startsWith(QByteArrayLiteral("multipart/form-data"))) {
+                QJsonObject body;
+                QList<MultipartFile> files;
+                QList<qint64> removeAttachmentIds;
+                QString parseError;
+                if (!MultipartParser::parseIssue(
+                        request, MaximumIssueBodySize, 9, &body, &files,
+                        &removeAttachmentIds, &parseError)) {
+                    return ApiContext::errorResponse(
+                        StatusCode::BadRequest,
+                        QStringLiteral("invalid_multipart"), parseError);
+                }
+                result = m_service.updateWithAttachments(
+                    id, body, files, removeAttachmentIds, authorization.user);
+            } else {
+                QJsonObject body;
+                QString parseError;
+                if (!ApiContext::parseJsonObject(request, &body, &parseError)) {
+                    return ApiContext::errorResponse(
+                        StatusCode::BadRequest,
+                        QStringLiteral("invalid_json"), parseError);
+                }
+                result = m_service.update(id, body, authorization.user);
             }
-            const IssueServiceResult result = m_service.update(
-                id, body, authorization.user);
             return result.ok()
                 ? ApiContext::successResponse({
                       {QStringLiteral("issue"), result.issue.toJson()}
@@ -247,6 +315,7 @@ QHttpServerResponse IssueController::errorResponse(
         status = StatusCode::Conflict;
         break;
     case IssueServiceError::Database:
+    case IssueServiceError::Storage:
     case IssueServiceError::None:
         break;
     }

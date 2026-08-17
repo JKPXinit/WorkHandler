@@ -1,6 +1,8 @@
 #ifndef ISSUEDAO_H
 #define ISSUEDAO_H
 
+#include "attachments/attachmentdao.h"
+
 #include <QJsonObject>
 #include <QList>
 #include <QString>
@@ -83,8 +85,17 @@ public:
     IssueDaoResult userExists(qint64 id, bool *exists) const;
     IssueDaoResult create(const IssueRecord &values,
                           IssueRecord *createdIssue) const;
+    IssueDaoResult createWithAttachments(
+        const IssueRecord &values,
+        const QList<AttachmentRecord> &attachments,
+        IssueRecord *createdIssue) const;
     IssueDaoResult update(const IssueRecord &values,
                           IssueRecord *updatedIssue) const;
+    IssueDaoResult updateWithAttachments(
+        const IssueRecord &values,
+        const QList<AttachmentRecord> &attachments,
+        const QList<qint64> &removeAttachmentIds,
+        IssueRecord *updatedIssue) const;
     IssueDaoResult updateStatus(qint64 id,
                                 const QString &status,
                                 IssueRecord *updatedIssue) const;

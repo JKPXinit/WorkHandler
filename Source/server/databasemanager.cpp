@@ -141,7 +141,7 @@ bool DatabaseManager::initialize(QString *errorMessage,
             "CREATE TABLE IF NOT EXISTS attachments ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT,"
             "issue_id INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,"
-            "comment_id INTEGER NOT NULL REFERENCES comments(id) ON DELETE CASCADE,"
+            "comment_id INTEGER REFERENCES comments(id) ON DELETE CASCADE,"
             "uploader_id INTEGER NOT NULL, filename TEXT NOT NULL,"
             "content_type TEXT NOT NULL DEFAULT 'application/octet-stream',"
             "storage_path TEXT NOT NULL, thumb_path TEXT, original_path TEXT,"
@@ -175,10 +175,11 @@ bool DatabaseManager::initialize(QString *errorMessage,
     }
 
     if (!migrateAttachmentsToComments(errorMessage)
+        || !migrateAttachmentOriginalPath(errorMessage)
+        || !migrateAttachmentCommentOptional(errorMessage)
         || !execute(QStringLiteral(
                 "CREATE INDEX IF NOT EXISTS idx_attachments_comment_id "
                 "ON attachments(comment_id)"), errorMessage)
-        || !migrateAttachmentOriginalPath(errorMessage)
         || !migrateNotifications(errorMessage)) {
         return false;
     }
@@ -285,6 +286,16 @@ bool DatabaseManager::migrateAttachmentsToComments(QString *errorMessage)
         }
     }
     columnsQuery.finish();
+    if (!hasCommentId) {
+        QSqlQuery alterQuery(m_database);
+        if (!alterQuery.exec(QStringLiteral(
+                "ALTER TABLE attachments ADD COLUMN comment_id INTEGER "
+                "REFERENCES comments(id) ON DELETE CASCADE"))) {
+            setError(errorMessage, alterQuery.lastError().text());
+            return false;
+        }
+        hasCommentId = true;
+    }
     if (hasCommentId) {
         return true;
     }
@@ -460,6 +471,76 @@ bool DatabaseManager::migrateAttachmentsToComments(QString *errorMessage)
         || !schemaQuery.exec(QStringLiteral(
             "CREATE INDEX idx_attachments_comment_id ON attachments(comment_id)"))) {
         return rollback(schemaQuery.lastError().text());
+    }
+    if (!m_database.commit()) {
+        const QString detail = m_database.lastError().text();
+        m_database.rollback();
+        setError(errorMessage, detail);
+        return false;
+    }
+    return true;
+}
+
+bool DatabaseManager::migrateAttachmentCommentOptional(QString *errorMessage)
+{
+    bool commentIdFound = false;
+    bool commentIdRequired = false;
+    QSqlQuery columnsQuery(m_database);
+    if (!columnsQuery.exec(QStringLiteral("PRAGMA table_info(attachments)"))) {
+        setError(errorMessage, columnsQuery.lastError().text());
+        return false;
+    }
+    while (columnsQuery.next()) {
+        if (columnsQuery.value(1).toString() == QStringLiteral("comment_id")) {
+            commentIdFound = true;
+            commentIdRequired = columnsQuery.value(3).toBool();
+            break;
+        }
+    }
+    columnsQuery.finish();
+    if (!commentIdFound) {
+        setError(errorMessage, QStringLiteral("Attachment comment column is missing."));
+        return false;
+    }
+    if (!commentIdRequired) {
+        return true;
+    }
+
+    if (!m_database.transaction()) {
+        setError(errorMessage, m_database.lastError().text());
+        return false;
+    }
+    const auto rollback = [this, errorMessage](const QString &message) {
+        m_database.rollback();
+        setError(errorMessage, message);
+        return false;
+    };
+    QSqlQuery query(m_database);
+    if (!query.exec(QStringLiteral("DROP INDEX IF EXISTS idx_attachments_issue_id"))
+        || !query.exec(QStringLiteral("DROP INDEX IF EXISTS idx_attachments_comment_id"))
+        || !query.exec(QStringLiteral(
+            "ALTER TABLE attachments RENAME TO attachments_comment_required"))
+        || !query.exec(QStringLiteral(
+            "CREATE TABLE attachments ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "issue_id INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,"
+            "comment_id INTEGER REFERENCES comments(id) ON DELETE CASCADE,"
+            "uploader_id INTEGER NOT NULL, filename TEXT NOT NULL,"
+            "content_type TEXT NOT NULL DEFAULT 'application/octet-stream',"
+            "storage_path TEXT NOT NULL, thumb_path TEXT, original_path TEXT,"
+            "file_size INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"))
+        || !query.exec(QStringLiteral(
+            "INSERT INTO attachments(id, issue_id, comment_id, uploader_id, filename, "
+            "content_type, storage_path, thumb_path, original_path, file_size, created_at) "
+            "SELECT id, issue_id, comment_id, uploader_id, filename, content_type, "
+            "storage_path, thumb_path, original_path, file_size, created_at "
+            "FROM attachments_comment_required"))
+        || !query.exec(QStringLiteral("DROP TABLE attachments_comment_required"))
+        || !query.exec(QStringLiteral(
+            "CREATE INDEX idx_attachments_issue_id ON attachments(issue_id)"))
+        || !query.exec(QStringLiteral(
+            "CREATE INDEX idx_attachments_comment_id ON attachments(comment_id)"))) {
+        return rollback(query.lastError().text());
     }
     if (!m_database.commit()) {
         const QString detail = m_database.lastError().text();
