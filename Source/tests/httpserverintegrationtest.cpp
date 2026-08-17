@@ -1878,6 +1878,60 @@ void HttpServerIntegrationTest::commentImagesAndCascadeCleanup()
         "GET", QStringLiteral("/api/attachments/%1").arg(logAttachmentId), {}, guestToken);
     QCOMPARE(downloadedLog.status, 200);
     QCOMPARE(downloadedLog.body, logData);
+
+    const QList<QPair<QString, QByteArray>> officeFiles {
+        {QStringLiteral("payload.bin"), QByteArray::fromHex("00ff1020aabbcc")},
+        {QStringLiteral("legacy.doc"), QByteArrayLiteral("legacy-word")},
+        {QStringLiteral("document.docx"), QByteArrayLiteral("modern-word")},
+        {QStringLiteral("macro.xlsm"), QByteArrayLiteral("macro-sheet")},
+        {QStringLiteral("sheet.xlsx"), QByteArrayLiteral("modern-sheet")},
+        {QStringLiteral("legacy.ppt"), QByteArrayLiteral("legacy-slides")},
+        {QStringLiteral("slides.pptx"), QByteArrayLiteral("modern-slides")},
+        {QStringLiteral("template.dotx"), QByteArrayLiteral("word-template")},
+        {QStringLiteral("template.potm"), QByteArrayLiteral("slides-template")}
+    };
+    QStringList officeMarkers;
+    for (int index = 0; index < officeFiles.size(); ++index) {
+        officeMarkers.append(QStringLiteral("[Attachment %1](upload:%1)")
+                                 .arg(index));
+    }
+    const Reply officeComment = requestCommentMultipart(
+        commentsPath, officeMarkers.join(QLatin1Char('\n')),
+        officeFiles, memberToken);
+    QCOMPARE(officeComment.status, 201);
+    const QJsonArray officeAttachments = officeComment.json()
+        .value(QStringLiteral("data")).toObject()
+        .value(QStringLiteral("comment")).toObject()
+        .value(QStringLiteral("attachments")).toArray();
+    QCOMPARE(officeAttachments.size(), officeFiles.size());
+    const QStringList officeContentTypes {
+        QStringLiteral("application/octet-stream"),
+        QStringLiteral("application/msword"),
+        QStringLiteral("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+        QStringLiteral("application/vnd.ms-excel.sheet.macroEnabled.12"),
+        QStringLiteral("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+        QStringLiteral("application/vnd.ms-powerpoint"),
+        QStringLiteral("application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+        QStringLiteral("application/vnd.openxmlformats-officedocument.wordprocessingml.template"),
+        QStringLiteral("application/vnd.ms-powerpoint.template.macroEnabled.12")
+    };
+    for (int index = 0; index < officeFiles.size(); ++index) {
+        const QJsonObject attachment = officeAttachments.at(index).toObject();
+        QCOMPARE(attachment.value(QStringLiteral("filename")).toString(),
+                 officeFiles.at(index).first);
+        QCOMPARE(attachment.value(QStringLiteral("content_type")).toString(),
+                 officeContentTypes.at(index));
+        QVERIFY(!attachment.value(QStringLiteral("is_image")).toBool());
+        const qint64 attachmentId = attachment.value(QStringLiteral("id")).toInteger();
+        const Reply downloaded = request(
+            "GET", QStringLiteral("/api/attachments/%1").arg(attachmentId),
+            {}, guestToken);
+        QCOMPARE(downloaded.status, 200);
+        QCOMPARE(downloaded.body, officeFiles.at(index).second);
+        QCOMPARE(downloaded.contentType,
+                 officeContentTypes.at(index).toLatin1());
+    }
+
     QCOMPARE(request("DELETE", QStringLiteral("/api/attachments/%1").arg(attachmentId), {}, m_token).status, 405);
     const qint64 largeAttachmentId = attachments.at(2).toObject()
                                          .value(QStringLiteral("id")).toInteger();
