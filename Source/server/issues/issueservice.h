@@ -1,6 +1,7 @@
 #ifndef ISSUESERVICE_H
 #define ISSUESERVICE_H
 
+#include "api/multipartparser.h"
 #include "issues/issuedao.h"
 
 #include <QJsonObject>
@@ -30,7 +31,8 @@ enum class IssueServiceError {
     NotFound,
     Forbidden,
     Conflict,
-    Database
+    Database,
+    Storage
 };
 
 struct IssueServiceResult
@@ -39,6 +41,7 @@ struct IssueServiceResult
     QString code;
     QString message;
     QList<IssueRecord> issues;
+    QList<AttachmentRecord> attachments;
     IssueRecord issue;
     qint64 deletedId {0};
 
@@ -56,9 +59,20 @@ public:
     IssueServiceResult get(qint64 id) const;
     IssueServiceResult create(const QJsonObject &values,
                               const UserRecord &currentUser);
+    IssueServiceResult createWithAttachments(
+        const QJsonObject &values,
+        const QList<MultipartFile> &files,
+        const UserRecord &currentUser);
     IssueServiceResult update(qint64 id,
                               const QJsonObject &values,
                               const UserRecord &currentUser);
+    IssueServiceResult updateWithAttachments(
+        qint64 id,
+        const QJsonObject &values,
+        const QList<MultipartFile> &files,
+        const QList<qint64> &removeAttachmentIds,
+        const UserRecord &currentUser);
+    IssueServiceResult descriptionAttachments(qint64 id) const;
     IssueServiceResult changeStatus(qint64 id,
                                     const QJsonObject &values,
                                     const UserRecord &currentUser);

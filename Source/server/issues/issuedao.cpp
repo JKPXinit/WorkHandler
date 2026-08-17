@@ -29,6 +29,33 @@ IssueDaoResult failure(const QSqlError &error, bool allowConflict)
     };
 }
 
+IssueDaoResult insertIssueAttachments(
+    QSqlDatabase database,
+    qint64 issueId,
+    const QList<AttachmentRecord> &attachments)
+{
+    QSqlQuery query(database);
+    for (const AttachmentRecord &attachment : attachments) {
+        query.prepare(QStringLiteral(
+            "INSERT INTO attachments(issue_id, comment_id, uploader_id, filename, "
+            "content_type, storage_path, thumb_path, original_path, file_size) "
+            "VALUES(?, NULL, ?, ?, ?, ?, ?, ?, ?)"));
+        query.addBindValue(issueId);
+        query.addBindValue(attachment.uploaderId);
+        query.addBindValue(attachment.filename);
+        query.addBindValue(attachment.contentType);
+        query.addBindValue(attachment.storagePath);
+        query.addBindValue(attachment.thumbnailPath);
+        query.addBindValue(attachment.originalPath);
+        query.addBindValue(attachment.fileSize);
+        if (!query.exec()) {
+            return failure(query.lastError(), true);
+        }
+        query.finish();
+    }
+    return success();
+}
+
 QString issueProjection()
 {
     return QStringLiteral(
@@ -234,6 +261,42 @@ IssueDaoResult IssueDao::create(const IssueRecord &values,
     return success();
 }
 
+IssueDaoResult IssueDao::createWithAttachments(
+    const IssueRecord &values,
+    const QList<AttachmentRecord> &attachments,
+    IssueRecord *createdIssue) const
+{
+    QSqlDatabase database = m_database.connection();
+    if (!database.transaction()) {
+        return failure(database.lastError(), false);
+    }
+    IssueRecord created;
+    IssueDaoResult result = create(values, &created);
+    if (result.ok()) {
+        result = insertIssueAttachments(database, created.id, attachments);
+    }
+    std::optional<IssueRecord> refreshed;
+    if (result.ok()) {
+        result = issueById(created.id, &refreshed);
+    }
+    if (!result.ok() || !refreshed) {
+        database.rollback();
+        return result.ok()
+            ? IssueDaoResult{IssueDaoError::Database,
+                             QStringLiteral("The created issue could not be read back.")}
+            : result;
+    }
+    if (!database.commit()) {
+        const QSqlError error = database.lastError();
+        database.rollback();
+        return failure(error, false);
+    }
+    if (createdIssue) {
+        *createdIssue = *refreshed;
+    }
+    return success();
+}
+
 IssueDaoResult IssueDao::update(const IssueRecord &values,
                                 IssueRecord *updatedIssue) const
 {
@@ -264,6 +327,61 @@ IssueDaoResult IssueDao::update(const IssueRecord &values,
     }
     if (updatedIssue) {
         *updatedIssue = *updated;
+    }
+    return success();
+}
+
+IssueDaoResult IssueDao::updateWithAttachments(
+    const IssueRecord &values,
+    const QList<AttachmentRecord> &attachments,
+    const QList<qint64> &removeAttachmentIds,
+    IssueRecord *updatedIssue) const
+{
+    QSqlDatabase database = m_database.connection();
+    if (!database.transaction()) {
+        return failure(database.lastError(), false);
+    }
+    IssueRecord updated;
+    IssueDaoResult result = update(values, &updated);
+    QSqlQuery removeQuery(database);
+    for (qint64 attachmentId : removeAttachmentIds) {
+        if (!result.ok()) {
+            break;
+        }
+        removeQuery.prepare(QStringLiteral(
+            "DELETE FROM attachments "
+            "WHERE id = ? AND issue_id = ? AND comment_id IS NULL"));
+        removeQuery.addBindValue(attachmentId);
+        removeQuery.addBindValue(values.id);
+        if (!removeQuery.exec()) {
+            result = failure(removeQuery.lastError(), true);
+        } else if (removeQuery.numRowsAffected() != 1) {
+            result = {IssueDaoError::Conflict,
+                      QStringLiteral("Description attachment could not be removed.")};
+        }
+        removeQuery.finish();
+    }
+    if (result.ok()) {
+        result = insertIssueAttachments(database, values.id, attachments);
+    }
+    std::optional<IssueRecord> refreshed;
+    if (result.ok()) {
+        result = issueById(values.id, &refreshed);
+    }
+    if (!result.ok() || !refreshed) {
+        database.rollback();
+        return result.ok()
+            ? IssueDaoResult{IssueDaoError::Database,
+                             QStringLiteral("The updated issue could not be read back.")}
+            : result;
+    }
+    if (!database.commit()) {
+        const QSqlError error = database.lastError();
+        database.rollback();
+        return failure(error, false);
+    }
+    if (updatedIssue) {
+        *updatedIssue = *refreshed;
     }
     return success();
 }

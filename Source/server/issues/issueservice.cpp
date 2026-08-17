@@ -6,11 +6,14 @@
 #include "notifications/notificationmanager.h"
 
 #include <QJsonValue>
+#include <QSet>
 
 #include <cmath>
 
 namespace {
 constexpr double MaximumJsonInteger = 9007199254740991.0;
+constexpr qsizetype MaximumAttachmentCount = 9;
+constexpr qint64 MaximumAttachmentTotalSize = 30 * 1024 * 1024;
 
 IssueServiceResult invalid(const QString &code, const QString &message)
 {
@@ -25,6 +28,21 @@ IssueServiceResult notFound(const QString &code, const QString &message)
 IssueServiceResult forbidden(const QString &code, const QString &message)
 {
     return {IssueServiceError::Forbidden, code, message};
+}
+
+IssueServiceResult attachmentFailure(const AttachmentServiceResult &result)
+{
+    IssueServiceError error = IssueServiceError::Database;
+    if (result.error == AttachmentServiceError::InvalidInput) {
+        error = IssueServiceError::InvalidInput;
+    } else if (result.error == AttachmentServiceError::NotFound) {
+        error = IssueServiceError::NotFound;
+    } else if (result.error == AttachmentServiceError::Conflict) {
+        error = IssueServiceError::Conflict;
+    } else if (result.error == AttachmentServiceError::Storage) {
+        error = IssueServiceError::Storage;
+    }
+    return {error, result.code, result.message};
 }
 
 bool validStatus(const QString &status)
@@ -248,6 +266,14 @@ IssueServiceResult IssueService::get(qint64 id) const
 IssueServiceResult IssueService::create(
     const QJsonObject &values, const UserRecord &currentUser)
 {
+    return createWithAttachments(values, {}, currentUser);
+}
+
+IssueServiceResult IssueService::createWithAttachments(
+    const QJsonObject &values,
+    const QList<MultipartFile> &files,
+    const UserRecord &currentUser)
+{
     if (!canCreate(currentUser)) {
         return forbidden(QStringLiteral("issue_write_forbidden"),
                          QStringLiteral("Issue creation requires write permission."));
@@ -310,9 +336,21 @@ IssueServiceResult IssueService::create(
 
     issue.status = QStringLiteral("open");
     issue.reporterId = currentUser.id;
+    AttachmentServiceResult attachmentResult;
+    if (!files.isEmpty()) {
+        attachmentResult = m_attachmentService.processIssueAttachments(
+            0, currentUser.id, files);
+        if (!attachmentResult.ok()) {
+            return attachmentFailure(attachmentResult);
+        }
+    }
     IssueServiceResult result;
-    const IssueDaoResult daoResult = m_dao.create(issue, &result.issue);
+    const IssueDaoResult daoResult = files.isEmpty()
+        ? m_dao.create(issue, &result.issue)
+        : m_dao.createWithAttachments(
+              issue, attachmentResult.attachments, &result.issue);
     if (!daoResult.ok()) {
+        m_attachmentService.removeFiles(attachmentResult.attachments);
         return daoFailure(daoResult);
     }
     m_notificationManager.issueCreated(result.issue, currentUser);
@@ -321,6 +359,16 @@ IssueServiceResult IssueService::create(
 
 IssueServiceResult IssueService::update(
     qint64 id, const QJsonObject &values, const UserRecord &currentUser)
+{
+    return updateWithAttachments(id, values, {}, {}, currentUser);
+}
+
+IssueServiceResult IssueService::updateWithAttachments(
+    qint64 id,
+    const QJsonObject &values,
+    const QList<MultipartFile> &files,
+    const QList<qint64> &removeAttachmentIds,
+    const UserRecord &currentUser)
 {
     IssueServiceResult existingResult = get(id);
     if (!existingResult.ok()) {
@@ -384,7 +432,7 @@ IssueServiceResult IssueService::update(
             issue.assigneeId = assigneeId;
         }
     }
-    if (!hasUpdate) {
+    if (!hasUpdate && files.isEmpty() && removeAttachmentIds.isEmpty()) {
         return invalid(QStringLiteral("missing_issue_fields"),
                        QStringLiteral("At least one editable issue field is required."));
     }
@@ -398,14 +446,105 @@ IssueServiceResult IssueService::update(
         return assigneeResult;
     }
 
+    QList<AttachmentRecord> removedAttachments;
+    if (!files.isEmpty() || !removeAttachmentIds.isEmpty()) {
+        const AttachmentServiceResult existingAttachmentsResult =
+            m_attachmentService.issueAttachments(id);
+        if (!existingAttachmentsResult.ok()) {
+            return attachmentFailure(existingAttachmentsResult);
+        }
+        QSet<qint64> removeIds;
+        for (qint64 removeId : removeAttachmentIds) {
+            if (removeId <= 0 || removeIds.contains(removeId)) {
+                return invalid(QStringLiteral("invalid_attachment_removal"),
+                               QStringLiteral("Attachment removal ids are invalid."));
+            }
+            bool found = false;
+            for (const AttachmentRecord &attachment : existingAttachmentsResult.attachments) {
+                if (attachment.id == removeId) {
+                    removedAttachments.append(attachment);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return invalid(QStringLiteral("invalid_attachment_removal"),
+                               QStringLiteral("Description attachment does not belong to this issue."));
+            }
+            removeIds.insert(removeId);
+        }
+
+        qint64 retainedSize = 0;
+        qsizetype retainedCount = 0;
+        for (const AttachmentRecord &attachment : existingAttachmentsResult.attachments) {
+            if (!removeIds.contains(attachment.id)) {
+                ++retainedCount;
+                retainedSize += attachment.fileSize;
+            }
+        }
+        qint64 newSize = 0;
+        for (const MultipartFile &file : files) {
+            newSize += file.data.size();
+        }
+        if (retainedCount + files.size() > MaximumAttachmentCount) {
+            return invalid(QStringLiteral("invalid_attachment_count"),
+                           QStringLiteral("An issue can contain at most 9 description attachments."));
+        }
+        if (retainedSize + newSize > MaximumAttachmentTotalSize) {
+            return invalid(QStringLiteral("invalid_attachment_total_size"),
+                           QStringLiteral("Issue description attachments must not exceed 30 MiB in total."));
+        }
+    }
+
+    AttachmentServiceResult newAttachmentsResult;
+    if (!files.isEmpty()) {
+        newAttachmentsResult = m_attachmentService.processIssueAttachments(
+            id, currentUser.id, files);
+        if (!newAttachmentsResult.ok()) {
+            return attachmentFailure(newAttachmentsResult);
+        }
+    }
+    StagedFileRemoval stagedRemoval;
+    if (!removedAttachments.isEmpty()) {
+        const AttachmentServiceResult stageResult =
+            m_attachmentService.stageRemoval(removedAttachments, &stagedRemoval);
+        if (!stageResult.ok()) {
+            m_attachmentService.removeFiles(newAttachmentsResult.attachments);
+            return attachmentFailure(stageResult);
+        }
+    }
+
     IssueServiceResult result;
-    const IssueDaoResult daoResult = m_dao.update(issue, &result.issue);
+    const bool changesAttachments = !files.isEmpty() || !removeAttachmentIds.isEmpty();
+    const IssueDaoResult daoResult = changesAttachments
+        ? m_dao.updateWithAttachments(issue, newAttachmentsResult.attachments,
+                                      removeAttachmentIds, &result.issue)
+        : m_dao.update(issue, &result.issue);
     if (!daoResult.ok()) {
+        m_attachmentService.removeFiles(newAttachmentsResult.attachments);
+        m_attachmentService.rollbackRemoval(&stagedRemoval);
         return daoFailure(daoResult);
     }
+    m_attachmentService.commitRemoval(&stagedRemoval);
     m_notificationManager.issueUpdated(existingResult.issue,
                                        result.issue,
                                        currentUser);
+    return result;
+}
+
+IssueServiceResult IssueService::descriptionAttachments(qint64 id) const
+{
+    const IssueServiceResult issueResult = get(id);
+    if (!issueResult.ok()) {
+        return issueResult;
+    }
+    const AttachmentServiceResult attachmentResult =
+        m_attachmentService.issueAttachments(id);
+    if (!attachmentResult.ok()) {
+        return attachmentFailure(attachmentResult);
+    }
+    IssueServiceResult result;
+    result.attachments = attachmentResult.attachments;
     return result;
 }
 
