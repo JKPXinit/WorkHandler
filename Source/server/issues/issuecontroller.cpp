@@ -166,8 +166,8 @@ void IssueController::registerRoutes(QHttpServer &server)
                 QList<MultipartFile> files;
                 QList<qint64> removeAttachmentIds;
                 QString parseError;
-                if (!MultipartParser::parseIssue(
-                        request, MaximumIssueBodySize, 9, &body, &files,
+                if (!MultipartParser::parseAttachmentForm(
+                        request, QByteArrayLiteral("issue"), MaximumIssueBodySize, 9, &body, &files,
                         &removeAttachmentIds, &parseError)
                     || files.isEmpty() || !removeAttachmentIds.isEmpty()) {
                     return ApiContext::errorResponse(
@@ -217,8 +217,8 @@ void IssueController::registerRoutes(QHttpServer &server)
                 QList<MultipartFile> files;
                 QList<qint64> removeAttachmentIds;
                 QString parseError;
-                if (!MultipartParser::parseIssue(
-                        request, MaximumIssueBodySize, 9, &body, &files,
+                if (!MultipartParser::parseAttachmentForm(
+                        request, QByteArrayLiteral("issue"), MaximumIssueBodySize, 9, &body, &files,
                         &removeAttachmentIds, &parseError)) {
                     return ApiContext::errorResponse(
                         StatusCode::BadRequest,
