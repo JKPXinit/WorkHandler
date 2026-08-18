@@ -18,6 +18,7 @@
 #include <QNetworkRequest>
 #include <QMessageAuthenticationCode>
 #include <QPair>
+#include <QSet>
 #include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlQuery>
@@ -61,6 +62,7 @@ private slots:
     void userOptionsAndBlockCrud();
     void issueCrudFilteringAndPermissions();
     void commentReadAndCreatePermissions();
+    void commentEditAndSoftDelete();
     void notificationApiAndBusinessEvents();
     void commentImagesAndCascadeCleanup();
     void attachmentUploadReadAndDeletePermissions();
@@ -89,6 +91,11 @@ private:
     Reply requestCommentMultipart(
         const QString &path,
         const QString &content,
+        const QList<QPair<QString, QByteArray>> &files,
+        const QString &token = QString());
+    Reply requestCommentEditMultipart(
+        const QString &path,
+        const QJsonObject &comment,
         const QList<QPair<QString, QByteArray>> &files,
         const QString &token = QString());
     Reply requestIssueMultipart(
@@ -427,6 +434,14 @@ void HttpServerIntegrationTest::attachmentCommentMigration()
         QString errorMessage;
         QVERIFY2(database.initialize(&errorMessage), qPrintable(errorMessage));
         QSqlQuery query(database.connection());
+        QVERIFY(query.exec(QStringLiteral("PRAGMA table_info(comments)")));
+        QSet<QString> commentColumns;
+        while (query.next()) {
+            commentColumns.insert(query.value(1).toString());
+        }
+        QVERIFY(commentColumns.contains(QStringLiteral("deleted_at")));
+        QVERIFY(commentColumns.contains(QStringLiteral("deleted_by_id")));
+        QVERIFY(commentColumns.contains(QStringLiteral("deleted_by_name")));
         QVERIFY(query.exec(QStringLiteral("PRAGMA table_info(attachments)")));
         bool foundCommentId = false;
         while (query.next()) {
@@ -1447,6 +1462,270 @@ void HttpServerIntegrationTest::commentReadAndCreatePermissions()
     QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(guest.id),
                      {}, m_token).status,
              200);
+}
+
+void HttpServerIntegrationTest::commentEditAndSoftDelete()
+{
+    QString errorMessage;
+    UserSummary member;
+    UserSummary other;
+    UserSummary guest;
+    QVERIFY2(m_server->createManagedUser(
+                 QStringLiteral("comment_moderation_member"), &member, &errorMessage),
+             qPrintable(errorMessage));
+    QVERIFY2(m_server->createManagedUser(
+                 QStringLiteral("comment_moderation_other"), &other, &errorMessage),
+             qPrintable(errorMessage));
+    QVERIFY2(m_server->createManagedUser(
+                 QStringLiteral("comment_moderation_guest"), &guest, &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/users/%1").arg(member.id),
+        {{QStringLiteral("username"), member.username},
+         {QStringLiteral("role"), QStringLiteral("user")},
+         {QStringLiteral("display_name"), QStringLiteral("Moderation Member")}},
+        m_token).status, 200);
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/users/%1").arg(other.id),
+        {{QStringLiteral("username"), other.username},
+         {QStringLiteral("role"), QStringLiteral("user")},
+         {QStringLiteral("display_name"), QStringLiteral("Moderation Other")}},
+        m_token).status, 200);
+    QCOMPARE(request(
+        "PUT", QStringLiteral("/api/users/%1").arg(guest.id),
+        {{QStringLiteral("username"), guest.username},
+         {QStringLiteral("role"), QStringLiteral("guest")},
+         {QStringLiteral("display_name"), QStringLiteral("Moderation Guest")}},
+        m_token).status, 200);
+
+    const auto login = [this](const QString &username) {
+        return request(
+            "POST", QStringLiteral("/api/auth/login"),
+            {{QStringLiteral("username"), username},
+             {QStringLiteral("password"), QStringLiteral("123456")}});
+    };
+    const Reply memberLogin = login(member.username);
+    const Reply otherLogin = login(other.username);
+    const Reply guestLogin = login(guest.username);
+    QCOMPARE(memberLogin.status, 200);
+    QCOMPARE(otherLogin.status, 200);
+    QCOMPARE(guestLogin.status, 200);
+    const QString memberToken = memberLogin.json().value(QStringLiteral("data")).toObject()
+                                    .value(QStringLiteral("token")).toString();
+    const QString otherToken = otherLogin.json().value(QStringLiteral("data")).toObject()
+                                   .value(QStringLiteral("token")).toString();
+    const QString guestToken = guestLogin.json().value(QStringLiteral("data")).toObject()
+                                   .value(QStringLiteral("token")).toString();
+
+    const Reply blockCreated = request(
+        "POST", QStringLiteral("/api/blocks"),
+        {{QStringLiteral("title"), QStringLiteral("Comment Moderation")}}, m_token);
+    QCOMPARE(blockCreated.status, 201);
+    const qint64 blockId = blockCreated.json().value(QStringLiteral("data")).toObject()
+                               .value(QStringLiteral("block")).toObject()
+                               .value(QStringLiteral("id")).toInteger();
+    const Reply issueCreated = request(
+        "POST", QStringLiteral("/api/issues"),
+        {{QStringLiteral("block_id"), blockId},
+         {QStringLiteral("title"), QStringLiteral("Editable comments")}}, memberToken);
+    QCOMPARE(issueCreated.status, 201);
+    const qint64 issueId = issueCreated.json().value(QStringLiteral("data")).toObject()
+                               .value(QStringLiteral("issue")).toObject()
+                               .value(QStringLiteral("id")).toInteger();
+    const QString commentsPath = QStringLiteral("/api/issues/%1/comments").arg(issueId);
+
+    const Reply firstCreated = requestCommentMultipart(
+        commentsPath,
+        QStringLiteral("[Keep](upload:0)\n[Remove](upload:1)\nOriginal text"),
+        {{QStringLiteral("keep.bin"), QByteArrayLiteral("keep-data")},
+         {QStringLiteral("remove.docx"), QByteArrayLiteral("remove-data")}},
+        memberToken);
+    QCOMPARE(firstCreated.status, 201);
+    const QJsonObject firstComment = firstCreated.json().value(QStringLiteral("data")).toObject()
+                                         .value(QStringLiteral("comment")).toObject();
+    const qint64 firstCommentId = firstComment.value(QStringLiteral("id")).toInteger();
+    const QJsonArray firstAttachments = firstComment.value(QStringLiteral("attachments")).toArray();
+    QCOMPARE(firstAttachments.size(), 2);
+    const qint64 keepId = firstAttachments.at(0).toObject()
+                              .value(QStringLiteral("id")).toInteger();
+    const qint64 removeId = firstAttachments.at(1).toObject()
+                                .value(QStringLiteral("id")).toInteger();
+    const QString firstPath = QStringLiteral("/api/comments/%1").arg(firstCommentId);
+    const QString authorContent = QStringLiteral(
+        "[Keep](attachment:%1)\n[Remove](attachment:%2)\nAuthor edit")
+                                      .arg(keepId).arg(removeId);
+
+    QCOMPARE(request("PUT", firstPath,
+                     {{QStringLiteral("content"), authorContent}}).status, 401);
+    QCOMPARE(request("DELETE", firstPath).status, 401);
+    QCOMPARE(request("PUT", firstPath,
+                     {{QStringLiteral("content"), authorContent}}, otherToken).status, 403);
+    QCOMPARE(request("DELETE", firstPath, {}, otherToken).status, 403);
+    QCOMPARE(request("PUT", firstPath,
+                     {{QStringLiteral("content"), authorContent}}, guestToken).status, 403);
+    QCOMPARE(request("DELETE", firstPath, {}, guestToken).status, 403);
+
+    const Reply authorEdited = request(
+        "PUT", firstPath, {{QStringLiteral("content"), authorContent}}, memberToken);
+    QCOMPARE(authorEdited.status, 200);
+    QCOMPARE(authorEdited.json().value(QStringLiteral("data")).toObject()
+                 .value(QStringLiteral("comment")).toObject()
+                 .value(QStringLiteral("content")).toString(), authorContent);
+    const QString adminContent = QStringLiteral(
+        "Admin edit\n[Keep](attachment:%1)\n[Remove](attachment:%2)")
+                                     .arg(keepId).arg(removeId);
+    QCOMPARE(request("PUT", firstPath,
+                     {{QStringLiteral("content"), adminContent}}, m_token).status, 200);
+    QCOMPARE(request("PUT", firstPath,
+                     {{QStringLiteral("content"), QStringLiteral("Missing references")}},
+                     memberToken).status, 400);
+
+    const Reply secondCreated = requestCommentMultipart(
+        commentsPath, QStringLiteral("[Second](upload:0)"),
+        {{QStringLiteral("second.bin"), QByteArrayLiteral("second-data")}},
+        memberToken);
+    QCOMPARE(secondCreated.status, 201);
+    const QJsonObject secondComment = secondCreated.json().value(QStringLiteral("data")).toObject()
+                                          .value(QStringLiteral("comment")).toObject();
+    const qint64 secondCommentId = secondComment.value(QStringLiteral("id")).toInteger();
+    const qint64 secondAttachmentId = secondComment.value(QStringLiteral("attachments")).toArray()
+                                            .at(0).toObject()
+                                            .value(QStringLiteral("id")).toInteger();
+    const QJsonObject crossRemoval {
+        {QStringLiteral("content"), adminContent},
+        {QStringLiteral("remove_attachment_ids"), QJsonArray{secondAttachmentId}}
+    };
+    const Reply crossResult = requestCommentEditMultipart(
+        firstPath, crossRemoval, {}, memberToken);
+    QCOMPARE(crossResult.status, 400);
+    QCOMPARE(crossResult.json().value(QStringLiteral("error")).toObject()
+                 .value(QStringLiteral("code")).toString(),
+             QStringLiteral("invalid_attachment_removal"));
+
+    const QString finalContent = QStringLiteral(
+        "[Keep](attachment:%1)\n[Replacement](upload:0)\nFinal text").arg(keepId);
+    const QJsonObject finalValues {
+        {QStringLiteral("content"), finalContent},
+        {QStringLiteral("remove_attachment_ids"), QJsonArray{removeId}}
+    };
+    const Reply finalEdit = requestCommentEditMultipart(
+        firstPath, finalValues,
+        {{QStringLiteral("replacement.docx"), QByteArrayLiteral("replacement-data")}},
+        memberToken);
+    QCOMPARE(finalEdit.status, 200);
+    const QJsonObject editedComment = finalEdit.json().value(QStringLiteral("data")).toObject()
+                                          .value(QStringLiteral("comment")).toObject();
+    const QString storedContent = editedComment.value(QStringLiteral("content")).toString();
+    QVERIFY(storedContent.contains(QStringLiteral("attachment:%1").arg(keepId)));
+    QVERIFY(!storedContent.contains(QStringLiteral("upload:")));
+    QVERIFY(!storedContent.contains(QStringLiteral("attachment:%1").arg(removeId)));
+    const QJsonArray editedAttachments = editedComment.value(QStringLiteral("attachments")).toArray();
+    QCOMPARE(editedAttachments.size(), 2);
+    bool keepFound = false;
+    for (const QJsonValue &value : editedAttachments) {
+        keepFound = keepFound || value.toObject().value(
+            QStringLiteral("id")).toInteger() == keepId;
+    }
+    QVERIFY(keepFound);
+    QCOMPARE(request("GET", QStringLiteral("/api/attachments/%1").arg(removeId),
+                     {}, guestToken).status, 404);
+
+    QCOMPARE(request("DELETE", firstPath, {}, otherToken).status, 403);
+    const Reply authorDeleted = request("DELETE", firstPath, {}, memberToken);
+    QCOMPARE(authorDeleted.status, 200);
+    const QJsonObject deletedComment = authorDeleted.json().value(QStringLiteral("data")).toObject()
+                                           .value(QStringLiteral("comment")).toObject();
+    QVERIFY(deletedComment.value(QStringLiteral("is_deleted")).toBool());
+    QVERIFY(deletedComment.value(QStringLiteral("content")).toString().isEmpty());
+    QVERIFY(deletedComment.value(QStringLiteral("attachments")).toArray().isEmpty());
+    QCOMPARE(deletedComment.value(QStringLiteral("deleted_by")).toObject()
+                 .value(QStringLiteral("display_name")).toString(),
+             QStringLiteral("Moderation Member"));
+    QCOMPARE(request("PUT", firstPath,
+                     {{QStringLiteral("content"), QStringLiteral("Edit deleted")}},
+                     memberToken).status, 409);
+    QCOMPARE(request("DELETE", firstPath, {}, memberToken).status, 409);
+
+    const QString secondPath = QStringLiteral("/api/comments/%1").arg(secondCommentId);
+    const Reply adminDeleted = request("DELETE", secondPath, {}, m_token);
+    QCOMPARE(adminDeleted.status, 200);
+    QVERIFY(!adminDeleted.json().value(QStringLiteral("data")).toObject()
+                 .value(QStringLiteral("comment")).toObject()
+                 .value(QStringLiteral("deleted_by")).toObject()
+                 .value(QStringLiteral("display_name")).toString().isEmpty());
+
+    const Reply listed = request("GET", commentsPath, {}, guestToken);
+    QCOMPARE(listed.status, 200);
+    const QJsonArray listedComments = listed.json().value(QStringLiteral("data")).toObject()
+                                          .value(QStringLiteral("comments")).toArray();
+    QCOMPARE(listedComments.size(), 2);
+    QCOMPARE(listedComments.at(0).toObject().value(QStringLiteral("id")).toInteger(),
+             firstCommentId);
+    QCOMPARE(listedComments.at(1).toObject().value(QStringLiteral("id")).toInteger(),
+             secondCommentId);
+    for (const QJsonValue &value : listedComments) {
+        const QJsonObject row = value.toObject();
+        QVERIFY(row.value(QStringLiteral("is_deleted")).toBool());
+        QVERIFY(row.value(QStringLiteral("content")).toString().isEmpty());
+        QVERIFY(row.value(QStringLiteral("attachments")).toArray().isEmpty());
+        QVERIFY(!row.value(QStringLiteral("deleted_at")).toString().isEmpty());
+        QVERIFY(row.value(QStringLiteral("deleted_by")).isObject());
+    }
+    QCOMPARE(request("GET", QStringLiteral("/api/issues/%1").arg(issueId), {}, guestToken)
+                 .json().value(QStringLiteral("data")).toObject()
+                 .value(QStringLiteral("issue")).toObject()
+                 .value(QStringLiteral("comment_count")).toInteger(), qint64(2));
+
+    const QString checkConnection = QStringLiteral("comment_soft_delete_check");
+    QStringList retainedFiles;
+    {
+        QSqlDatabase database = QSqlDatabase::addDatabase(
+            QStringLiteral("QSQLITE"), checkConnection);
+        database.setDatabaseName(
+            m_temporaryDirectory.filePath(QStringLiteral("issue_panel.db")));
+        QVERIFY(database.open());
+        QSqlQuery query(database);
+        query.prepare(QStringLiteral(
+            "SELECT content, deleted_at, deleted_by_id, deleted_by_name "
+            "FROM comments WHERE id = ?"));
+        query.addBindValue(firstCommentId);
+        QVERIFY(query.exec());
+        QVERIFY(query.next());
+        QCOMPARE(query.value(0).toString(), storedContent);
+        QVERIFY(!query.value(1).toString().isEmpty());
+        QCOMPARE(query.value(2).toLongLong(), member.id);
+        QCOMPARE(query.value(3).toString(), QStringLiteral("Moderation Member"));
+        query.prepare(QStringLiteral(
+            "SELECT storage_path FROM attachments WHERE comment_id = ? ORDER BY id"));
+        query.addBindValue(firstCommentId);
+        QVERIFY(query.exec());
+        while (query.next()) {
+            retainedFiles.append(QDir(
+                m_temporaryDirectory.filePath(QStringLiteral("uploads")))
+                                     .filePath(query.value(0).toString()));
+        }
+        QCOMPARE(retainedFiles.size(), 2);
+        query.prepare(QStringLiteral(
+            "SELECT COUNT(*) FROM attachments WHERE comment_id = ?"));
+        query.addBindValue(secondCommentId);
+        QVERIFY(query.exec());
+        QVERIFY(query.next());
+        QCOMPARE(query.value(0).toInt(), 1);
+        database.close();
+    }
+    QSqlDatabase::removeDatabase(checkConnection);
+    for (const QString &path : std::as_const(retainedFiles)) {
+        QVERIFY(QFileInfo::exists(path));
+    }
+
+    QCOMPARE(request("DELETE", QStringLiteral("/api/blocks/%1").arg(blockId),
+                     {}, m_token).status, 200);
+    QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(member.id),
+                     {}, m_token).status, 200);
+    QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(other.id),
+                     {}, m_token).status, 200);
+    QCOMPARE(request("DELETE", QStringLiteral("/api/users/%1").arg(guest.id),
+                     {}, m_token).status, 200);
 }
 
 void HttpServerIntegrationTest::notificationApiAndBusinessEvents()
@@ -2920,6 +3199,35 @@ HttpServerIntegrationTest::requestCommentMultipart(
     payload += "--" + boundary + "--\r\n";
     return requestRaw(
         QByteArrayLiteral("POST"), path, payload, token,
+        QByteArrayLiteral("multipart/form-data; boundary=") + boundary);
+}
+
+HttpServerIntegrationTest::Reply
+HttpServerIntegrationTest::requestCommentEditMultipart(
+    const QString &path,
+    const QJsonObject &comment,
+    const QList<QPair<QString, QByteArray>> &files,
+    const QString &token)
+{
+    const QByteArray boundary = QByteArrayLiteral(
+        "WorkHandlerCommentEditBoundary7MA4YWxkTrZu0gW");
+    QByteArray payload;
+    payload += "--" + boundary + "\r\n";
+    payload += "Content-Disposition: form-data; name=\"comment\"\r\n";
+    payload += "Content-Type: application/json; charset=utf-8\r\n\r\n";
+    payload += QJsonDocument(comment).toJson(QJsonDocument::Compact);
+    payload += "\r\n";
+    for (const auto &file : files) {
+        payload += "--" + boundary + "\r\n";
+        payload += "Content-Disposition: form-data; name=\"files\"; filename=\""
+            + file.first.toUtf8() + "\"\r\n";
+        payload += "Content-Type: application/octet-stream\r\n\r\n";
+        payload += file.second;
+        payload += "\r\n";
+    }
+    payload += "--" + boundary + "--\r\n";
+    return requestRaw(
+        QByteArrayLiteral("PUT"), path, payload, token,
         QByteArrayLiteral("multipart/form-data; boundary=") + boundary);
 }
 
