@@ -108,6 +108,65 @@ void CommentController::registerRoutes(QHttpServer &server)
                       StatusCode::Created)
                 : errorResponse(result);
         });
+
+    server.route(
+        QStringLiteral("/api/comments/<arg>"), Method::Put,
+        [this](qint64 id, const QHttpServerRequest &request) {
+            const ApiContext::AuthorizationResult authorization =
+                m_apiContext.authorize(request, false);
+            if (!authorization.authorized) {
+                return ApiContext::authorizationError(authorization);
+            }
+
+            const QByteArray contentType = request.value("Content-Type").toLower();
+            CommentServiceResult result;
+            if (contentType.startsWith(QByteArrayLiteral("multipart/form-data"))) {
+                QJsonObject body;
+                QList<MultipartFile> files;
+                QList<qint64> removeAttachmentIds;
+                QString parseError;
+                if (!MultipartParser::parseAttachmentForm(
+                        request, QByteArrayLiteral("comment"), MaximumCommentBodySize, 9, &body,
+                        &files, &removeAttachmentIds, &parseError)) {
+                    return ApiContext::errorResponse(
+                        StatusCode::BadRequest,
+                        QStringLiteral("invalid_multipart"), parseError);
+                }
+                result = m_service.updateWithAttachments(
+                    id, body, files, removeAttachmentIds, authorization.user);
+            } else {
+                QJsonObject body;
+                QString parseError;
+                if (!ApiContext::parseJsonObject(request, &body, &parseError)) {
+                    return ApiContext::errorResponse(
+                        StatusCode::BadRequest,
+                        QStringLiteral("invalid_json"), parseError);
+                }
+                result = m_service.update(id, body, authorization.user);
+            }
+            return result.ok()
+                ? ApiContext::successResponse({
+                      {QStringLiteral("comment"), result.comment.toJson()}
+                  })
+                : errorResponse(result);
+        });
+
+    server.route(
+        QStringLiteral("/api/comments/<arg>"), Method::Delete,
+        [this](qint64 id, const QHttpServerRequest &request) {
+            const ApiContext::AuthorizationResult authorization =
+                m_apiContext.authorize(request, false);
+            if (!authorization.authorized) {
+                return ApiContext::authorizationError(authorization);
+            }
+            const CommentServiceResult result = m_service.remove(
+                id, authorization.user);
+            return result.ok()
+                ? ApiContext::successResponse({
+                      {QStringLiteral("comment"), result.comment.toJson()}
+                  })
+                : errorResponse(result);
+        });
 }
 
 QHttpServerResponse CommentController::errorResponse(
