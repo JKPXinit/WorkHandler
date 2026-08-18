@@ -33,7 +33,9 @@ QString commentProjection()
 {
     return QStringLiteral(
         "SELECT c.id, c.issue_id, c.user_id, c.content, c.created_at, "
-        "u.username, COALESCE(u.display_name, '') "
+        "u.username, COALESCE(u.display_name, ''), "
+        "COALESCE(c.deleted_at, ''), c.deleted_by_id, "
+        "COALESCE(c.deleted_by_name, '') "
         "FROM comments c JOIN users u ON u.id = c.user_id ");
 }
 }
@@ -50,18 +52,34 @@ QJsonObject CommentUserReference::toJson() const
 QJsonObject CommentRecord::toJson() const
 {
     QJsonArray attachmentArray;
-    for (const AttachmentRecord &attachment : attachments) {
-        attachmentArray.append(attachment.toJson());
+    if (deletedAt.isEmpty()) {
+        for (const AttachmentRecord &attachment : attachments) {
+            attachmentArray.append(attachment.toJson());
+        }
     }
-    return {
+    QJsonObject object = {
         {QStringLiteral("id"), id},
         {QStringLiteral("issue_id"), issueId},
         {QStringLiteral("user_id"), userId},
-        {QStringLiteral("content"), content},
+        {QStringLiteral("content"), deletedAt.isEmpty() ? content : QString()},
         {QStringLiteral("created_at"), createdAt},
         {QStringLiteral("user"), user.toJson()},
-        {QStringLiteral("attachments"), attachmentArray}
+        {QStringLiteral("attachments"), attachmentArray},
+        {QStringLiteral("is_deleted"), !deletedAt.isEmpty()},
+        {QStringLiteral("deleted_at"), deletedAt.isEmpty()
+             ? QJsonValue(QJsonValue::Null) : QJsonValue(deletedAt)}
     };
+    if (deletedAt.isEmpty()) {
+        object.insert(QStringLiteral("deleted_by"), QJsonValue(QJsonValue::Null));
+    } else {
+        QJsonObject deletedBy {
+            {QStringLiteral("id"), deletedById
+                 ? QJsonValue(*deletedById) : QJsonValue(QJsonValue::Null)},
+            {QStringLiteral("display_name"), deletedByName}
+        };
+        object.insert(QStringLiteral("deleted_by"), deletedBy);
+    }
+    return object;
 }
 
 bool CommentDaoResult::ok() const
@@ -146,7 +164,7 @@ CommentDaoResult CommentDao::create(qint64 issueId,
         return {CommentDaoError::Database,
                 QStringLiteral("The created comment could not be read back.")};
     }
-    return loadAttachments(createdComment);
+    return success();
 }
 
 CommentDaoResult CommentDao::createWithAttachments(
@@ -225,10 +243,96 @@ CommentDaoResult CommentDao::createWithAttachments(
         return {CommentDaoError::Database,
                 QStringLiteral("The created comment could not be read back.")};
     }
-    const CommentDaoResult attachmentResult = loadAttachments(createdComment);
-    if (!attachmentResult.ok()) {
+    if (!database.commit()) {
+        const QSqlError error = database.lastError();
         database.rollback();
-        return attachmentResult;
+        return failure(error, false);
+    }
+    return success();
+}
+
+CommentDaoResult CommentDao::updateWithAttachments(
+    qint64 id,
+    const QString &content,
+    const QList<AttachmentRecord> &attachments,
+    const QList<qint64> &removeAttachmentIds,
+    CommentRecord *updatedComment) const
+{
+    QSqlDatabase database = m_database.connection();
+    if (!database.transaction()) {
+        return failure(database.lastError(), false);
+    }
+    CommentDaoResult result;
+    QSqlQuery removeQuery(database);
+    for (qint64 attachmentId : removeAttachmentIds) {
+        removeQuery.prepare(QStringLiteral(
+            "DELETE FROM attachments WHERE id = ? AND comment_id = ?"));
+        removeQuery.addBindValue(attachmentId);
+        removeQuery.addBindValue(id);
+        if (!removeQuery.exec()) {
+            result = failure(removeQuery.lastError(), true);
+            break;
+        }
+        if (removeQuery.numRowsAffected() != 1) {
+            result = {CommentDaoError::Conflict,
+                      QStringLiteral("Comment attachment could not be removed.")};
+            break;
+        }
+        removeQuery.finish();
+    }
+
+    QString storedContent = content;
+    QSqlQuery attachmentQuery(database);
+    for (qsizetype index = 0; result.ok() && index < attachments.size(); ++index) {
+        const AttachmentRecord &attachment = attachments.at(index);
+        attachmentQuery.prepare(QStringLiteral(
+            "INSERT INTO attachments(issue_id, comment_id, uploader_id, filename, "
+            "content_type, storage_path, thumb_path, original_path, file_size) "
+            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)"));
+        attachmentQuery.addBindValue(attachment.issueId);
+        attachmentQuery.addBindValue(id);
+        attachmentQuery.addBindValue(attachment.uploaderId);
+        attachmentQuery.addBindValue(attachment.filename);
+        attachmentQuery.addBindValue(attachment.contentType);
+        attachmentQuery.addBindValue(attachment.storagePath);
+        attachmentQuery.addBindValue(attachment.thumbnailPath);
+        attachmentQuery.addBindValue(attachment.originalPath);
+        attachmentQuery.addBindValue(attachment.fileSize);
+        if (!attachmentQuery.exec()) {
+            result = failure(attachmentQuery.lastError(), true);
+            break;
+        }
+        storedContent.replace(
+            QStringLiteral("upload:%1").arg(index),
+            QStringLiteral("attachment:%1")
+                .arg(attachmentQuery.lastInsertId().toLongLong()));
+        attachmentQuery.finish();
+    }
+
+    if (result.ok()) {
+        QSqlQuery updateQuery(database);
+        updateQuery.prepare(QStringLiteral(
+            "UPDATE comments SET content = ? WHERE id = ? AND deleted_at IS NULL"));
+        updateQuery.addBindValue(storedContent);
+        updateQuery.addBindValue(id);
+        if (!updateQuery.exec()) {
+            result = failure(updateQuery.lastError(), true);
+        } else if (updateQuery.numRowsAffected() != 1) {
+            result = {CommentDaoError::Conflict,
+                      QStringLiteral("Comment could not be updated.")};
+        }
+    }
+
+    bool found = false;
+    if (result.ok()) {
+        result = commentById(id, updatedComment, &found);
+    }
+    if (!result.ok() || !found) {
+        database.rollback();
+        return result.ok()
+            ? CommentDaoResult{CommentDaoError::Database,
+                               QStringLiteral("The updated comment could not be read back.")}
+            : result;
     }
     if (!database.commit()) {
         const QSqlError error = database.lastError();
@@ -236,6 +340,35 @@ CommentDaoResult CommentDao::createWithAttachments(
         return failure(error, false);
     }
     return success();
+}
+
+CommentDaoResult CommentDao::softDelete(qint64 id,
+                                        qint64 deletedById,
+                                        const QString &deletedByName,
+                                        CommentRecord *deletedComment) const
+{
+    QSqlQuery query(m_database.connection());
+    query.prepare(QStringLiteral(
+        "UPDATE comments SET deleted_at = CURRENT_TIMESTAMP, deleted_by_id = ?, "
+        "deleted_by_name = ? WHERE id = ? AND deleted_at IS NULL"));
+    query.addBindValue(deletedById);
+    query.addBindValue(deletedByName);
+    query.addBindValue(id);
+    if (!query.exec()) {
+        return failure(query.lastError(), true);
+    }
+    if (query.numRowsAffected() != 1) {
+        return {CommentDaoError::Conflict,
+                QStringLiteral("Comment could not be deleted.")};
+    }
+    bool found = false;
+    const CommentDaoResult result = commentById(id, deletedComment, &found);
+    if (!result.ok()) {
+        return result;
+    }
+    return found ? success()
+                 : CommentDaoResult{CommentDaoError::Database,
+                                    QStringLiteral("The deleted comment could not be read back.")};
 }
 
 CommentDaoResult CommentDao::commentById(qint64 id,
@@ -255,6 +388,10 @@ CommentDaoResult CommentDao::commentById(qint64 id,
     if (query.next()) {
         if (comment) {
             *comment = readComment(query);
+            const CommentDaoResult result = loadAttachments(comment);
+            if (!result.ok()) {
+                return result;
+            }
         }
         if (found) {
             *found = true;
@@ -311,5 +448,10 @@ CommentRecord CommentDao::readComment(const QSqlQuery &query)
         query.value(5).toString(),
         query.value(6).toString()
     };
+    comment.deletedAt = query.value(7).toString();
+    if (!query.value(8).isNull()) {
+        comment.deletedById = query.value(8).toLongLong();
+    }
+    comment.deletedByName = query.value(9).toString();
     return comment;
 }

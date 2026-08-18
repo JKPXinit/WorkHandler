@@ -78,6 +78,7 @@ public:
     QByteArray tokenSecret(QString *errorMessage = nullptr) const;
 
 private:
+    bool migrateCommentModeration(QString *errorMessage);
     bool migrateAttachmentsToComments(QString *errorMessage);
     bool migrateAttachmentCommentOptional(QString *errorMessage);
     bool migrateAttachmentOriginalPath(QString *errorMessage);
