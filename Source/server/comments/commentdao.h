@@ -7,6 +7,8 @@
 #include <QList>
 #include <QString>
 
+#include <optional>
+
 class DatabaseManager;
 class QSqlQuery;
 
@@ -26,6 +28,9 @@ struct CommentRecord
     qint64 userId {0};
     QString content;
     QString createdAt;
+    QString deletedAt;
+    std::optional<qint64> deletedById;
+    QString deletedByName;
     CommentUserReference user;
     QList<AttachmentRecord> attachments;
 
@@ -53,6 +58,9 @@ public:
 
     CommentDaoResult comments(qint64 issueId,
                               QList<CommentRecord> *comments) const;
+    CommentDaoResult commentById(qint64 id,
+                                 CommentRecord *comment,
+                                 bool *found) const;
     CommentDaoResult issueExists(qint64 issueId, bool *exists) const;
     CommentDaoResult create(qint64 issueId,
                             qint64 userId,
@@ -64,11 +72,18 @@ public:
         const QString &content,
         const QList<AttachmentRecord> &attachments,
         CommentRecord *createdComment) const;
+    CommentDaoResult updateWithAttachments(
+        qint64 id,
+        const QString &content,
+        const QList<AttachmentRecord> &attachments,
+        const QList<qint64> &removeAttachmentIds,
+        CommentRecord *updatedComment) const;
+    CommentDaoResult softDelete(qint64 id,
+                                qint64 deletedById,
+                                const QString &deletedByName,
+                                CommentRecord *deletedComment) const;
 
 private:
-    CommentDaoResult commentById(qint64 id,
-                                 CommentRecord *comment,
-                                 bool *found) const;
     static CommentRecord readComment(const QSqlQuery &query);
     CommentDaoResult loadAttachments(CommentRecord *comment) const;
 

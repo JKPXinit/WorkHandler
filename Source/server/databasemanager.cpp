@@ -133,7 +133,10 @@ bool DatabaseManager::initialize(QString *errorMessage,
             "id INTEGER PRIMARY KEY AUTOINCREMENT,"
             "issue_id INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,"
             "user_id INTEGER NOT NULL REFERENCES users(id),"
-            "content TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"),
+            "content TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
+            "deleted_at DATETIME,"
+            "deleted_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,"
+            "deleted_by_name TEXT)"),
         QStringLiteral(
             "CREATE INDEX IF NOT EXISTS idx_comments_issue_id "
             "ON comments(issue_id)"),
@@ -174,7 +177,8 @@ bool DatabaseManager::initialize(QString *errorMessage,
         }
     }
 
-    if (!migrateAttachmentsToComments(errorMessage)
+    if (!migrateCommentModeration(errorMessage)
+        || !migrateAttachmentsToComments(errorMessage)
         || !migrateAttachmentOriginalPath(errorMessage)
         || !migrateAttachmentCommentOptional(errorMessage)
         || !execute(QStringLiteral(
@@ -269,6 +273,32 @@ bool DatabaseManager::initialize(QString *errorMessage,
     }
 
     return true;
+}
+
+bool DatabaseManager::migrateCommentModeration(QString *errorMessage)
+{
+    QSet<QString> columns;
+    QSqlQuery query(m_database);
+    if (!query.exec(QStringLiteral("PRAGMA table_info(comments)"))) {
+        setError(errorMessage, query.lastError().text());
+        return false;
+    }
+    while (query.next()) {
+        columns.insert(query.value(1).toString());
+    }
+    query.finish();
+    if (!columns.contains(QStringLiteral("deleted_at"))
+        && !execute(QStringLiteral("ALTER TABLE comments ADD COLUMN deleted_at DATETIME"), errorMessage)) {
+        return false;
+    }
+    if (!columns.contains(QStringLiteral("deleted_by_id"))
+        && !execute(QStringLiteral(
+            "ALTER TABLE comments ADD COLUMN deleted_by_id INTEGER "
+            "REFERENCES users(id) ON DELETE SET NULL"), errorMessage)) {
+        return false;
+    }
+    return columns.contains(QStringLiteral("deleted_by_name"))
+        || execute(QStringLiteral("ALTER TABLE comments ADD COLUMN deleted_by_name TEXT"), errorMessage);
 }
 
 bool DatabaseManager::migrateAttachmentsToComments(QString *errorMessage)

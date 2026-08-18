@@ -29,13 +29,14 @@ public:
                              QString *content,
                              QList<MultipartFile> *files,
                              QString *errorMessage);
-    static bool parseIssue(const QHttpServerRequest &request,
-                           qsizetype maximumBodySize,
-                           int maximumFiles,
-                           QJsonObject *values,
-                           QList<MultipartFile> *files,
-                           QList<qint64> *removeAttachmentIds,
-                           QString *errorMessage);
+    static bool parseAttachmentForm(const QHttpServerRequest &request,
+                                    const QByteArray &jsonFieldName,
+                                    qsizetype maximumBodySize,
+                                    int maximumFiles,
+                                    QJsonObject *values,
+                                    QList<MultipartFile> *files,
+                                    QList<qint64> *removeAttachmentIds,
+                                    QString *errorMessage);
 };
 
 #endif // MULTIPARTPARSER_H
