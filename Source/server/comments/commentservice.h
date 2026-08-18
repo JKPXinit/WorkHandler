@@ -47,6 +47,17 @@ public:
         const QString &content,
         const QList<MultipartFile> &files,
         const UserRecord &currentUser);
+    CommentServiceResult update(qint64 id,
+                                const QJsonObject &values,
+                                const UserRecord &currentUser);
+    CommentServiceResult updateWithAttachments(
+        qint64 id,
+        const QJsonObject &values,
+        const QList<MultipartFile> &files,
+        const QList<qint64> &removeAttachmentIds,
+        const UserRecord &currentUser);
+    CommentServiceResult remove(qint64 id,
+                                const UserRecord &currentUser);
 
 private:
     CommentServiceResult validateIssue(qint64 issueId) const;

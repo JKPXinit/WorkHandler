@@ -604,12 +604,23 @@ svg.icon { width: 18px; height: 18px; flex: 0 0 auto; fill: none; stroke: curren
 .comment { display: grid; grid-template-columns: 36px minmax(0,1fr); gap: 12px; padding: 18px 0; border-bottom: 1px solid var(--hairline); }
 .comment:first-child { padding-top: 0; }
 .comment .avatar { width: 36px; height: 36px; }
-.comment-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+.comment-content { min-width: 0; }
+.comment-head { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
+.comment-head-meta { display: flex; align-items: center; gap: 6px; }
 .comment-head span { color: var(--muted); white-space: nowrap; }
+.comment-menu-wrap { position: relative; }
+.comment-menu-button { width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; color: var(--muted); cursor: pointer; }
+.comment-menu-button:hover, .comment-menu-button[aria-expanded="true"] { background: var(--parchment); color: var(--ink); }
+.comment-menu { position: absolute; top: 32px; right: 0; z-index: 5; display: grid; min-width: 112px; padding: 5px; border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--canvas); box-shadow: rgba(0,0,0,0.18) 0 8px 24px; }
+.comment-menu.hidden { display: none; }
+.comment-menu button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--ink-soft); cursor: pointer; text-align: left; }
+.comment-menu button:hover { background: var(--parchment); color: var(--ink); }
+.comment-menu button.comment-delete-action { color: var(--danger); }
 .comment-body { margin: 4px 0 0; overflow-wrap: anywhere; color: var(--ink-soft); font-size: 13px; white-space: pre-wrap; }
-.comment-body .comment-image { display: inline-block; max-width: 100%; margin: 8px 8px 2px 0; vertical-align: top; border: 0; background: transparent; cursor: zoom-in; }
+.comment-deleted { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+.comment-body .comment-image { display: block; width: fit-content; max-width: 100%; margin: 8px 0 2px; border: 0; background: transparent; cursor: zoom-in; }
 .comment-body .comment-image img { display: block; width: min(180px, 100%); aspect-ratio: 4/3; object-fit: cover; border: 1px solid var(--hairline); background: var(--parchment); }
-.comment-file { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; margin: 8px 8px 2px 0; padding: 8px 10px; border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--pearl); color: var(--ink-soft); vertical-align: middle; text-decoration: none; }
+.comment-file { display: flex; align-items: center; gap: 8px; width: fit-content; max-width: 100%; margin: 8px 0 2px; padding: 8px 10px; border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--pearl); color: var(--ink-soft); text-decoration: none; }
 .comment-file:hover { border-color: var(--blue); color: var(--blue); }
 .comment-file-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .comment-file-size { color: var(--muted); font-size: 11px; white-space: nowrap; }
@@ -785,6 +796,7 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
   <symbol id="i-logout" viewBox="0 0 24 24"><path d="M10 17l5-5-5-5M15 12H3M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/></symbol>
   <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
   <symbol id="i-up" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></symbol>
   <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
   <symbol id="i-paperclip" viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66L9.41 17.4a2 2 0 0 1-2.83-2.83l8.49-8.48"/></symbol>
@@ -1037,6 +1049,9 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     comments: [],
     issueAttachments: [],
     commentImages: [],
+    commentEditFiles: [],
+    commentEditAttachments: [],
+    removedCommentAttachmentIds: [],
     issueFiles: [],
     issueExistingAttachments: [],
     removedIssueAttachmentIds: [],
@@ -1226,6 +1241,54 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     });
   }
 
+  function demoCommentResponse(comment) {
+    var copy = Object.assign({}, comment);
+    var deleted = Boolean(comment.deleted_at);
+    copy.user = demo.users.find(function (user) { return user.id === comment.user_id; }) || null;
+    copy.content = deleted ? '' : comment.content;
+    copy.attachments = deleted ? [] : demo.attachments.filter(function (attachment) {
+      return attachment.comment_id === comment.id;
+    });
+    copy.is_deleted = deleted;
+    copy.deleted_at = comment.deleted_at || null;
+    copy.deleted_by = deleted ? {
+      id: comment.deleted_by_id || null,
+      display_name: comment.deleted_by_name || ''
+    } : null;
+    return copy;
+  }
+
+  function demoCommentForm(body) {
+    if (!(body instanceof FormData)) return { values: body || {}, files: [], removeIds: [] };
+    var values = {};
+    try { values = JSON.parse(String(body.get('comment') || '{}')); }
+    catch (error) { values = {}; }
+    var removeIds = Array.isArray(values.remove_attachment_ids)
+      ? values.remove_attachment_ids.map(Number) : [];
+    delete values.remove_attachment_ids;
+    return { values: values, files: body.getAll('files'), removeIds: removeIds };
+  }
+
+  function addDemoCommentAttachments(issueId, commentId, files) {
+    var nextId = demo.attachments.reduce(function (max, item) { return Math.max(max, item.id); }, 0) + 1;
+    return files.map(function (file, index) {
+      var attachment = {
+        id: nextId + index,
+        issue_id: issueId,
+        comment_id: commentId,
+        uploader_id: demoUser().id,
+        filename: file.name || 'attachment.bin',
+        content_type: file.type || 'application/octet-stream',
+        is_image: /^image\//.test(file.type || '') || /\.(png|jpe?g|webp)$/i.test(file.name || ''),
+        file_size: file.size || 0,
+        created_at: new Date().toISOString(),
+        preview_url: URL.createObjectURL(file)
+      };
+      demo.attachments.push(attachment);
+      return attachment;
+    });
+  }
+
   function demoRequest(path, options) {
     options = options || {};
     var method = String(options.method || 'GET').toUpperCase();
@@ -1407,40 +1470,86 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
             return;
           }
           if (method === 'GET') {
-            resolve(success({ comments: demo.comments.filter(function (item) { return item.issue_id === commentIssueId; }).map(function (item) {
-              var copy = Object.assign({}, item);
-              copy.user = demo.users.find(function (user) { return user.id === item.user_id; }) || null;
-              copy.attachments = demo.attachments.filter(function (attachment) { return attachment.comment_id === item.id; });
-              return copy;
-            }) }));
+            resolve(success({ comments: demo.comments.filter(function (item) {
+              return item.issue_id === commentIssueId;
+            }).map(demoCommentResponse) }));
             return;
           }
           if (method === 'POST') {
             var commentId = demo.comments.reduce(function (max, item) { return Math.max(max, item.id); }, 0) + 1;
             var formContent = body instanceof FormData ? String(body.get('content') || '') : String(body.content || '');
             var formFiles = body instanceof FormData ? body.getAll('files') : [];
-            var createdAttachments = formFiles.map(function (file, index) {
-              var attachmentId = demo.attachments.reduce(function (max, item) { return Math.max(max, item.id); }, 0) + index + 1;
-              return {
-                id: attachmentId,
-                issue_id: commentIssueId,
-                comment_id: commentId,
-                uploader_id: demoUser().id,
-                filename: file.name || 'image.png',
-                content_type: file.type || 'application/octet-stream',
-                is_image: /^image\//.test(file.type || '') || /\.(png|jpe?g|webp)$/i.test(file.name || ''),
-                file_size: file.size || 0,
-                created_at: new Date().toISOString(),
-                preview_url: URL.createObjectURL(file)
-              };
+            var createdAttachments = addDemoCommentAttachments(commentIssueId, commentId, formFiles);
+            createdAttachments.forEach(function (attachment, index) {
+              formContent = formContent.replace('upload:' + index, 'attachment:' + attachment.id);
             });
-            var createdComment = { id: commentId, issue_id: commentIssueId, user_id: demoUser().id, content: formContent, created_at: new Date().toISOString(), attachments: createdAttachments };
+            var createdComment = {
+              id: commentId,
+              issue_id: commentIssueId,
+              user_id: demoUser().id,
+              content: formContent,
+              created_at: new Date().toISOString(),
+              deleted_at: null,
+              deleted_by_id: null,
+              deleted_by_name: ''
+            };
             demo.comments.push(createdComment);
-            createdAttachments.forEach(function (attachment) { demo.attachments.push(attachment); });
-            createdComment.user = demoUser();
-            resolve(success({ comment: createdComment }, 201));
+            resolve(success({ comment: demoCommentResponse(createdComment) }, 201));
             return;
           }
+        }
+        match = pathname.match(/^\/api\/comments\/(\d+)$/);
+        if (match && (method === 'PUT' || method === 'DELETE')) {
+          var targetComment = demo.comments.find(function (item) { return item.id === Number(match[1]); });
+          if (!targetComment) {
+            resolve(failure(404, 'comment_not_found', '评论不存在'));
+            return;
+          }
+          var commentActor = demoUser();
+          var canModifyComment = commentActor.role === 'admin' ||
+            commentActor.role === 'user' && commentActor.id === targetComment.user_id;
+          if (!canModifyComment) {
+            resolve(failure(403, method === 'PUT' ? 'comment_edit_forbidden' : 'comment_delete_forbidden', '只能操作自己的评论'));
+            return;
+          }
+          if (targetComment.deleted_at) {
+            resolve(failure(409, 'comment_deleted', '此条评论已经被删除'));
+            return;
+          }
+          if (method === 'DELETE') {
+            targetComment.deleted_at = new Date().toISOString();
+            targetComment.deleted_by_id = commentActor.id;
+            targetComment.deleted_by_name = displayName(commentActor);
+            resolve(success({ comment: demoCommentResponse(targetComment) }));
+            return;
+          }
+          var commentForm = demoCommentForm(body);
+          var commentValues = commentForm.values;
+          var commentContent = String(commentValues.content || '');
+          var currentCommentAttachments = demo.attachments.filter(function (attachment) {
+            return attachment.comment_id === targetComment.id;
+          });
+          var invalidRemoval = commentForm.removeIds.some(function (id) {
+            return !currentCommentAttachments.some(function (attachment) {
+              return Number(attachment.id) === Number(id);
+            });
+          });
+          if (invalidRemoval) {
+            resolve(failure(400, 'invalid_attachment_removal', '附件不属于此条评论'));
+            return;
+          }
+          demo.attachments = demo.attachments.filter(function (attachment) {
+            return attachment.comment_id !== targetComment.id ||
+              commentForm.removeIds.indexOf(Number(attachment.id)) < 0;
+          });
+          var newCommentAttachments = addDemoCommentAttachments(
+            targetComment.issue_id, targetComment.id, commentForm.files);
+          newCommentAttachments.forEach(function (attachment, index) {
+            commentContent = commentContent.replace('upload:' + index, 'attachment:' + attachment.id);
+          });
+          targetComment.content = commentContent;
+          resolve(success({ comment: demoCommentResponse(targetComment) }));
+          return;
         }
         match = pathname.match(/^\/api\/attachments\/(\d+)$/);
         if (match && method === 'GET') {
@@ -1794,6 +1903,12 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     return state.currentUser && state.currentUser.role !== 'guest';
   }
 
+  function canModifyComment(comment) {
+    if (!state.currentUser || !comment || comment.is_deleted || comment.deleted_at) return false;
+    return state.currentUser.role === 'admin' ||
+      state.currentUser.role === 'user' && Number(comment.user_id) === Number(state.currentUser.id);
+  }
+
   async function openIssue(identifier, updateHash) {
     var numericId = parseTaskId(identifier);
     if (!numericId) {
@@ -1917,6 +2032,28 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     }
     html += escapeHtml(content.slice(cursor));
     return html.replace(/\r?\n/g, '<br>');
+  }
+
+  function commentHtml(comment) {
+    var deleted = Boolean(comment.is_deleted || comment.deleted_at);
+    var html = '<article class="comment" data-comment-id="' + Number(comment.id) + '">';
+    html += '<span class="avatar">' + escapeHtml(initials(comment.user)) + '</span><div class="comment-content">';
+    html += '<div class="comment-head"><strong>' + escapeHtml(displayName(comment.user)) + '</strong><div class="comment-head-meta">';
+    html += '<span>' + escapeHtml(formatDate(comment.created_at)) + '</span>';
+    if (canModifyComment(comment)) {
+      html += '<div class="comment-menu-wrap"><button class="comment-menu-button" type="button" data-action="toggle-comment-menu" data-id="' + Number(comment.id) + '" aria-haspopup="menu" aria-expanded="false" title="评论操作" aria-label="评论操作">' + icon('more') + '</button>';
+      html += '<div class="comment-menu hidden" data-comment-menu="' + Number(comment.id) + '" role="menu">';
+      html += '<button type="button" data-action="edit-comment" data-id="' + Number(comment.id) + '" role="menuitem">' + icon('edit') + '编辑</button>';
+      html += '<button class="comment-delete-action" type="button" data-action="delete-comment" data-id="' + Number(comment.id) + '" role="menuitem">' + icon('trash') + '删除</button></div></div>';
+    }
+    html += '</div></div>';
+    if (deleted) {
+      var deletedBy = comment.deleted_by || {};
+      html += '<p class="comment-deleted"><em>此条评论已被 ' + escapeHtml(displayName(deletedBy)) + ' 删除</em></p>';
+    } else {
+      html += '<div class="comment-body">' + commentContentHtml(comment) + '</div>';
+    }
+    return html + '</div></article>';
   }
 
   function descriptionAttachmentsHtml() {
@@ -2051,6 +2188,22 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     renderCommentFileList();
   }
 
+  function closeCommentMenus(exceptId) {
+    document.querySelectorAll('[data-comment-menu]').forEach(function (menu) {
+      var keepOpen = exceptId !== undefined && Number(menu.dataset.commentMenu) === Number(exceptId);
+      menu.classList.toggle('hidden', !keepOpen);
+      var button = menu.parentElement && menu.parentElement.querySelector('.comment-menu-button');
+      if (button) button.setAttribute('aria-expanded', String(keepOpen));
+    });
+  }
+
+  function toggleCommentMenu(id) {
+    var menu = document.querySelector('[data-comment-menu="' + Number(id) + '"]');
+    if (!menu) return;
+    var opening = menu.classList.contains('hidden');
+    closeCommentMenus(opening ? id : undefined);
+  }
+
   function closeAttachmentPreview() {
     if ($('imagePreviewDialog').open) $('imagePreviewDialog').close();
     $('imagePreview').removeAttribute('src');
@@ -2085,9 +2238,7 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     conversation += '<section class="detail-section"><h3>讨论</h3><div class="comment-list">';
     if (state.comments.length) {
       state.comments.forEach(function (comment) {
-        conversation += '<article class="comment"><span class="avatar">' + escapeHtml(initials(comment.user)) + '</span><div>';
-        conversation += '<div class="comment-head"><strong>' + escapeHtml(displayName(comment.user)) + '</strong><span>' + escapeHtml(formatDate(comment.created_at)) + '</span></div>';
-        conversation += '<div class="comment-body">' + commentContentHtml(comment) + '</div></div></article>';
+        conversation += commentHtml(comment);
       });
     } else {
       conversation += '<p class="detail-description">暂无评论</p>';
@@ -2299,6 +2450,129 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     return html;
   }
 
+  function commentEditFormHtml(comment) {
+    var html = '<div class="form-grid"><div class="field field-wide">';
+    html += '<label for="commentEditContent">评论内容</label><textarea id="commentEditContent" maxlength="4000" required>' + escapeHtml(comment.content || '') + '</textarea></div>';
+    html += '<div class="field field-wide"><span class="issue-attachment-label">附件</span><div class="issue-attachment-tools">';
+    html += '<label class="btn-ghost" for="commentEditAttachmentInput">' + icon('upload') + '添加附件<input id="commentEditAttachmentInput" type="file" accept="' + attachmentAccept + '" multiple></label>';
+    html += '<span class="comment-image-hint" id="commentEditAttachmentHint"></span></div>';
+    html += '<div class="comment-file-list" id="commentEditFileList"></div></div></div>';
+    html += '<div class="field-error" id="formError" role="alert"></div>';
+    return html;
+  }
+
+  function renderCommentEditFileList() {
+    var list = $('commentEditFileList');
+    if (!list) return;
+    var removedIds = state.removedCommentAttachmentIds || [];
+    var existing = (state.commentEditAttachments || []).filter(function (attachment) {
+      return removedIds.indexOf(Number(attachment.id)) < 0;
+    });
+    var files = state.commentEditFiles || [];
+    var html = existing.map(function (attachment) {
+      return '<div class="comment-file-row"><span class="comment-file-name">' + icon('paperclip') + escapeHtml(attachment.filename) + '</span>' +
+        '<span class="comment-file-size">' + formatFileSize(attachment.file_size) + '</span>' +
+        '<button class="comment-file-remove" type="button" data-action="remove-existing-comment-attachment" data-attachment-id="' + Number(attachment.id) + '" aria-label="移除附件">' + icon('x') + '</button></div>';
+    }).join('');
+    html += files.map(function (file, index) {
+      return '<div class="comment-file-row"><span class="comment-file-name">' + icon('paperclip') + escapeHtml(file.name) + '</span>' +
+        '<span class="comment-file-size">' + formatFileSize(file.size) + '</span>' +
+        '<button class="comment-file-remove" type="button" data-action="remove-comment-edit-file" data-file-index="' + index + '" aria-label="移除附件">' + icon('x') + '</button></div>';
+    }).join('');
+    list.innerHTML = html;
+    var hint = $('commentEditAttachmentHint');
+    if (hint) hint.textContent = existing.length + files.length + ' / ' + maximumAttachmentCount;
+  }
+
+  function removeExistingCommentAttachment(id) {
+    var exists = (state.commentEditAttachments || []).some(function (attachment) {
+      return Number(attachment.id) === Number(id);
+    });
+    if (!exists || state.removedCommentAttachmentIds.indexOf(Number(id)) >= 0) return;
+    state.removedCommentAttachmentIds.push(Number(id));
+    var textarea = $('commentEditContent');
+    if (textarea) {
+      textarea.value = textarea.value.replace(/(!?)\[([^\]\r\n]*)\]\(attachment:(\d+)\)/g,
+        function (marker, bang, label, rawId) { return Number(rawId) === Number(id) ? '' : marker; });
+    }
+    renderCommentEditFileList();
+  }
+
+  function removeCommentEditFile(index) {
+    var files = state.commentEditFiles || [];
+    if (index < 0 || index >= files.length) return;
+    var textarea = $('commentEditContent');
+    if (textarea) {
+      textarea.value = textarea.value.replace(/(!?)\[([^\]\r\n]*)\]\(upload:(\d+)\)/g,
+        function (marker, bang, label, rawIndex) {
+          var markerIndex = Number(rawIndex);
+          if (markerIndex === index) return '';
+          return markerIndex > index ? bang + '[' + label + '](upload:' + (markerIndex - 1) + ')' : marker;
+        });
+    }
+    files.splice(index, 1);
+    renderCommentEditFileList();
+  }
+
+  function insertCommentEditAttachments(event) {
+    var input = event.target;
+    var selectedFiles = Array.from(input.files || []);
+    var files = selectedFiles.filter(isSupportedUploadFile).filter(function (file) {
+      return file.size > 0 && file.size <= maximumAttachmentFileSize;
+    });
+    if (files.length !== selectedFiles.length) showToast('附件类型不受支持、内容为空或超过 10 MiB');
+    input.value = '';
+    if (!files.length) return;
+    var removedIds = state.removedCommentAttachmentIds || [];
+    var existing = (state.commentEditAttachments || []).filter(function (attachment) {
+      return removedIds.indexOf(Number(attachment.id)) < 0;
+    });
+    var current = state.commentEditFiles || [];
+    if (existing.length + current.length + files.length > maximumAttachmentCount) {
+      showToast('每条评论最多添加 9 个附件');
+      return;
+    }
+    var nextFiles = current.concat(files);
+    var totalSize = existing.reduce(function (sum, attachment) {
+      return sum + Number(attachment.file_size || 0);
+    }, 0) + nextFiles.reduce(function (sum, file) { return sum + file.size; }, 0);
+    if (totalSize > maximumAttachmentTotalSize) {
+      showToast('评论附件总大小不能超过 30 MiB');
+      return;
+    }
+    var textarea = $('commentEditContent');
+    var start = textarea.selectionStart;
+    var end = textarea.selectionEnd;
+    var prefix = textarea.value.slice(0, start);
+    var suffix = textarea.value.slice(end);
+    var markers = files.map(function (file, index) {
+      return uploadMarker(file, current.length + index);
+    }).join('\n');
+    textarea.value = prefix + markers + suffix;
+    state.commentEditFiles = nextFiles;
+    var nextPosition = prefix.length + markers.length;
+    textarea.focus();
+    textarea.setSelectionRange(nextPosition, nextPosition);
+    renderCommentEditFileList();
+  }
+
+  function openCommentForm(comment) {
+    if (!canModifyComment(comment)) return;
+    closeCommentMenus();
+    state.modalMode = 'edit-comment';
+    state.editingId = Number(comment.id);
+    state.commentEditFiles = [];
+    state.commentEditAttachments = Array.isArray(comment.attachments) ? comment.attachments.slice() : [];
+    state.removedCommentAttachmentIds = [];
+    $('formDialogTitle').textContent = '编辑评论';
+    $('formSubmitButton').textContent = '保存修改';
+    $('formDialogBody').innerHTML = commentEditFormHtml(comment);
+    $('commentEditAttachmentInput').addEventListener('change', insertCommentEditAttachments);
+    renderCommentEditFileList();
+    $('formDialog').showModal();
+    window.setTimeout(function () { $('commentEditContent').focus(); }, 0);
+  }
+
   function openIssueForm(issue) {
     state.modalMode = issue ? 'edit-issue' : 'create-issue';
     state.editingId = issue ? Number(issue.id) : null;
@@ -2365,6 +2639,9 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     state.issueFiles = [];
     state.issueExistingAttachments = [];
     state.removedIssueAttachmentIds = [];
+    state.commentEditFiles = [];
+    state.commentEditAttachments = [];
+    state.removedCommentAttachmentIds = [];
   }
 
   async function submitDynamicForm(event) {
@@ -2376,6 +2653,7 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     try {
       if (state.modalMode === 'create-issue' || state.modalMode === 'edit-issue') await saveIssue();
       else if (state.modalMode === 'create-block' || state.modalMode === 'edit-block') await saveBlock();
+      else if (state.modalMode === 'edit-comment') await saveCommentEdit();
       else if (state.modalMode === 'password') await savePassword();
     } finally {
       setBusy(button, false);
@@ -2418,6 +2696,72 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     await selectBlock(state.selectedBlockId, false);
     if (issue) await openIssue(taskIdFor(issue), true);
     showToast(editing ? 'Issue 已更新' : 'Issue 已创建');
+  }
+
+  async function saveCommentEdit() {
+    var content = $('commentEditContent').value.trim();
+    if (!content) {
+      $('formError').textContent = '评论内容不能为空';
+      return;
+    }
+    var selectedFiles = state.commentEditFiles || [];
+    var files = [];
+    var seenUploads = {};
+    var valid = true;
+    content = content.replace(/(!?)\[([^\]\r\n]*)\]\(upload:(\d+)\)/g,
+      function (marker, bang, label, rawIndex) {
+        var sourceIndex = Number(rawIndex);
+        if (!selectedFiles[sourceIndex] || seenUploads[sourceIndex]) {
+          valid = false;
+          return marker;
+        }
+        seenUploads[sourceIndex] = true;
+        var nextIndex = files.length;
+        files.push(selectedFiles[sourceIndex]);
+        return bang + '[' + label + '](upload:' + nextIndex + ')';
+      });
+    if (files.length !== selectedFiles.length || content.indexOf('upload:') >= 0) valid = false;
+
+    var removedIds = state.removedCommentAttachmentIds || [];
+    var retained = (state.commentEditAttachments || []).filter(function (attachment) {
+      return removedIds.indexOf(Number(attachment.id)) < 0;
+    });
+    var retainedById = {};
+    retained.forEach(function (attachment) { retainedById[String(attachment.id)] = true; });
+    var seenAttachments = {};
+    content.replace(/(!?)\[([^\]\r\n]*)\]\(attachment:(\d+)\)/g,
+      function (marker, bang, label, rawId) {
+        if (!retainedById[rawId] || seenAttachments[rawId]) valid = false;
+        seenAttachments[rawId] = true;
+        return marker;
+      });
+    if (Object.keys(seenAttachments).length !== retained.length ||
+        content.indexOf('attachment:') >= 0 && !retained.length) valid = false;
+    if (!valid) {
+      $('formError').textContent = '请确保每个保留或新增附件在评论中恰好引用一次';
+      return;
+    }
+
+    var commentId = state.editingId;
+    var requestBody = { content: content };
+    if (files.length || removedIds.length) {
+      requestBody = new FormData();
+      requestBody.append('comment', JSON.stringify({
+        content: content,
+        remove_attachment_ids: removedIds.slice()
+      }));
+      files.forEach(function (file) { requestBody.append('files', file); });
+    }
+    var result = await request('/api/comments/' + commentId, { method: 'PUT', body: requestBody });
+    if (!result.ok) {
+      $('formError').textContent = resultMessage(result, '评论保存失败');
+      return;
+    }
+    var taskId = state.selectedTaskId;
+    closeFormDialog();
+    await openIssue(taskId, false);
+    await loadIssues();
+    showToast('评论已更新');
   }
 
   async function saveBlock() {
@@ -2504,6 +2848,23 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
       await loadBlocks();
       await loadIssues();
       showToast('Issue 已删除');
+    });
+  }
+
+  function deleteComment(id) {
+    var comment = state.comments.find(function (item) { return Number(item.id) === Number(id); });
+    if (!canModifyComment(comment)) return;
+    closeCommentMenus();
+    confirmAction('删除评论', '确认删除这条评论？删除后将保留删除人提示，且无法恢复。', '删除评论', async function () {
+      var taskId = state.selectedTaskId;
+      var result = await request('/api/comments/' + Number(id), { method: 'DELETE' });
+      if (!result.ok) {
+        showToast(resultMessage(result, '评论删除失败'));
+        return;
+      }
+      await openIssue(taskId, false);
+      await loadIssues();
+      showToast('评论已删除');
     });
   }
 
@@ -2724,6 +3085,21 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
       removeCommentFile(Number(target.dataset.fileIndex));
       return;
     }
+    if (action === 'remove-comment-edit-file') {
+      event.preventDefault();
+      removeCommentEditFile(Number(target.dataset.fileIndex));
+      return;
+    }
+    if (action === 'remove-existing-comment-attachment') {
+      event.preventDefault();
+      removeExistingCommentAttachment(Number(target.dataset.attachmentId));
+      return;
+    }
+    if (action === 'toggle-comment-menu') {
+      event.preventDefault();
+      toggleCommentMenu(id);
+      return;
+    }
     if (action === 'remove-issue-file') {
       event.preventDefault();
       removeIssueFile(Number(target.dataset.fileIndex));
@@ -2739,6 +3115,11 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     else if (action === 'copy-task-id') await copyTaskId(target.dataset.taskId);
     else if (action === 'edit-issue') openIssueForm(state.selectedIssue);
     else if (action === 'delete-issue') await deleteIssue(id);
+    else if (action === 'edit-comment') {
+      var comment = state.comments.find(function (item) { return Number(item.id) === id; });
+      openCommentForm(comment);
+    }
+    else if (action === 'delete-comment') deleteComment(id);
     else if (action === 'change-status') await changeStatus(target.dataset.status);
     else if (action === 'preview-image') await previewAttachment(Number(target.dataset.attachmentId), target.dataset.imageAlt);
     else if (action === 'close-image-preview') closeAttachmentPreview();
@@ -2779,6 +3160,7 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
     });
     document.addEventListener('click', function (event) {
       handleClick(event);
+      if (!event.target.closest('.comment-menu-wrap')) closeCommentMenus();
       if (!event.target.closest('.profile-wrap')) {
         $('profileMenu').classList.add('hidden');
         $('profileButton').setAttribute('aria-expanded', 'false');
@@ -2790,6 +3172,10 @@ dialog::backdrop { background: rgba(0,0,0,0.46); }
       if (issueRow && (event.key === 'Enter' || event.key === ' ')) {
         event.preventDefault();
         openIssue(issueRow.dataset.taskId, true);
+        return;
+      }
+      if (event.key === 'Escape' && document.querySelector('.comment-menu:not(.hidden)')) {
+        closeCommentMenus();
         return;
       }
       if (event.key === 'Escape' && !$('formDialog').open && !$('confirmDialog').open) {

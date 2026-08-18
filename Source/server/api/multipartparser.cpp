@@ -295,13 +295,14 @@ bool MultipartParser::parseComment(const QHttpServerRequest &request,
     return true;
 }
 
-bool MultipartParser::parseIssue(const QHttpServerRequest &request,
-                                 qsizetype maximumBodySize,
-                                 int maximumFiles,
-                                 QJsonObject *values,
-                                 QList<MultipartFile> *files,
-                                 QList<qint64> *removeAttachmentIds,
-                                 QString *errorMessage)
+bool MultipartParser::parseAttachmentForm(const QHttpServerRequest &request,
+                                          const QByteArray &jsonFieldName,
+                                          qsizetype maximumBodySize,
+                                          int maximumFiles,
+                                          QJsonObject *values,
+                                          QList<MultipartFile> *files,
+                                          QList<qint64> *removeAttachmentIds,
+                                          QString *errorMessage)
 {
     if (values) {
         *values = {};
@@ -321,7 +322,7 @@ bool MultipartParser::parseIssue(const QHttpServerRequest &request,
         setError(errorMessage,
                  body.isEmpty()
                      ? QStringLiteral("Multipart request body is empty.")
-                     : QStringLiteral("Issue attachments exceed the request size limit."));
+                     : QStringLiteral("Attachments exceed the request size limit."));
         return false;
     }
     const QByteArray boundary = boundaryFromContentType(request.value("Content-Type"));
@@ -333,7 +334,7 @@ bool MultipartParser::parseIssue(const QHttpServerRequest &request,
 
     const QByteArray delimiter = QByteArrayLiteral("--") + boundary;
     qsizetype position = 0;
-    bool foundIssue = false;
+    bool foundValues = false;
     QJsonObject parsedValues;
     QList<MultipartFile> parsedFiles;
     while (true) {
@@ -379,18 +380,18 @@ bool MultipartParser::parseIssue(const QHttpServerRequest &request,
 
         const QString fieldName = dispositionValue(disposition, QStringLiteral("name"));
         const QByteArray partData = body.mid(headerEnd + 4, nextBoundary - (headerEnd + 4));
-        if (fieldName == QStringLiteral("issue")) {
-            if (foundIssue) {
-                setError(errorMessage, QStringLiteral("Exactly one issue field is required."));
+        if (fieldName == QString::fromLatin1(jsonFieldName)) {
+            if (foundValues) {
+                setError(errorMessage, QStringLiteral("Exactly one JSON data field is required."));
                 return false;
             }
             QJsonParseError parseError;
             const QJsonDocument document = QJsonDocument::fromJson(partData, &parseError);
             if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
-                setError(errorMessage, QStringLiteral("Issue field must contain a JSON object."));
+                setError(errorMessage, QStringLiteral("Multipart JSON data must be an object."));
                 return false;
             }
-            foundIssue = true;
+            foundValues = true;
             parsedValues = document.object();
         } else if (fieldName == QStringLiteral("files")) {
             MultipartFile file;
@@ -400,12 +401,12 @@ bool MultipartParser::parseIssue(const QHttpServerRequest &request,
             file.data = partData;
             if (file.filename.isEmpty() || file.data.isEmpty()
                 || file.filename.size() > 255 || file.filename.contains(QChar::Null)) {
-                setError(errorMessage, QStringLiteral("Issue attachment is invalid."));
+                setError(errorMessage, QStringLiteral("Attachment is invalid."));
                 return false;
             }
             parsedFiles.append(std::move(file));
             if (parsedFiles.size() > maximumFiles) {
-                setError(errorMessage, QStringLiteral("An issue can contain at most 9 attachments."));
+                setError(errorMessage, QStringLiteral("An upload can contain at most 9 attachments."));
                 return false;
             }
         } else if (!fieldName.isEmpty()) {
@@ -415,8 +416,8 @@ bool MultipartParser::parseIssue(const QHttpServerRequest &request,
         position = nextBoundary + 2;
     }
 
-    if (!foundIssue) {
-        setError(errorMessage, QStringLiteral("Exactly one issue field is required."));
+    if (!foundValues) {
+        setError(errorMessage, QStringLiteral("Exactly one JSON data field is required."));
         return false;
     }
     QList<qint64> parsedRemoveIds;
