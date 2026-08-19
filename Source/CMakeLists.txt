@@ -228,10 +228,11 @@ if(BUILD_TESTING)
     find_package(Qt6 REQUIRED COMPONENTS Test)
     qt_add_executable(workhandler_httpserver_tests
         tests/httpserverintegrationtest.cpp
+        html.qrc
     )
     set_target_properties(workhandler_httpserver_tests PROPERTIES
         AUTOUIC OFF
-        AUTORCC OFF
+        AUTORCC ON
     )
     target_link_libraries(workhandler_httpserver_tests PRIVATE
         Qt6::Core
