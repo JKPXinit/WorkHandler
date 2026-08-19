@@ -55,7 +55,8 @@ QJsonObject ServerConfig::toJson() const
         {QStringLiteral("server_port"), int(serverPort)},
         {QStringLiteral("auto_start"), autoStart},
         {QStringLiteral("keep_original"), keepOriginal},
-        {QStringLiteral("max_image_width"), maxImageWidth}
+        {QStringLiteral("max_image_width"), maxImageWidth},
+        {QStringLiteral("senior_animation"), seniorAnimation}
     };
 }
 
@@ -536,7 +537,8 @@ bool HttpServer::updateConfiguration(const ServerConfig &config, QString *errorM
                               config.serverPort,
                               config.autoStart,
                               config.keepOriginal,
-                              config.maxImageWidth);
+                              config.maxImageWidth,
+                              config.seniorAnimation);
     return true;
 }
 
@@ -580,6 +582,8 @@ void HttpServer::registerRoutes()
                        [this]() { return staticFrontendResponse(); });
     m_httpServer.route(QStringLiteral("/index.html"), Method::Get,
                        [this]() { return staticFrontendResponse(); });
+    m_httpServer.route(QStringLiteral("/app.ico"), Method::Get,
+                       [this]() { return appIconResponse(); });
     m_httpServer.route(QStringLiteral("/api/health"), Method::Get,
                        [this]() { return healthResponse(); });
 
@@ -948,7 +952,26 @@ QHttpServerResponse HttpServer::staticFrontendResponse() const
                              QStringLiteral("frontend_unavailable"),
                              tr("The embedded frontend resource is unavailable."));
     }
+    QByteArray frontend = file.readAll();
+    frontend.replace(QByteArrayLiteral("__SENIOR_ANIMATION__"),
+                     configuration().seniorAnimation
+                         ? QByteArrayLiteral("true")
+                         : QByteArrayLiteral("false"));
     QHttpServerResponse response(QByteArrayLiteral("text/html; charset=utf-8"),
+                                 frontend, StatusCode::Ok);
+    addCorsHeaders(&response);
+    return response;
+}
+
+QHttpServerResponse HttpServer::appIconResponse() const
+{
+    QFile file(QStringLiteral(":/prefix4/app.ico"));
+    if (!file.open(QIODevice::ReadOnly)) {
+        return errorResponse(StatusCode::InternalServerError,
+                             QStringLiteral("icon_unavailable"),
+                             tr("The embedded application icon is unavailable."));
+    }
+    QHttpServerResponse response(QByteArrayLiteral("image/x-icon"),
                                  file.readAll(), StatusCode::Ok);
     addCorsHeaders(&response);
     return response;

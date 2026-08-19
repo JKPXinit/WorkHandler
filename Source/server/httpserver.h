@@ -48,6 +48,7 @@ struct ServerConfig
     bool autoStart {true};
     bool keepOriginal {false};
     int maxImageWidth {1920};
+    bool seniorAnimation {false};
 
     QJsonObject toJson() const;
 };
@@ -123,7 +124,8 @@ signals:
                               quint16 serverPort,
                               bool autoStart,
                               bool keepOriginal,
-                              int maxImageWidth);
+                              int maxImageWidth,
+                              bool seniorAnimation);
 
 private:
     using AuthorizationResult = ApiContext::AuthorizationResult;
@@ -133,6 +135,7 @@ private:
     AuthorizationResult authorize(const QHttpServerRequest &request,
                                   bool adminRequired) const;
     QHttpServerResponse staticFrontendResponse() const;
+    QHttpServerResponse appIconResponse() const;
     QHttpServerResponse healthResponse() const;
 
     static QHttpServerResponse successResponse(
