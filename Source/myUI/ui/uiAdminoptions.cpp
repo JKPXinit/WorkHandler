@@ -420,10 +420,13 @@ QWidget *ui_AdminOptions::createHttpPage(
         tr("Start with the application"), runtimeGroup);
     QCheckBox *keepOriginalCheck = new QCheckBox(
         tr("Keep original uploaded images"), runtimeGroup);
+    QCheckBox *seniorAnimationCheck = new QCheckBox(
+        tr("Senior animation"), runtimeGroup);
     QSpinBox *maxWidthSpin = new QSpinBox(runtimeGroup);
     maxWidthSpin->setRange(320, 16383);
     runtimeForm->addRow(QString(), autoStartCheck);
     runtimeForm->addRow(QString(), keepOriginalCheck);
+    runtimeForm->addRow(QString(), seniorAnimationCheck);
     runtimeForm->addRow(tr("Maximum image width:"), maxWidthSpin);
     layout->addWidget(runtimeGroup);
 
@@ -457,7 +460,8 @@ QWidget *ui_AdminOptions::createHttpPage(
 
     const auto reloadInterfaces = [this, interfaceCombo, addressCombo,
                                    portSpin, bindAllCheck, autoStartCheck,
-                                   keepOriginalCheck, maxWidthSpin,
+                                   keepOriginalCheck, seniorAnimationCheck,
+                                   maxWidthSpin,
                                    populateAddresses]() {
         const SoftwareConfig *settings = m_mainWindow->m_softwareconfig;
         const QString preferredInterface = settings->httpServerInterfaceName();
@@ -498,6 +502,7 @@ QWidget *ui_AdminOptions::createHttpPage(
         bindAllCheck->setChecked(settings->httpServerBindAllInterfaces());
         autoStartCheck->setChecked(settings->httpServerAutoStart());
         keepOriginalCheck->setChecked(settings->httpServerKeepOriginal());
+        seniorAnimationCheck->setChecked(settings->httpServerSeniorAnimation());
         maxWidthSpin->setValue(settings->httpServerMaxImageWidth());
     };
 
@@ -509,7 +514,8 @@ QWidget *ui_AdminOptions::createHttpPage(
     if (applyConfiguration) {
         *applyConfiguration =
             [this, interfaceCombo, addressCombo, portSpin, bindAllCheck,
-             autoStartCheck, keepOriginalCheck, maxWidthSpin,
+             autoStartCheck, keepOriginalCheck, seniorAnimationCheck,
+             maxWidthSpin,
              statusLabel]() -> bool {
                 const QString serverInterface = bindAllCheck->isChecked()
                     ? QStringLiteral("0.0.0.0")
@@ -531,9 +537,10 @@ QWidget *ui_AdminOptions::createHttpPage(
                 const bool bindAll = bindAllCheck->isChecked();
                 const bool autoStart = autoStartCheck->isChecked();
                 const bool keepOriginal = keepOriginalCheck->isChecked();
+                const bool seniorAnimation = seniorAnimationCheck->isChecked();
                 const int maxImageWidth = maxWidthSpin->value();
 
-                const bool changed =
+                const bool restartRequired =
                     interfaceName != settings->httpServerInterfaceName()
                     || selectedAddress != settings->httpServerSelectedAddress()
                     || port != settings->httpServerPort()
@@ -541,6 +548,8 @@ QWidget *ui_AdminOptions::createHttpPage(
                     || autoStart != settings->httpServerAutoStart()
                     || keepOriginal != settings->httpServerKeepOriginal()
                     || maxImageWidth != settings->httpServerMaxImageWidth();
+                const bool changed = restartRequired
+                    || seniorAnimation != settings->httpServerSeniorAnimation();
                 if (!changed) {
                     return true;
                 }
@@ -559,6 +568,8 @@ QWidget *ui_AdminOptions::createHttpPage(
                 const bool oldAutoStart = settings->httpServerAutoStart();
                 const bool oldKeepOriginal = settings->httpServerKeepOriginal();
                 const int oldMaxImageWidth = settings->httpServerMaxImageWidth();
+                const bool oldSeniorAnimation =
+                    settings->httpServerSeniorAnimation();
 
                 settings->setHttpServerInterfaceName(interfaceName);
                 settings->setHttpServerSelectedAddress(selectedAddress);
@@ -567,13 +578,15 @@ QWidget *ui_AdminOptions::createHttpPage(
                 settings->setHttpServerAutoStart(autoStart);
                 settings->setHttpServerKeepOriginal(keepOriginal);
                 settings->setHttpServerMaxImageWidth(maxImageWidth);
+                settings->setHttpServerSeniorAnimation(seniorAnimation);
 
                 const ServerConfig config = {
                     serverInterface,
                     port,
                     autoStart,
                     keepOriginal,
-                    maxImageWidth
+                    maxImageWidth,
+                    seniorAnimation
                 };
                 QString errorMessage;
                 if (!m_mainWindow->m_httpServer->updateConfiguration(
@@ -585,12 +598,15 @@ QWidget *ui_AdminOptions::createHttpPage(
                     settings->setHttpServerAutoStart(oldAutoStart);
                     settings->setHttpServerKeepOriginal(oldKeepOriginal);
                     settings->setHttpServerMaxImageWidth(oldMaxImageWidth);
+                    settings->setHttpServerSeniorAnimation(oldSeniorAnimation);
                     statusLabel->setText(errorMessage);
                     statusLabel->show();
                     return false;
                 }
-                m_mainWindow->m_httpServer->restartServer(
-                    config.serverInterface, config.serverPort);
+                if (restartRequired) {
+                    m_mainWindow->m_httpServer->restartServer(
+                        config.serverInterface, config.serverPort);
+                }
                 return true;
             };
     }
