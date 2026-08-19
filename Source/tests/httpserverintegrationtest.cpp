@@ -58,6 +58,7 @@ private slots:
     void attachmentCommentMigration();
     void targetNotificationSchemaPurgesReadRows();
     void healthAndCors();
+    void frontendAnimationConfiguration();
     void authentication();
     void userOptionsAndBlockCrud();
     void issueCrudFilteringAndPermissions();
@@ -517,6 +518,43 @@ void HttpServerIntegrationTest::healthAndCors()
     QCOMPARE(requestRaw("POST", QStringLiteral("/api/auth/login"), "{").status,
              400);
     QCOMPARE(request("GET", QStringLiteral("/api/unknown")).status, 404);
+}
+
+void HttpServerIntegrationTest::frontendAnimationConfiguration()
+{
+    const auto setSeniorAnimation = [this](bool enabled) {
+        m_server->setConfigurationProvider([this, enabled](QString *errorMessage) {
+            if (errorMessage) {
+                errorMessage->clear();
+            }
+            ServerConfig config;
+            config.serverInterface = QStringLiteral("127.0.0.1");
+            config.serverPort = m_port;
+            config.maxImageWidth = 1600;
+            config.seniorAnimation = enabled;
+            return config;
+        });
+    };
+
+    setSeniorAnimation(false);
+    const Reply disabled = request("GET", QStringLiteral("/"));
+    setSeniorAnimation(true);
+    const Reply enabled = request("GET", QStringLiteral("/index.html"));
+    const Reply appIcon = request("GET", QStringLiteral("/app.ico"));
+    setSeniorAnimation(false);
+
+    QCOMPARE(disabled.status, 200);
+    QVERIFY(disabled.body.contains("data-senior-animation=\"false\""));
+    QVERIFY(!disabled.body.contains("__SENIOR_ANIMATION__"));
+    QCOMPARE(enabled.status, 200);
+    QVERIFY(enabled.body.contains("data-senior-animation=\"true\""));
+    QVERIFY(!enabled.body.contains("__SENIOR_ANIMATION__"));
+    QVERIFY(enabled.body.contains("/app.ico"));
+    QCOMPARE(appIcon.status, 200);
+    QCOMPARE(appIcon.contentType, QByteArrayLiteral("image/x-icon"));
+    QCOMPARE(appIcon.allowOrigin, QByteArrayLiteral("*"));
+    QVERIFY(appIcon.body.size() > 6);
+    QCOMPARE(appIcon.body.left(4), QByteArray::fromHex("00000100"));
 }
 
 void HttpServerIntegrationTest::authentication()
@@ -3077,6 +3115,10 @@ void HttpServerIntegrationTest::configurationReadOnly()
                  .value(QStringLiteral("config")).toObject()
                  .value(QStringLiteral("max_image_width")).toInt(),
              1600);
+    QCOMPARE(read.json().value(QStringLiteral("data")).toObject()
+                 .value(QStringLiteral("config")).toObject()
+                 .value(QStringLiteral("senior_animation")).toBool(),
+             false);
 
     QCOMPARE(request("POST", QStringLiteral("/api/server/restart"), {}, m_token).status,
              404);

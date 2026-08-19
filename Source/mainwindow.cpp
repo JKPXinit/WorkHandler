@@ -49,6 +49,7 @@ MainWindow::MainWindow(QWidget *parent)
         config.autoStart = m_softwareconfig->httpServerAutoStart();
         config.keepOriginal = m_softwareconfig->httpServerKeepOriginal();
         config.maxImageWidth = m_softwareconfig->httpServerMaxImageWidth();
+        config.seniorAnimation = m_softwareconfig->httpServerSeniorAnimation();
         if (errorMessage) {
             errorMessage->clear();
         }
@@ -241,7 +242,8 @@ MainWindow::MainWindow(QWidget *parent)
                    quint16 serverPort,
                    bool autoStart,
                    bool keepOriginal,
-                   int maxImageWidth) {
+                   int maxImageWidth,
+                   bool seniorAnimation) {
                 const QString anyAddress =
                     QHostAddress(QHostAddress::AnyIPv4).toString();
                 const bool bindAll = serverInterface == anyAddress;
@@ -253,6 +255,7 @@ MainWindow::MainWindow(QWidget *parent)
                 m_softwareconfig->setHttpServerAutoStart(autoStart);
                 m_softwareconfig->setHttpServerKeepOriginal(keepOriginal);
                 m_softwareconfig->setHttpServerMaxImageWidth(maxImageWidth);
+                m_softwareconfig->setHttpServerSeniorAnimation(seniorAnimation);
                 m_softwareconfig->Write_config();
                 m_httpServerManagerDialog->refreshConfiguration();
             });

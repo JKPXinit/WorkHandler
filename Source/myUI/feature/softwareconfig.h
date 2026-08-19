@@ -48,6 +48,7 @@ typedef struct m_Options {
         bool autoStart;              // 应用启动时自动启动 HTTP 服务
         bool keepOriginal;           // 图片处理后是否保留原图
         int maxImageWidth;           // 图片处理最大宽度
+        bool seniorAnimation;        // 是否启用网页登录页高级动画
     };
     httpServerConfig_t m_httpServerConfig;
 
@@ -107,6 +108,8 @@ public:
     void setHttpServerKeepOriginal(bool enabled) { m_Config->m_httpServerConfig.keepOriginal = enabled; }
     int httpServerMaxImageWidth() const { return m_Config->m_httpServerConfig.maxImageWidth; }
     void setHttpServerMaxImageWidth(int width) { m_Config->m_httpServerConfig.maxImageWidth = width; }
+    bool httpServerSeniorAnimation() const { return m_Config->m_httpServerConfig.seniorAnimation; }
+    void setHttpServerSeniorAnimation(bool enabled) { m_Config->m_httpServerConfig.seniorAnimation = enabled; }
 
     // Shortcut config
     const QMap<int, QString>& shortcutKeys() const { return m_Config->m_shortcutConfig.keys; }

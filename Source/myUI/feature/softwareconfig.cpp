@@ -97,6 +97,7 @@ m_Options_t *SoftwareConfig::strXml_to_Options(QString strxml) {
     OptionsTmp->m_httpServerConfig.autoStart = true;
     OptionsTmp->m_httpServerConfig.keepOriginal = false;
     OptionsTmp->m_httpServerConfig.maxImageWidth = 1920;
+    OptionsTmp->m_httpServerConfig.seniorAnimation = false;
 
     QXmlStreamReader xmlReader(strxml);     // 读取 XML 迭代器
 
@@ -231,6 +232,11 @@ m_Options_t *SoftwareConfig::strXml_to_Options(QString strxml) {
                                 OptionsTmp->m_httpServerConfig.maxImageWidth = width;
                             }
                         }
+
+                        if (xmlReader.name() == "seniorAnimation") {
+                            OptionsTmp->m_httpServerConfig.seniorAnimation =
+                                (xmlReader.readElementText() == "true");
+                        }
                     }
                 } // HttpServer
 
@@ -280,6 +286,7 @@ void SoftwareConfig::Default_Config() {
     m_Config->m_httpServerConfig.autoStart = true;
     m_Config->m_httpServerConfig.keepOriginal = false;
     m_Config->m_httpServerConfig.maxImageWidth = 1920;
+    m_Config->m_httpServerConfig.seniorAnimation = false;
     Write_config(); // 写入配置文件
 }
 
@@ -343,6 +350,8 @@ QString SoftwareConfig::Options_to_strXml(m_Options_t *OptionsTmp) {
                             OptionsTmp->m_httpServerConfig.keepOriginal ? "true" : "false");
     writer.writeTextElement("maxImageWidth",
                             QString::number(OptionsTmp->m_httpServerConfig.maxImageWidth));
+    writer.writeTextElement("seniorAnimation",
+                            OptionsTmp->m_httpServerConfig.seniorAnimation ? "true" : "false");
     writer.writeEndElement();               // HTTP 服务设置
 
     writer.writeStartElement("Shortcuts");

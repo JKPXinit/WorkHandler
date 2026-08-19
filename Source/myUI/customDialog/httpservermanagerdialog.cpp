@@ -321,6 +321,7 @@ ServerConfig HttpServerManagerDialog::currentConfiguration() const
     config.autoStart = settings->httpServerAutoStart();
     config.keepOriginal = settings->httpServerKeepOriginal();
     config.maxImageWidth = settings->httpServerMaxImageWidth();
+    config.seniorAnimation = settings->httpServerSeniorAnimation();
     return config;
 }
 

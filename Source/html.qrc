@@ -1,5 +1,6 @@
 <RCC>
     <qresource prefix="/prefix4">
         <file>html/index.html</file>
+        <file alias="app.ico">icon/app.ico</file>
     </qresource>
 </RCC>
